@@ -58,8 +58,6 @@ const date = (s: string) =>
     day: "numeric",
     month: "short",
   });
-const overdue = (l: Launch) =>
-  new Date(l.deadline + "T23:59:59") < new Date() && l.stage < 10;
 const initials = (s: string) =>
   s
     .split(" ")
@@ -198,7 +196,7 @@ export default function App() {
       `${l.program} ${l.university} ${l.city} ${l.owner}`
         .toLowerCase()
         .includes(search.toLowerCase()) &&
-      (!onlyOverdue || overdue(l)),
+      (!onlyOverdue || l.overdue),
   );
   const filteredUniversities = universities.filter((u) =>
     `${u.name} ${u.city} ${u.contact}`
@@ -208,6 +206,7 @@ export default function App() {
   const filteredTasks = tasks.filter((t) =>
     `${t.title} ${t.owner}`.toLowerCase().includes(search.toLowerCase()),
   );
+  const annual = dashboard?.annual ?? [];
   function exportCsv() {
     const escape = (v: string | number) =>
       '"' +
@@ -217,7 +216,7 @@ export default function App() {
       '"';
     const rows = [
       ["Год", "Заявки", "Обучающиеся", "Потоки"],
-      ...(dashboard?.annual ?? []).map((x) => [
+      ...annual.map((x) => [
         x.year,
         x.applications,
         x.students,
@@ -301,7 +300,7 @@ export default function App() {
                 </span>
               </td>
               <td>{l.students}</td>
-              <td className={overdue(l) ? "danger" : ""}>{date(l.deadline)}</td>
+              <td className={l.overdue ? "danger" : ""}>{date(l.deadline)}</td>
               <td>
                 <button
                   className="icon-button"
@@ -320,6 +319,10 @@ export default function App() {
       )}
     </div>
   );
+  const chartMax = Math.max(
+    1,
+    ...annual.flatMap((a) => [a.applications, a.students]),
+  );
   const chart = (
     <div className="chart">
       <div className="chart-legend">
@@ -333,13 +336,13 @@ export default function App() {
         </span>
       </div>
       <div className="bars">
-        {(dashboard?.annual ?? []).map((a) => (
+        {annual.map((a) => (
           <div className="bar-group" key={a.year}>
             <div className="bar-pair">
               <div
                 className="bar purple"
                 style={{
-                  height: `${(a.applications / Math.max(1, ...(dashboard?.annual ?? []).map((x) => x.applications))) * 145}px`,
+                  height: `${(a.applications / chartMax) * 145}px`,
                 }}
                 title={`Заявки: ${a.applications}`}
               >
@@ -348,7 +351,7 @@ export default function App() {
               <div
                 className="bar lilac"
                 style={{
-                  height: `${(a.students / Math.max(1, ...(dashboard?.annual ?? []).map((x) => x.applications))) * 145}px`,
+                  height: `${(a.students / chartMax) * 145}px`,
                 }}
                 title={`Обучающиеся: ${a.students}`}
               >
@@ -723,7 +726,7 @@ export default function App() {
                                 <Users size={14} />
                                 {l.students}
                               </span>
-                              <span className={overdue(l) ? "danger" : ""}>
+                              <span className={l.overdue ? "danger" : ""}>
                                 <CalendarDays size={14} />
                                 {date(l.deadline)}
                               </span>
@@ -794,7 +797,7 @@ export default function App() {
                           </tr>
                         </thead>
                         <tbody>
-                          {dashboard.annual.map((a) => (
+                          {annual.map((a) => (
                             <tr key={a.year}>
                               <td>{a.year}</td>
                               <td>{format(a.applications)}</td>

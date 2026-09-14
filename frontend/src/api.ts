@@ -15,6 +15,7 @@ export interface Launch {
   students: number;
   stage: number;
   deadline: string;
+  overdue: boolean;
 }
 export interface Task {
   id: number;
