@@ -13,6 +13,9 @@ STAGES = ['Поиск контакта', 'Уточнение интереса', 
 def serialize(record):
     return {column.name: getattr(record, column.name) for column in record.__table__.columns}
 
+def is_overdue(launch):
+    return launch.deadline < date.today() and launch.stage < 10
+
 def create_app(database_url=None, seed_demo=False):
     url = database_url or os.getenv('DATABASE_URL', 'sqlite:///./edu_crm.db')
     engine = create_engine(url, connect_args={'check_same_thread': False} if url.startswith('sqlite') else {}, pool_pre_ping=True)
@@ -65,7 +68,7 @@ def create_app(database_url=None, seed_demo=False):
 
     @app.get('/api/v1/launches')
     def launches(db: Session = Depends(session)):
-        return [{**serialize(l), 'university': u.name, 'city': u.city} for l,u in db.execute(select(Launch, University).join(University).order_by(Launch.id))]
+        return [{**serialize(l), 'university': u.name, 'city': u.city, 'overdue': is_overdue(l)} for l,u in db.execute(select(Launch, University).join(University).order_by(Launch.id))]
 
     @app.post('/api/v1/launches', status_code=201)
     def add_launch(data: LaunchInput, db: Session = Depends(session)):
@@ -106,7 +109,7 @@ def create_app(database_url=None, seed_demo=False):
     @app.get('/api/v1/dashboard')
     def dashboard(db: Session = Depends(session)):
         rows = list(db.scalars(select(Launch)))
-        return {'universities': len(list(db.scalars(select(University.id)))), 'launches': len(rows), 'students': sum(x.students for x in rows), 'overdue': sum(x.deadline < date.today() and x.stage < 10 for x in rows), 'annual': [serialize(x) for x in db.scalars(select(AnnualMetric).order_by(AnnualMetric.year))]}
+        return {'universities': len(list(db.scalars(select(University.id)))), 'launches': len(rows), 'students': sum(x.students for x in rows), 'overdue': sum(is_overdue(x) for x in rows), 'annual': [serialize(x) for x in db.scalars(select(AnnualMetric).order_by(AnnualMetric.year))]}
 
     return app
 

@@ -35,4 +35,5 @@ def test_demo_tasks_and_dashboard(tmp_path):
         task = c.get('/api/v1/tasks').json()[0]
         assert c.patch(f"/api/v1/tasks/{task['id']}", json={'done': True}).json()['done'] is True
         assert c.get('/api/v1/dashboard').json()['students'] == sum(x['students'] for x in launches)
+        assert c.get('/api/v1/dashboard').json()['overdue'] == sum(x['overdue'] for x in launches)
         assert c.patch('/api/v1/tasks/999', json={'done': True}).status_code == 404
