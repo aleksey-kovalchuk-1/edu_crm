@@ -34,14 +34,16 @@ docker compose up --build -d
 
 ## Локальная разработка без Docker
 
-Python 3.12 и Node.js 22. По умолчанию API использует SQLite для удобного локального запуска; Docker использует PostgreSQL.
+Python 3.12 и Node.js 22. Поддерживается только PostgreSQL; переменная `DATABASE_URL` обязательна — без неё API не запустится. База из Compose доступна на `127.0.0.1:5432`.
 
 ```bash
+docker compose up -d db
 python -m venv .venv
 source .venv/bin/activate
 pip install -r backend/requirements-dev.txt -c backend/constraints.txt
 cd backend
-SEED_DEMO=true uvicorn app.main:app --host 127.0.0.1 --port 8000 --reload
+DATABASE_URL=postgresql+psycopg://crm:local-demo-only@127.0.0.1:5432/edu_crm SEED_DEMO=true \
+  uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --reload
 ```
 
 В другом терминале:
@@ -52,18 +54,21 @@ npm ci
 npm run dev
 ```
 
-Открыть http://localhost:5173. Vite перенаправляет `/api` на порт 8000. Для PostgreSQL вручную задайте `DATABASE_URL=postgresql+psycopg://user:password@host:5432/edu_crm`.
+Открыть http://localhost:5173. Vite перенаправляет `/api` на порт 8000.
 
 ## Проверки
 
+Тесты работают только с PostgreSQL: для каждого теста создаётся отдельная база из шаблона и удаляется после теста. По умолчанию используется сервер из Compose (`127.0.0.1:5432`); другой сервер задаётся через `TEST_DATABASE_URL` (URL служебной базы `postgres`). Рабочая база `edu_crm` тестами не затрагивается.
+
 ```bash
+docker compose up -d db
 cd backend
 ../.venv/bin/python -m pytest -q
 cd ../frontend
 npm run build
 ```
 
-Тесты проверяют сохранение данных между запусками API, историю этапов, валидацию, отсутствующие связи, задачи и показатели. В данной среде пройдены 3 API-теста на SQLite, сборка TypeScript/Vite и HTTP-проверка связки Vite → FastAPI → БД. Есть два предупреждения зависимостей Starlette/httpx об устаревающих интерфейсах. Контейнеры PostgreSQL/Superset не запускались (Docker недоступен), визуальная проверка браузером не выполнена (локальный адрес недоступен браузеру).
+Результаты проверок по задачам фиксируются в `docs/night-report.md`.
 
 ## Структура
 

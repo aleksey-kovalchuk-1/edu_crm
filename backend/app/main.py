@@ -1,12 +1,12 @@
-import os
 from contextlib import asynccontextmanager
 from datetime import date
 from fastapi import FastAPI, Depends, HTTPException
-from sqlalchemy import create_engine, select, event, text
+from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
 from .models import Base, University, Launch, Task, StageEvent, AnnualMetric
 from .schemas import UniversityInput, LaunchInput, StageInput, TaskInput
 from .seed import seed
+from .settings import load_settings, validate_database_url
 
 STAGES = ['Поиск контакта', 'Уточнение интереса', 'Встреча', 'Обмен документами', 'Согласование документов', 'Подписание', 'Передача материалов и лицензий', 'Внедрение продукта', 'Обучение преподавателей', 'Актуализация программы', 'Проведение занятий', 'Обновление материалов', 'Повышение квалификации']
 
@@ -16,13 +16,15 @@ def serialize(record):
 def is_overdue(launch):
     return launch.deadline < date.today() and launch.stage < 10
 
-def create_app(database_url=None, seed_demo=False):
-    url = database_url or os.getenv('DATABASE_URL', 'sqlite:///./edu_crm.db')
-    engine = create_engine(url, connect_args={'check_same_thread': False} if url.startswith('sqlite') else {}, pool_pre_ping=True)
-    if url.startswith('sqlite'):
-        @event.listens_for(engine, 'connect')
-        def enable_foreign_keys(connection, _):
-            connection.execute('PRAGMA foreign_keys=ON')
+def create_app(database_url=None, seed_demo=None):
+    # The server calls create_app() with no arguments and reads the environment; tests pass values explicitly.
+    if database_url is None:
+        settings = load_settings()
+        database_url = settings.database_url
+        seed_demo = settings.seed_demo if seed_demo is None else seed_demo
+    else:
+        database_url = validate_database_url(database_url)
+    engine = create_engine(database_url, pool_pre_ping=True)
 
     @asynccontextmanager
     async def lifespan(app):
@@ -112,5 +114,3 @@ def create_app(database_url=None, seed_demo=False):
         return {'universities': len(list(db.scalars(select(University.id)))), 'launches': len(rows), 'students': sum(x.students for x in rows), 'overdue': sum(is_overdue(x) for x in rows), 'annual': [serialize(x) for x in db.scalars(select(AnnualMetric).order_by(AnnualMetric.year))]}
 
     return app
-
-app = create_app(seed_demo=os.getenv('SEED_DEMO', 'false').lower() == 'true')
