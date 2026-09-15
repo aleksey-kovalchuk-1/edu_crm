@@ -1,8 +1,9 @@
 from contextlib import asynccontextmanager
 from datetime import date
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
+from .errors import AppError, ErrorCode, install_error_handlers
 from .models import University, Launch, Task, StageEvent, AnnualMetric
 from .schemas import UniversityInput, LaunchInput, StageInput, TaskInput
 from .seed import seed
@@ -35,6 +36,7 @@ def create_app(database_url=None, seed_demo=None):
         engine.dispose()
 
     app = FastAPI(title='Образование CRM API', version='0.1.0', lifespan=lifespan, description='Демонстрационный шаблон. Авторизация и производственные интеграции ещё не реализованы.')
+    install_error_handlers(app)
 
     def session():
         with Session(engine) as db:
@@ -43,7 +45,7 @@ def create_app(database_url=None, seed_demo=None):
     def require(db, model, id):
         record = db.get(model, id)
         if record is None:
-            raise HTTPException(404, 'Запись не найдена')
+            raise AppError(ErrorCode.RECORD_NOT_FOUND)
         return record
 
     @app.get('/api/v1/health')
