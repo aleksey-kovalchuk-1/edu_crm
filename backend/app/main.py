@@ -6,7 +6,6 @@ from sqlalchemy.orm import Session
 from .errors import AppError, ErrorCode, install_error_handlers
 from .models import University, Launch, Task, StageEvent, AnnualMetric
 from .schemas import UniversityInput, LaunchInput, StageInput, TaskInput
-from .seed import seed
 from .settings import load_settings, validate_database_url
 
 STAGES = ['Поиск контакта', 'Уточнение интереса', 'Встреча', 'Обмен документами', 'Согласование документов', 'Подписание', 'Передача материалов и лицензий', 'Внедрение продукта', 'Обучение преподавателей', 'Актуализация программы', 'Проведение занятий', 'Обновление материалов', 'Повышение квалификации']
@@ -17,25 +16,26 @@ def serialize(record):
 def is_overdue(launch):
     return launch.deadline < date.today() and launch.stage < 10
 
-def create_app(database_url=None, seed_demo=None):
-    # The server calls create_app() with no arguments and reads the environment; tests pass values explicitly.
-    if database_url is None:
-        settings = load_settings()
-        database_url = settings.database_url
-        seed_demo = settings.seed_demo if seed_demo is None else seed_demo
-    else:
-        database_url = validate_database_url(database_url)
+def create_app(database_url=None):
+    # The server calls create_app() with no arguments and reads the environment; tests pass the URL explicitly.
+    database_url = load_settings().database_url if database_url is None else validate_database_url(database_url)
     engine = create_engine(database_url, pool_pre_ping=True)
 
     @asynccontextmanager
     async def lifespan(app):
-        if seed_demo:
-            with Session(engine) as db:
-                seed(db)
         yield
         engine.dispose()
 
-    app = FastAPI(title='Образование CRM API', version='0.1.0', lifespan=lifespan, description='Демонстрационный шаблон. Авторизация и производственные интеграции ещё не реализованы.')
+    # Documentation lives under /api because nginx only proxies that prefix to the API.
+    app = FastAPI(
+        title='Образование CRM API',
+        version='0.1.0',
+        lifespan=lifespan,
+        description='Демонстрационный шаблон. Авторизация и производственные интеграции ещё не реализованы.',
+        docs_url='/api/docs',
+        redoc_url='/api/redoc',
+        openapi_url='/api/openapi.json',
+    )
     install_error_handlers(app)
 
     def session():

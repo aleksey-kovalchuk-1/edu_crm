@@ -16,9 +16,8 @@ def test_non_postgres_url_is_rejected(url):
 
 
 def test_valid_settings_are_normalised():
-    settings = load_settings({'DATABASE_URL': ' postgresql+psycopg://u:p@h:5432/db ', 'SEED_DEMO': 'TRUE'})
+    settings = load_settings({'DATABASE_URL': ' postgresql+psycopg://u:p@h:5432/db '})
     assert settings.database_url == 'postgresql+psycopg://u:p@h:5432/db'
-    assert settings.seed_demo is True
 
 
 def test_server_factory_requires_database_url(monkeypatch):

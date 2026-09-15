@@ -11,7 +11,6 @@ class SettingsError(RuntimeError):
 @dataclass(frozen=True)
 class Settings:
     database_url: str
-    seed_demo: bool
 
 
 def validate_database_url(url):
@@ -25,7 +24,4 @@ def validate_database_url(url):
 
 def load_settings(environ=None):
     environ = os.environ if environ is None else environ
-    return Settings(
-        database_url=validate_database_url(environ.get('DATABASE_URL')),
-        seed_demo=environ.get('SEED_DEMO', 'false').strip().lower() == 'true',
-    )
+    return Settings(database_url=validate_database_url(environ.get('DATABASE_URL')))
