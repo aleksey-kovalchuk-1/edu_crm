@@ -84,9 +84,15 @@ def _boolean(environ, name, default):
     raise SettingsError(f'{name} must be true or false, got {raw!r}')
 
 
+def database_url_from_environment(environ=None):
+    """Only the database URL, for tools such as migrations and seeding that do not need login settings."""
+    environ = os.environ if environ is None else environ
+    return validate_database_url(environ.get('DATABASE_URL'))
+
+
 def load_settings(environ=None):
     environ = os.environ if environ is None else environ
-    database_url = validate_database_url(environ.get('DATABASE_URL'))
+    database_url = database_url_from_environment(environ)
 
     missing = [name for name in REQUIRED_AUTH_SETTINGS if not (environ.get(name) or '').strip()]
     if missing:

@@ -9,7 +9,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import create_engine, inspect
 
-from .settings import load_settings
+from .settings import database_url_from_environment
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent
 BASELINE_REVISION = '0001'
@@ -36,4 +36,4 @@ def upgrade_database(database_url, configure_logger=False):
 
 
 if __name__ == '__main__':
-    upgrade_database(load_settings().database_url, configure_logger=True)
+    upgrade_database(database_url_from_environment(), configure_logger=True)

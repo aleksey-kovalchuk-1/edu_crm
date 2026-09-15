@@ -2,7 +2,7 @@ from datetime import date, timedelta
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from .models import University, Launch, Task, StageEvent, AnnualMetric
-from .settings import load_settings
+from .settings import database_url_from_environment
 
 def seed(db):
     if db.scalar(select(University.id).limit(1)) is not None:
@@ -50,4 +50,4 @@ def seed_database(database_url):
 
 
 if __name__ == '__main__':
-    seed_database(load_settings().database_url)
+    seed_database(database_url_from_environment())

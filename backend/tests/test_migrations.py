@@ -1,8 +1,12 @@
+import os
+import subprocess
+import sys
+
 from alembic import command
 from alembic.script import ScriptDirectory
 from sqlalchemy import create_engine, inspect, text
 
-from app.db_migrate import BASELINE_REVISION, alembic_config, upgrade_database
+from app.db_migrate import BACKEND_DIR, BASELINE_REVISION, alembic_config, upgrade_database
 
 
 def _head(config):
@@ -36,6 +40,18 @@ def test_downgrade_to_base_and_upgrade_again(database_url):
         engine.dispose()
     command.upgrade(config, 'head')
     command.check(config)
+
+
+def test_alembic_command_line_needs_only_database_url(database_url):
+    # The real CLI goes through migrations/env.py; login settings must not be required for schema work.
+    environment = {key: value for key, value in os.environ.items() if not key.startswith(('OIDC_', 'SESSION_', 'PUBLIC_BASE_URL'))}
+    environment['DATABASE_URL'] = database_url
+    result = subprocess.run(
+        [sys.executable, '-m', 'alembic', 'current'],
+        cwd=BACKEND_DIR, env=environment, capture_output=True, text=True, timeout=60,
+    )
+    assert result.returncode == 0, result.stderr
+    assert '(head)' in result.stdout
 
 
 def test_database_created_before_migrations_keeps_its_data(empty_database_url):
