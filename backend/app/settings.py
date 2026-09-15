@@ -33,6 +33,7 @@ class Settings:
     session_revalidate_seconds: int = 120
     cookie_secure: bool = True
     allowed_origins: tuple[str, ...] = ()
+    attachments_dir: str = '/data/attachments'
 
     @property
     def callback_url(self):
@@ -121,4 +122,5 @@ def load_settings(environ=None):
         session_revalidate_seconds=_positive_int(environ, 'SESSION_REVALIDATE_SECONDS', 120),
         cookie_secure=_boolean(environ, 'COOKIE_SECURE', True),
         allowed_origins=allowed_origins,
+        attachments_dir=(environ.get('ATTACHMENTS_DIR') or '').strip() or '/data/attachments',
     )

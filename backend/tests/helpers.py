@@ -1,3 +1,4 @@
+import tempfile
 from contextlib import contextmanager
 from datetime import timedelta
 from urllib.parse import parse_qs, urlsplit
@@ -24,6 +25,7 @@ def make_settings(database_url, **overrides):
         public_base_url=PUBLIC_BASE_URL,
         session_encryption_key=TEST_ENCRYPTION_KEY,
         cookie_secure=False,
+        attachments_dir=tempfile.mkdtemp(prefix='edu-crm-attachments-'),
     )
     values.update(overrides)
     return Settings(**values)
