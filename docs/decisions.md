@@ -39,6 +39,11 @@ Status values: `OWNER` (explicit owner decision), `ASSUMED` (default the owner m
 | D-114 | Milestone tags use `ai-mN-<name>-YYYYMMDD` and are never moved | Unique, recoverable versions | ASSUMED |
 | D-115 | The lead agent alone owns migrations, the API contract, and Compose/deployment files; subagents get non-overlapping files | Avoids conflicting edits | ASSUMED |
 | D-116 | The A1 spec draft (custom session authentication) is superseded by D-002; kept for history | Owner decision overrides it | ASSUMED |
+| D-117 | Keycloak `quay.io/keycloak/keycloak:26.7.3`; realm `edu-crm` imported from `deploy/keycloak/realm-edu-crm.json`; client secret and demo passwords substituted from environment variables (`${VAR}`), required in Compose with `${VAR:?}` because an unset variable is imported as literal text | Verified in a throwaway container on 2026-09-15 (see night report) | ASSUMED |
+| D-118 | The backend keeps only `crm-*` values from the token `roles` claim; built-in roles (`default-roles-edu-crm`, `offline_access`, `uma_authorization`) are ignored | Tokens carry built-in roles alongside CRM roles | ASSUMED |
+| D-120 | Every API error response is `{"code", "message", "details"}` with codes from `backend/app/errors.py`, documented in `docs/api/errors.md`; the frontend shows `message` and the `code` | Specification requires error codes; one shape keeps clients simple | ASSUMED |
+| D-121 | Frontend: React Router for pages, TanStack Query for server state with targeted cache invalidation, Vitest + Testing Library + ESLint for checks | Multiple screens and the no-reload / 1-second requirements; current single file refetches everything after each change | ASSUMED |
+| D-119 | Constraint names follow PostgreSQL defaults (`<table>_pkey`, `<table>_<column>_fkey`, `<table>_<column>_key`) through the SQLAlchemy naming convention | Databases built by `create_all` before migrations keep identical names, so the baseline can be stamped | ASSUMED |
 
 ## Proposals awaiting owner approval
 
