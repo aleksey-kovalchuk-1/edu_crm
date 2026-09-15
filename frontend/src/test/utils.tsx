@@ -3,15 +3,101 @@ import { MemoryRouter, useLocation } from "react-router";
 import { vi } from "vitest";
 import type { Session } from "../api/auth";
 import { API_BASE } from "../api/client";
-import type { Dashboard, Launch, Task, University } from "../api/types";
+import type {
+  Contract,
+  CrmUser,
+  Dashboard,
+  ITDirection,
+  ITProduct,
+  Launch,
+  Task,
+  TransferStatus,
+  University,
+  UniversityContact,
+} from "../api/types";
 import { AppProviders } from "../app/AppProviders";
 import { AppRoutes } from "../app/App";
 import { createQueryClient } from "../app/queryClient";
 
 export function fixtures() {
   const universities: University[] = [
-    { id: 1, name: "Колледж связи", city: "Казань", contact: "Анна Смирнова" },
-    { id: 2, name: "Технический университет", city: "Омск", contact: "" },
+    {
+      id: 1,
+      name: "Колледж связи",
+      short_name: "КС",
+      city: "Казань",
+      region: "Республика Татарстан",
+      website: "https://ks.example",
+      contact: "Анна Смирнова",
+      is_active: true,
+      managers: [{ id: 5, full_name: "Анна Демо" }],
+    },
+    {
+      id: 2,
+      name: "Технический университет",
+      short_name: "",
+      city: "Омск",
+      region: "",
+      website: "",
+      contact: "",
+      is_active: true,
+      managers: [],
+    },
+  ];
+  const directions: ITDirection[] = [
+    { id: 1, name: "DevOps", description: "", is_active: true },
+    { id: 2, name: "Тестирование", description: "QA", is_active: true },
+  ];
+  const products: ITProduct[] = [
+    {
+      id: 3,
+      vendor: "РТК ИТ",
+      name: "Учебная среда",
+      description: "",
+      is_active: true,
+      directions: [{ id: 1, name: "DevOps" }],
+    },
+  ];
+  const users: CrmUser[] = [
+    { id: 5, full_name: "Анна Демо", email: "anna@example.test", roles: ["crm-user"], is_active: true },
+    { id: 6, full_name: "Олег Кузнецов", email: "oleg@example.test", roles: ["crm-user"], is_active: true },
+  ];
+  const contacts: UniversityContact[] = [
+    {
+      id: 7,
+      university_id: 1,
+      full_name: "Иван Демо",
+      position: "Проректор",
+      email: "",
+      phone: "",
+      comment: "",
+      is_active: true,
+    },
+  ];
+  const transferStatuses: TransferStatus[] = [
+    { value: "not_started", label: "Не начата" },
+    { value: "in_progress", label: "Идёт передача" },
+    { value: "transferred", label: "Передано" },
+    { value: "cancelled", label: "Отменено" },
+  ];
+  const contracts: Contract[] = [
+    {
+      id: 12,
+      contract_number: "Д-2026-001",
+      university: { id: 1, name: "Колледж связи" },
+      it_product: { id: 3, vendor: "РТК ИТ", name: "Учебная среда" },
+      signed_at: "2025-10-01",
+      valid_until: "2026-10-01",
+      transfer_status: "in_progress",
+      transfer_status_label: "Идёт передача",
+      manager: { id: 5, full_name: "Анна Демо" },
+      manager_name: "",
+      contacts: [{ id: 7, full_name: "Иван Демо" }],
+      comment: "",
+      is_expired: false,
+      expires_soon: true,
+      updated_at: "2026-09-01T10:00:00Z",
+    },
   ];
   const launches: Launch[] = [
     {
@@ -61,7 +147,19 @@ export function fixtures() {
     overdue: 1,
     annual: [{ year: 2025, applications: 120, students: 80, streams: 4 }],
   };
-  return { universities, launches, tasks, stages, dashboard };
+  return {
+    universities,
+    launches,
+    tasks,
+    stages,
+    dashboard,
+    directions,
+    products,
+    users,
+    contacts,
+    transferStatuses,
+    contracts,
+  };
 }
 
 export const CSRF_TOKEN = "csrf-test-token";
@@ -108,7 +206,11 @@ export function deferred<T>() {
 export const apiError = (status: number, code: string, message: string, details: unknown = null) =>
   [status, { code, message, details }] as [number, unknown];
 
-/** Stubs global fetch with an in-memory API; handlers are keyed "METHOD /path". */
+/**
+ * Stubs global fetch with an in-memory API; handlers are keyed "METHOD /path".
+ * A handler for the exact path (with query) wins; otherwise the path without
+ * its query string is tried.
+ */
 export function mockApi(extra: Record<string, Handler> = {}) {
   const data = fixtures();
   const calls: Call[] = [];
@@ -125,6 +227,18 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     "GET /launches/1/history": () => [
       { id: 1, stage: 4, created_at: "2026-09-01T10:00:00" },
     ],
+    "GET /it-directions": () => data.directions,
+    "GET /it-products": () => data.products,
+    "GET /users": () => data.users,
+    "GET /universities/1/contacts": () => data.contacts,
+    "GET /universities/2/contacts": () => [],
+    "GET /contracts/transfer-statuses": () => data.transferStatuses,
+    "GET /contracts": () => ({
+      items: data.contracts,
+      total: data.contracts.length,
+      limit: 50,
+      offset: 0,
+    }),
     ...extra,
   };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -137,7 +251,8 @@ export function mockApi(extra: Record<string, Handler> = {}) {
       headers: Object.fromEntries(new Headers(init?.headers).entries()),
     };
     calls.push(call);
-    const handler = handlers[`${method} ${path}`];
+    const handler =
+      handlers[`${method} ${path}`] ?? handlers[`${method} ${path.split("?")[0]}`];
     const result = handler
       ? await handler(call)
       : apiError(404, "NOT_FOUND", "Ресурс не найден");
@@ -151,7 +266,10 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     });
   });
   vi.stubGlobal("fetch", fetchMock);
-  return { data, calls, count };
+  /** Calls to a path, ignoring its query string. */
+  const callsTo = (method: string, pathname: string) =>
+    calls.filter((c) => c.method === method && c.path.split("?")[0] === pathname);
+  return { data, calls, count, callsTo };
 }
 
 /** Exposes the router location as text (data-testid="location"). */

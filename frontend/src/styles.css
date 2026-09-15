@@ -1407,3 +1407,362 @@ dialog::backdrop {
     font-size: 17px;
   }
 }
+
+/* Catalogs, universities and contracts (T-032) */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="tab"]:focus-visible {
+  outline: 3px solid #aa8bff;
+  outline-offset: 2px;
+}
+textarea {
+  font: inherit;
+}
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid #e4e1ec;
+  margin-bottom: 22px;
+  overflow-x: auto;
+}
+.tab {
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  padding: 11px 16px;
+  margin-bottom: -1px;
+  color: #6c647a;
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.tab:hover {
+  color: #4b435c;
+}
+.tab.selected {
+  color: #5c2f9e;
+  border-bottom-color: #7844d0;
+}
+.toggle,
+.inline-select {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: #5f5670;
+  white-space: nowrap;
+}
+.toggle input {
+  accent-color: #7844d0;
+  width: 15px;
+  height: 15px;
+}
+.inline-select select,
+.filters select,
+.filters input {
+  border: 1px solid #e4e1ec;
+  border-radius: 7px;
+  background: #fff;
+  color: #4b435c;
+  padding: 9px 10px;
+  font-size: 11px;
+  min-width: 0;
+}
+.filters {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+  margin: -8px 0 22px;
+}
+.filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 650;
+  color: #6f6479;
+}
+.data-table td {
+  font-size: 11px;
+  color: #4f4760;
+}
+.data-table td small {
+  color: #6f6479;
+}
+.data-table td.wrap,
+.cell-note {
+  white-space: normal;
+  max-width: 340px;
+}
+.cell-title {
+  font-weight: 750;
+  color: #3d3550;
+}
+.row-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  justify-content: flex-end;
+}
+.data-table .text-button,
+.contact-list .text-button {
+  font-size: 11px;
+  color: #6b3fb0;
+}
+.chips {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  white-space: normal;
+}
+.chip {
+  background: #f1eafa;
+  color: #5c3a8e;
+  border-radius: 12px;
+  padding: 3px 9px;
+  font-size: 10px;
+  font-weight: 650;
+}
+.badge-3 {
+  color: #2f6d56;
+}
+.badge-4 {
+  color: #5f5670;
+}
+.badge-warning {
+  background: #fcf1e4;
+  color: #7a4f12;
+  font-size: 10px;
+}
+.badge-danger {
+  background: #fff0ed;
+  color: #a4461d;
+  font-size: 10px;
+}
+.inline-badge {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+.validity {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 19px;
+  border-top: 1px solid #f0edf4;
+}
+.pagination .muted,
+.table-total {
+  font-size: 11px;
+  color: #6f6479;
+}
+.table-total {
+  padding: 12px 19px;
+  border-top: 1px solid #f0edf4;
+}
+.pagination .muted {
+  margin-right: auto;
+}
+.empty-state {
+  color: #5f5670;
+  font-size: 12px;
+}
+.university-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.card-title-link:hover {
+  color: #6b3fb0;
+  text-decoration: underline;
+}
+.short-name {
+  display: block;
+  font-size: 11px;
+  color: #6b3fb0;
+  font-weight: 750;
+}
+.website-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #6b3fb0;
+  text-decoration: underline;
+  overflow-wrap: anywhere;
+}
+.university-card p + p {
+  margin-top: 6px;
+}
+.back-link {
+  font-size: 11px;
+  margin-bottom: 14px;
+}
+.head-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding: 0 23px 22px;
+}
+.fields dt {
+  font-size: 10px;
+  color: #6f6479;
+}
+.fields dd {
+  margin: 5px 0 0;
+  font-size: 12px;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.detail-columns {
+  display: grid;
+  grid-template-columns: 1fr 1.6fr;
+  gap: 22px;
+}
+.people-list,
+.contact-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 23px 10px;
+}
+.people-list li,
+.contact-list li {
+  padding: 12px 0;
+  border-bottom: 1px solid #f1edf6;
+  font-size: 12px;
+  font-weight: 600;
+}
+.people-list li:last-child,
+.contact-list li:last-child {
+  border-bottom: 0;
+}
+.contact-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+.contact-list small {
+  color: #6f6479;
+  font-size: 10px;
+}
+.contact-list li.inactive strong {
+  color: #6f6479;
+}
+dialog.wide {
+  width: min(720px, calc(100% - 30px));
+}
+.modal textarea {
+  display: block;
+  width: 100%;
+  border: 1px solid #e4dce9;
+  border-radius: 7px;
+  padding: 11px;
+  color: #5d476c;
+  font-size: 12px;
+  resize: vertical;
+}
+.modal form label,
+.modal legend,
+.form-note {
+  color: #6f5a80;
+}
+.modal input[type="checkbox"] {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  accent-color: #7844d0;
+  flex-shrink: 0;
+}
+.checkbox-group {
+  border: 1px solid #e4dce9;
+  border-radius: 7px;
+  padding: 10px 12px 4px;
+  margin: 0 0 15px;
+  max-height: 220px;
+  overflow: auto;
+}
+.checkbox-group legend {
+  font-size: 11px;
+  font-weight: 650;
+  padding: 0 4px;
+}
+.modal form .checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 8px;
+  color: #4b435c;
+  font-weight: 600;
+}
+.checkbox-group .muted,
+.form-note {
+  font-size: 11px;
+  line-height: 1.7;
+  margin-bottom: 10px;
+}
+.field-hint {
+  font-size: 10px;
+  color: #6f6479;
+  font-weight: 500;
+}
+@media (max-width: 1200px) {
+  .detail-columns {
+    grid-template-columns: 1fr;
+  }
+  .fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 800px) {
+  .fields {
+    grid-template-columns: 1fr;
+    padding: 0 15px 18px;
+  }
+  .filters {
+    grid-template-columns: 1fr 1fr;
+  }
+  .section-head {
+    flex-wrap: wrap;
+  }
+  .pagination {
+    flex-wrap: wrap;
+  }
+  .contact-list li {
+    flex-direction: column;
+  }
+  .toolbar .primary {
+    font-size: 11px;
+  }
+}
+.modal form .field-with-hint label {
+  margin-bottom: 5px;
+}
+.field-with-hint .field-hint {
+  margin-bottom: 15px;
+}

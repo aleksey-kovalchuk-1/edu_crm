@@ -8,12 +8,25 @@ import {
   Plus,
 } from "lucide-react";
 import { useTasks } from "../api/queries";
-import { CreateModal, type CreateKind } from "../components/forms/CreateModal";
+import { CreateModal } from "../components/forms/CreateModal";
 import { ErrorAlert } from "../components/QueryState";
 import { canEditCatalog, roleLabel, userInitials } from "../lib/user";
 import { useSession, useSignOut } from "./AuthGate";
 import { LaunchDetailProvider } from "./LaunchDetail";
-import { NOT_FOUND_TITLE, findPage, pages, paths } from "./navigation";
+import {
+  NOT_FOUND_TITLE,
+  findPage,
+  isPageRoot,
+  pages,
+  paths,
+  type CreateKind,
+} from "./navigation";
+
+const CREATE_LABELS: Record<CreateKind, string> = {
+  university: "Добавить заведение",
+  launch: "Новое взаимодействие",
+  contract: "Новый договор",
+};
 
 export function Layout() {
   const location = useLocation();
@@ -21,15 +34,19 @@ export function Layout() {
   const logout = useSignOut();
   const [menu, setMenu] = useState(false);
   const [create, setCreate] = useState<CreateKind | null>(null);
+  // Bumped by a sidebar click so re-opening the current page resets its local state.
+  const [navResets, setNavResets] = useState(0);
   const tasks = useTasks();
   const page = findPage(location.pathname);
   const openTasks = tasks.data?.filter((t) => !t.done).length;
   const closeMenu = () => setMenu(false);
   const initials = userInitials(user);
   // The server enforces roles; the interface only hides actions that would be refused.
+  const createKind =
+    page && page.create && isPageRoot(page, location.pathname) ? page.create : null;
   const canCreate =
-    page !== undefined &&
-    (page.create !== "university" || canEditCatalog(user.roles));
+    createKind !== null &&
+    (createKind !== "university" || canEditCatalog(user.roles));
 
   return (
     <LaunchDetailProvider>
@@ -58,11 +75,14 @@ export function Layout() {
               <NavLink
                 key={p.path}
                 to={p.path}
-                end
+                end={p.path === paths.overview}
                 className={({ isActive }) =>
                   isActive ? "nav-item active" : "nav-item"
                 }
-                onClick={closeMenu}
+                onClick={() => {
+                  closeMenu();
+                  setNavResets((n) => n + 1);
+                }}
               >
                 <p.icon size={19} />
                 {p.name}
@@ -129,21 +149,19 @@ export function Layout() {
                 <h1>{page?.heading ?? NOT_FOUND_TITLE}</h1>
                 {page && <p className="subtitle">{page.subtitle}</p>}
               </div>
-              {page && canCreate && (
-                <button
-                  className="primary"
-                  onClick={() => setCreate(page.create)}
-                >
+              {createKind && canCreate && (
+                <button className="primary" onClick={() => setCreate(createKind)}>
                   <Plus size={18} />
-                  {page.create === "university"
-                    ? "Добавить заведение"
-                    : "Новое взаимодействие"}
+                  {CREATE_LABELS[createKind]}
                 </button>
               )}
             </div>
             {logout.error && <ErrorAlert error={logout.error} />}
-            {/* A new key per navigation resets page-local state (search, filters). */}
-            <Outlet key={location.key} />
+            {/*
+              A new key per page (or sidebar click) resets page-local state; query-string
+              changes (URL filters) keep the page mounted so inputs keep focus.
+            */}
+            <Outlet key={`${location.pathname}#${navResets}`} />
             <footer>
               Образование CRM <span>Рабочий шаблон · Данные вымышлены</span>
             </footer>

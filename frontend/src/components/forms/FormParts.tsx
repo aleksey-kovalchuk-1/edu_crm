@@ -8,21 +8,34 @@ export function FieldError({
   error: unknown;
   field: string;
 }) {
-  const message =
-    error instanceof ApiError ? error.fieldMessage(field) : undefined;
+  const message = fieldErrorMessage(error, field);
   return message ? (
     <small className="field-error danger">{message}</small>
   ) : null;
+}
+
+/**
+ * Message the server reported for a field or its items ("contact_ids.0").
+ * A detail without its own text falls back to the error message (e.g. CONFLICT).
+ */
+export function fieldErrorMessage(error: unknown, field: string): string | undefined {
+  if (!(error instanceof ApiError)) return undefined;
+  const detail = error.details?.find(
+    (d) => d.field === field || d.field?.startsWith(`${field}.`),
+  );
+  return detail ? detail.message || error.message : undefined;
 }
 
 export function FormFooter({
   error,
   pending,
   onCancel,
+  submitLabel = "Создать",
 }: {
   error: unknown;
   pending: boolean;
   onCancel: () => void;
+  submitLabel?: string;
 }) {
   return (
     <>
@@ -36,7 +49,7 @@ export function FormFooter({
           Отмена
         </button>
         <button className="primary" disabled={pending}>
-          {pending ? "Сохраняем…" : "Создать"}
+          {pending ? "Сохраняем…" : submitLabel}
         </button>
       </div>
     </>

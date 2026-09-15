@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  addOneYear,
   csvCell,
   formatDate,
   formatDateTime,
@@ -8,6 +9,7 @@ import {
   initials,
   launchCode,
   matches,
+  safeWebsiteUrl,
   stageGroup,
   toCsv,
 } from "./format";
@@ -63,5 +65,19 @@ describe("format helpers", () => {
     expect(csvCell('a"b')).toBe('"a""b"');
     expect(csvCell("=SUM(A1)")).toBe(`"'=SUM(A1)"`);
     expect(toCsv([["Год", 2025]])).toBe('﻿"Год";"2025"');
+  });
+
+  it("computes the default licence validity", () => {
+    expect(addOneYear("2026-01-15")).toBe("2027-01-15");
+    expect(addOneYear("2024-02-29")).toBe("2025-02-28");
+    expect(addOneYear("")).toBe("");
+  });
+
+  it("allows only http(s) website links", () => {
+    expect(safeWebsiteUrl("https://stu.example")).toBe("https://stu.example/");
+    expect(safeWebsiteUrl("stu.example")).toBe("https://stu.example/");
+    expect(safeWebsiteUrl("javascript:alert(1)")).toBeNull();
+    expect(safeWebsiteUrl("ftp://stu.example")).toBeNull();
+    expect(safeWebsiteUrl("")).toBeNull();
   });
 });
