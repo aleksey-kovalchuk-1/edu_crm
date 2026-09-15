@@ -84,6 +84,10 @@ services:
       # uvicorn reads both: worker processes, and which proxies may set X-Forwarded-* (only nginx reaches the API on the Compose network).
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       FORWARDED_ALLOW_IPS: '*'
+      ATTACHMENTS_DIR: /data/attachments
+    volumes:
+      # Files attached to status changes; include this volume in backups together with the database.
+      - attachments_data:/data/attachments
     depends_on:
       db:
         condition: service_healthy
@@ -127,4 +131,5 @@ services:
 
 volumes:
   postgres_data:
+  attachments_data:
   superset_data:

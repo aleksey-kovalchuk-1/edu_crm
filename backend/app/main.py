@@ -13,8 +13,9 @@ from .catalog_routes import active_university_in_scope, router as catalog_router
 from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
-from .models import AnnualMetric, Launch, StageEvent, StatusChange, Task, University
-from .workflows import active_statuses, default_template, status_at_position
+from .models import AnnualMetric, Launch, StageEvent, StatusChange, Task, University, WorkflowStatus
+from .workflow_routes import router as workflow_router
+from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
 from .schemas import LaunchInput, StageInput, TaskInput
 from .security import TokenCipher
@@ -31,14 +32,6 @@ def serialize(record):
 
 def is_overdue(launch):
     return launch.deadline < date.today() and launch.stage < 10
-
-
-def launch_in_scope(db, user, launch_id):
-    # Launches belong to a university, so a manager only reaches launches of universities assigned to them (D-141).
-    launch = db.scalar(select(Launch).where(Launch.id == launch_id, university_scope(Launch.university_id, user)))
-    if launch is None:
-        raise AppError(ErrorCode.RECORD_NOT_FOUND)
-    return launch
 
 
 def create_app(settings=None, *, http_client=None):
@@ -82,6 +75,7 @@ def create_app(settings=None, *, http_client=None):
     app.include_router(audit_router)
     app.include_router(catalog_router)
     app.include_router(import_router)
+    app.include_router(workflow_router)
 
     @app.get('/api/v1/health')
     def health(db: Session = Depends(get_db)):
@@ -89,8 +83,9 @@ def create_app(settings=None, *, http_client=None):
         return {'status': 'ok'}
 
     @app.get('/api/v1/stages', dependencies=[Depends(any_role)])
-    def stages():
-        return STAGES
+    def stages(db: Session = Depends(get_db)):
+        # Status names of the default workflow indexed by position, so renamed statuses show up in older screens.
+        return [status.name for status in all_statuses(db, default_template(db).id)]
 
     @app.get('/api/v1/launches')
     def launches(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
@@ -112,7 +107,7 @@ def create_app(settings=None, *, http_client=None):
         db.add(StatusChange(launch_id=record.id, from_status_id=None, to_status_id=first_status.id, user_id=auth.user.id))
         record_event(db, request, auth.user, 'launch.create', entity_type='launch', entity_id=record.id,
                      summary=f'Создано взаимодействие «{record.program}» с «{university.name}»',
-                     payload={**data.model_dump(mode='json'), 'stage': 0})
+                     payload={**data.model_dump(mode='json'), 'stage': first_status.position})
         db.commit()
         db.refresh(record)
         return serialize(record)
@@ -125,12 +120,13 @@ def create_app(settings=None, *, http_client=None):
             if status is None:
                 raise AppError(ErrorCode.VALIDATION_ERROR, details=[{'field': 'stage', 'message': 'В процессе нет активного статуса с таким номером', 'type': 'value_error'}])
             previous = record.stage
+            previous_status = db.get(WorkflowStatus, record.status_id)
             db.add(StatusChange(launch_id=id, from_status_id=record.status_id, to_status_id=status.id, user_id=auth.user.id))
             record.stage = data.stage
             record.status_id = status.id
             db.add(StageEvent(launch_id=id, stage=data.stage))
             record_event(db, request, auth.user, 'launch.stage_change', entity_type='launch', entity_id=id,
-                         summary=f'«{record.program}»: этап «{STAGES[previous]}» → «{STAGES[data.stage]}»',
+                         summary=f'«{record.program}»: этап «{previous_status.name}» → «{status.name}»',
                          payload={'from': previous, 'to': data.stage})
             db.commit()
         return serialize(record)
