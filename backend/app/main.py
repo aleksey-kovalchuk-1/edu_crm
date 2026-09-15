@@ -3,7 +3,7 @@ from datetime import date
 from fastapi import FastAPI, Depends, HTTPException
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session
-from .models import Base, University, Launch, Task, StageEvent, AnnualMetric
+from .models import University, Launch, Task, StageEvent, AnnualMetric
 from .schemas import UniversityInput, LaunchInput, StageInput, TaskInput
 from .seed import seed
 from .settings import load_settings, validate_database_url
@@ -28,7 +28,6 @@ def create_app(database_url=None, seed_demo=None):
 
     @asynccontextmanager
     async def lifespan(app):
-        Base.metadata.create_all(engine)
         if seed_demo:
             with Session(engine) as db:
                 seed(db)
