@@ -21,6 +21,10 @@ export const hasCrmAccess = (roles: string[]) => roleLabel(roles) !== null;
 export const canEditCatalog = (roles: string[]) =>
   roles.includes(ROLES.supervisor) || roles.includes(ROLES.admin);
 
+/** Uploading catalogs from xls/xlsx files (T-033) — supervisors and admins. */
+export const canImportCatalogs = (roles: string[]) =>
+  roles.includes(ROLES.supervisor) || roles.includes(ROLES.admin);
+
 /** Supervisors and admins see everyone's actions; a crm-user sees only their own. */
 export const seesAllActions = (roles: string[]) =>
   roles.includes(ROLES.supervisor) || roles.includes(ROLES.admin);

@@ -56,6 +56,17 @@ describe("apiRequest", () => {
     ]);
   });
 
+  it("sends FormData as multipart without a JSON content type", async () => {
+    configureApiClient({ csrfToken: () => "token-2" });
+    const fetchMock = stubFetch(201, "{}");
+    const form = new FormData();
+    form.append("file", new File(["x"], "a.xlsx"));
+    await apiRequest("/imports", "POST", form);
+    const init = (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1];
+    expect(init.body).toBe(form);
+    expect(init.headers).toEqual({ "X-CSRF-Token": "token-2" });
+  });
+
   it("reports 401 from data requests but not from /auth/me", async () => {
     const onUnauthenticated = vi.fn();
     configureApiClient({ onUnauthenticated });
