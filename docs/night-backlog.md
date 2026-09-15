@@ -10,8 +10,8 @@ Priority order: owner decisions and the official specification (`docs/specificat
 
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
-| T-001 | Working branch, saved specification, tracking documents, supersede the A1 draft | — | Files committed on `ai/crm-foundation` | IN_PROGRESS |
-| T-002 | Database backup and restore scripts with documentation | — | Backup of the dev volume created; restore into a separate check database reproduces row counts; the restore script refuses to overwrite an existing database | TODO |
+| T-001 | Working branch, saved specification, tracking documents, supersede the A1 draft | — | Files committed on `ai/crm-foundation` | VERIFIED (`7381a60`) |
+| T-002 | Database backup and restore scripts with documentation | — | Backup of the dev volume created; restore into a separate check database reproduces row counts; the restore script refuses to overwrite an existing database | VERIFIED |
 
 ## M1 — Foundation
 

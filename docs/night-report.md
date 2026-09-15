@@ -26,10 +26,13 @@ Run started. No milestone verified yet.
 | Time (UTC) | Action | Evidence |
 |---|---|---|
 | 2026-09-15 07:57 | `pg_dump -Fc` of the dev database before any schema work | `/Users/alex/dev/edu-crm-backups/edu_crm-20260915T075739Z-pre-foundation.dump` (13,251 bytes; `pg_restore --list` shows 5 table-data entries) |
+| 2026-09-15 08:02 | T-002 verification with `scripts/db-backup.sh` / `db-restore.sh` / `db-row-counts.sh` | Restored `edu_crm-20260915T080214Z-t002-check.dump` into `edu_crm_restore_check`: counts identical (annual_metrics 3, launches 8, stage_events 8, tasks 8, universities 6); restore into existing name and into `edu_crm` refused (exit 1); invalid name refused (exit 2); check database dropped; live counts unchanged |
 
 ## Checkpoints and versions
 
-No commits or tags on the working branch yet.
+| Commit | Task | Verification |
+|---|---|---|
+| `7381a60` | T-001 specification and tracking documents | Documentation only |
 
 ## Blockers
 
