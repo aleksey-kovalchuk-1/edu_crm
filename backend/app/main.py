@@ -13,7 +13,8 @@ from .catalog_routes import active_university_in_scope, router as catalog_router
 from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
-from .models import AnnualMetric, Launch, StageEvent, Task, University
+from .models import AnnualMetric, Launch, StageEvent, StatusChange, Task, University
+from .workflows import active_statuses, default_template, status_at_position
 from .oidc import OIDCClient
 from .schemas import LaunchInput, StageInput, TaskInput
 from .security import TokenCipher
@@ -102,10 +103,13 @@ def create_app(settings=None, *, http_client=None):
     @app.post('/api/v1/launches', status_code=201)
     def add_launch(data: LaunchInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
         university = active_university_in_scope(db, auth.user, data.university_id)
-        record = Launch(**data.model_dump(), stage=0)
+        template = default_template(db)
+        first_status = active_statuses(db, template.id)[0]
+        record = Launch(**data.model_dump(), stage=first_status.position, workflow_template_id=template.id, status_id=first_status.id)
         db.add(record)
         db.flush()
-        db.add(StageEvent(launch_id=record.id, stage=0))
+        db.add(StageEvent(launch_id=record.id, stage=first_status.position))
+        db.add(StatusChange(launch_id=record.id, from_status_id=None, to_status_id=first_status.id, user_id=auth.user.id))
         record_event(db, request, auth.user, 'launch.create', entity_type='launch', entity_id=record.id,
                      summary=f'Создано взаимодействие «{record.program}» с «{university.name}»',
                      payload={**data.model_dump(mode='json'), 'stage': 0})
@@ -117,8 +121,13 @@ def create_app(settings=None, *, http_client=None):
     def update_stage(id: int, data: StageInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
         record = launch_in_scope(db, auth.user, id)
         if record.stage != data.stage:
+            status = status_at_position(db, record.workflow_template_id, data.stage)
+            if status is None:
+                raise AppError(ErrorCode.VALIDATION_ERROR, details=[{'field': 'stage', 'message': 'В процессе нет активного статуса с таким номером', 'type': 'value_error'}])
             previous = record.stage
+            db.add(StatusChange(launch_id=id, from_status_id=record.status_id, to_status_id=status.id, user_id=auth.user.id))
             record.stage = data.stage
+            record.status_id = status.id
             db.add(StageEvent(launch_id=id, stage=data.stage))
             record_event(db, request, auth.user, 'launch.stage_change', entity_type='launch', entity_id=id,
                          summary=f'«{record.program}»: этап «{STAGES[previous]}» → «{STAGES[data.stage]}»',

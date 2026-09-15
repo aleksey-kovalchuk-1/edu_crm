@@ -54,6 +54,8 @@ class Launch(Base):
     students: Mapped[int] = mapped_column(default=0)
     stage: Mapped[int] = mapped_column(default=0)
     deadline: Mapped[date] = mapped_column(Date)
+    workflow_template_id: Mapped[int] = mapped_column(ForeignKey('workflow_templates.id'))
+    status_id: Mapped[int] = mapped_column(ForeignKey('workflow_statuses.id'))
 
 class Task(Base):
     __tablename__ = 'tasks'
@@ -69,6 +71,57 @@ class StageEvent(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     launch_id: Mapped[int] = mapped_column(ForeignKey('launches.id'))
     stage: Mapped[int]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+
+
+class WorkflowTemplate(Base):
+    """A configurable interaction process (docs/design/workflows.md)."""
+    __tablename__ = 'workflow_templates'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(russian_text(200), unique=True)
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    is_default: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    statuses: Mapped[list['WorkflowStatus']] = relationship(order_by='WorkflowStatus.position', viewonly=True)
+
+
+class WorkflowStatus(Base):
+    __tablename__ = 'workflow_statuses'
+    __table_args__ = (UniqueConstraint('template_id', 'name'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey('workflow_templates.id'), index=True)
+    name: Mapped[str] = mapped_column(russian_text(120))
+    position: Mapped[int]
+    is_final: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+
+
+class StatusChange(Base):
+    """One step in a launch's history: which status it moved to, who did it, with an optional comment and files."""
+    __tablename__ = 'status_changes'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    launch_id: Mapped[int] = mapped_column(ForeignKey('launches.id'), index=True)
+    from_status_id: Mapped[int | None] = mapped_column(ForeignKey('workflow_statuses.id'))
+    to_status_id: Mapped[int] = mapped_column(ForeignKey('workflow_statuses.id'))
+    comment: Mapped[str] = mapped_column(Text, default='', server_default='')
+    user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    attachments: Mapped[list['Attachment']] = relationship(order_by='Attachment.id', viewonly=True)
+
+
+class Attachment(Base):
+    """File metadata; the bytes live on the attachments volume under storage_key (D-153)."""
+    __tablename__ = 'attachments'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    status_change_id: Mapped[int] = mapped_column(ForeignKey('status_changes.id'), index=True)
+    launch_id: Mapped[int] = mapped_column(ForeignKey('launches.id'), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str] = mapped_column(String(64))
+    storage_key: Mapped[str] = mapped_column(String(64), unique=True)
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 class AnnualMetric(Base):
