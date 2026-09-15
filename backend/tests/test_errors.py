@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.errors import CATALOGUE, AppError, ErrorCode
 from app.main import create_app
+from helpers import login, make_settings
 
 ERRORS_DOC = Path(__file__).resolve().parents[2] / 'docs' / 'api' / 'errors.md'
 
@@ -32,31 +33,27 @@ def test_every_code_is_documented():
     assert missing == []
 
 
-def test_unknown_route(database_url):
-    with TestClient(create_app(database_url)) as client:
-        assert_error(client.get('/api/v1/no-such-route'), 404, 'NOT_FOUND')
+def test_unknown_route(client):
+    assert_error(client.get('/api/v1/no-such-route'), 404, 'NOT_FOUND')
 
 
-def test_missing_record(database_url):
-    with TestClient(create_app(database_url)) as client:
-        body = assert_error(client.patch('/api/v1/launches/999', json={'stage': 1}), 404, 'RECORD_NOT_FOUND')
-        assert body['message'] == 'Запись не найдена'
+def test_missing_record(client, keycloak):
+    login(client, keycloak)
+    body = assert_error(client.patch('/api/v1/launches/999', json={'stage': 1}), 404, 'RECORD_NOT_FOUND')
+    assert body['message'] == 'Запись не найдена'
 
 
-def test_validation_error_names_the_field(database_url):
-    with TestClient(create_app(database_url)) as client:
-        body = assert_error(client.post('/api/v1/universities', json={'name': '  ', 'city': 'Москва'}), 422, 'VALIDATION_ERROR')
-        assert [detail['field'] for detail in body['details']] == ['name']
+def test_validation_error_names_the_field(client, keycloak):
+    login(client, keycloak, roles=('crm-supervisor',))
+    body = assert_error(client.post('/api/v1/universities', json={'name': '  ', 'city': 'Москва'}), 422, 'VALIDATION_ERROR')
+    assert [detail['field'] for detail in body['details']] == ['name']
 
 
-def test_method_not_allowed(database_url):
-    with TestClient(create_app(database_url)) as client:
-        assert_error(client.delete('/api/v1/universities'), 405, 'METHOD_NOT_ALLOWED')
+def test_method_not_allowed(client):
+    assert_error(client.delete('/api/v1/universities'), 405, 'METHOD_NOT_ALLOWED')
 
 
-def test_unexpected_error_hides_internals(database_url):
-    app = create_app(database_url)
-
+def test_unexpected_error_hides_internals(app):
     def fail():
         raise RuntimeError('secret internal detail')
 
@@ -78,9 +75,7 @@ def test_unexpected_error_hides_internals(database_url):
     (429, 'RATE_LIMITED'),
     (418, 'BAD_REQUEST'),
 ])
-def test_http_exceptions_map_to_codes(database_url, status, code):
-    app = create_app(database_url)
-
+def test_http_exceptions_map_to_codes(app, status, code):
     def fail():
         raise HTTPException(status_code=status, detail='Своё сообщение', headers={'X-Test': '1'})
 
@@ -92,9 +87,7 @@ def test_http_exceptions_map_to_codes(database_url, status, code):
         assert response.headers['X-Test'] == '1'
 
 
-def test_app_error_carries_custom_message_and_details(database_url):
-    app = create_app(database_url)
-
+def test_app_error_carries_custom_message_and_details(app):
     def conflict():
         raise AppError(ErrorCode.CONFLICT, 'Договор с таким номером уже есть', [{'field': 'contract_number', 'message': 'Дубликат'}])
 
@@ -105,8 +98,8 @@ def test_app_error_carries_custom_message_and_details(database_url):
         assert body['details'] == [{'field': 'contract_number', 'message': 'Дубликат'}]
 
 
-def test_unreachable_database_returns_service_unavailable():
-    app = create_app('postgresql+psycopg://crm:unused@127.0.0.1:1/unreachable')
+def test_unreachable_database_returns_service_unavailable(keycloak):
+    app = create_app(make_settings('postgresql+psycopg://crm:unused@127.0.0.1:1/unreachable'), http_client=keycloak.http_client())
     with TestClient(app, raise_server_exceptions=False) as client:
         assert_error(client.get('/api/v1/health'), 503, 'SERVICE_UNAVAILABLE')
 
