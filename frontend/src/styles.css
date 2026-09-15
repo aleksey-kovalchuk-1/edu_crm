@@ -964,7 +964,14 @@ td small {
   color: #9985aa;
 }
 .danger {
-  color: #c78352 !important;
+  /* 6.0:1 on white, 5.4:1 on the error banner (WCAG AA for small text). */
+  color: #a4461d !important;
+}
+.field-error {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 500;
 }
 .error {
   background: #fff0ed;
