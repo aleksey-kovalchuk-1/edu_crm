@@ -2,7 +2,7 @@ import pytest
 from cryptography.fernet import Fernet
 
 from app.main import create_app
-from app.settings import SettingsError, load_settings
+from app.settings import SettingsError, database_url_from_environment, load_settings
 from helpers import make_settings
 
 
@@ -70,6 +70,13 @@ def test_valid_settings_are_normalised():
     assert settings.cookie_secure is False
     assert settings.session_ttl_hours == 4
     assert settings.session_revalidate_seconds == 120
+
+
+def test_tools_need_only_the_database_url():
+    # Migrations and seeding run without login settings (for example from a developer shell).
+    assert database_url_from_environment({'DATABASE_URL': ' postgresql+psycopg://u:p@h/db '}) == 'postgresql+psycopg://u:p@h/db'
+    with pytest.raises(SettingsError, match='DATABASE_URL is not set'):
+        database_url_from_environment({})
 
 
 def test_cookies_are_secure_by_default():

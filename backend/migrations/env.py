@@ -4,7 +4,7 @@ from alembic import context
 from sqlalchemy import create_engine, pool
 
 from app.models import Base
-from app.settings import load_settings
+from app.settings import database_url_from_environment
 
 config = context.config
 if config.config_file_name is not None and config.attributes.get('configure_logger', True):
@@ -15,7 +15,7 @@ target_metadata = Base.metadata
 
 def database_url():
     # Callers such as tests pass the URL through attributes; this avoids ConfigParser's % interpolation of passwords.
-    return config.attributes.get('database_url') or load_settings().database_url
+    return config.attributes.get('database_url') or database_url_from_environment()
 
 
 def run(connection):
