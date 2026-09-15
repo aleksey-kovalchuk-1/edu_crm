@@ -61,7 +61,7 @@ class OIDCClient:
         self._jwks = None
         self._jwks_loaded_at = 0.0
 
-    def authorization_url(self, *, redirect_uri, state, nonce, code_challenge):
+    def authorization_url(self, *, redirect_uri, state, nonce, code_challenge, registration=False):
         query = urlencode({
             'response_type': 'code',
             'client_id': self.client_id,
@@ -72,7 +72,11 @@ class OIDCClient:
             'code_challenge': code_challenge,
             'code_challenge_method': 'S256',
         })
-        return f'{self.issuer}/protocol/openid-connect/auth?{query}'
+        # Same authorization request either way (identical PKCE/state handling on the way back to
+        # /callback); only the entry page differs. Keycloak's dedicated registration endpoint opens
+        # straight on the registration form instead of the login form (D-155).
+        endpoint = 'registrations' if registration else 'auth'
+        return f'{self.issuer}/protocol/openid-connect/{endpoint}?{query}'
 
     def end_session_url(self, *, post_logout_redirect_uri):
         query = urlencode({'client_id': self.client_id, 'post_logout_redirect_uri': post_logout_redirect_uri})

@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { loginUrl, safeNextPath } from "../api/auth";
+import { loginUrl, registerUrl, safeNextPath } from "../api/auth";
 import { browser } from "../lib/browser";
 import {
   CSRF_TOKEN,
@@ -35,6 +35,10 @@ describe("auth gate", () => {
     expect(safeNextPath("/a\\b")).toBe("/");
     expect(safeNextPath("tasks")).toBe("/");
     expect(loginUrl("//evil.example")).toBe("/api/v1/auth/login?next=%2F");
+    expect(registerUrl("//evil.example")).toBe("/api/v1/auth/register?next=%2F");
+    expect(registerUrl("/tasks?view=1")).toBe(
+      "/api/v1/auth/register?next=%2Ftasks%3Fview%3D1",
+    );
   });
 
   it.each([
@@ -77,6 +81,44 @@ describe("auth gate", () => {
     expect(assign()).toHaveBeenCalledWith("/api/v1/auth/login?next=%2Ftasks%3Fview%3D1");
   });
 
+  it("offers registration next to sign-in on the login screen", async () => {
+    mockApi({ "GET /auth/me": unauthenticated });
+    renderApp("/tasks?auth_error=LOGIN_FAILED");
+    await screen.findByRole("alert");
+    const button = screen.getByRole("button", { name: "Зарегистрироваться" });
+    expect(assign()).not.toHaveBeenCalled();
+
+    fireEvent.click(button);
+
+    expect(assign()).toHaveBeenCalledWith(
+      "/api/v1/auth/register?next=%2Ftasks",
+    );
+    await waitFor(() => expect(location()).toBe("/tasks"));
+    expect(assign()).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers registration on the logged-out screen", async () => {
+    mockApi({ "GET /auth/me": unauthenticated });
+    renderApp("/?logged_out=1");
+    const button = await screen.findByRole("button", {
+      name: "Зарегистрироваться",
+    });
+    expect(assign()).not.toHaveBeenCalled();
+
+    fireEvent.click(button);
+
+    expect(assign()).toHaveBeenCalledWith("/api/v1/auth/register?next=%2F");
+  });
+
+  it("does not offer registration once signed in", async () => {
+    mockApi({ "GET /auth/me": () => sessionFixture() });
+    renderApp("/");
+    await screen.findByText("Анна Петрова");
+    expect(
+      screen.queryByRole("button", { name: "Зарегистрироваться" }),
+    ).toBeNull();
+  });
+
   it("shows a no-access screen for a session without CRM roles", async () => {
     mockApi({ "GET /auth/me": () => sessionFixture(["offline_access"]) });
     renderApp("/");
@@ -84,6 +126,9 @@ describe("auth gate", () => {
       "нет доступа к CRM",
     );
     expect(screen.getByRole("button", { name: /Выйти/ })).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Зарегистрироваться" }),
+    ).toBeNull();
     expect(assign()).not.toHaveBeenCalled();
   });
 });

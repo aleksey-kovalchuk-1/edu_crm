@@ -8,6 +8,7 @@ from helpers import login
 PUBLIC_ENDPOINTS = {
     ('GET', '/api/v1/health'),
     ('GET', '/api/v1/auth/login'),
+    ('GET', '/api/v1/auth/register'),
     ('GET', '/api/v1/auth/callback'),
 }
 READ_ENDPOINTS = ['/api/v1/stages', '/api/v1/universities', '/api/v1/launches', '/api/v1/tasks', '/api/v1/dashboard', '/api/v1/audit/recent']
