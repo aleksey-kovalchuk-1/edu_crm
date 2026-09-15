@@ -1,6 +1,6 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import ForeignKey, String, Date, DateTime, Boolean, MetaData, Text
-from sqlalchemy.dialects.postgresql import ARRAY
+from sqlalchemy import BigInteger, ForeignKey, Index, String, Date, DateTime, Boolean, MetaData, Text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Names match PostgreSQL's own defaults, so databases created before migrations existed keep identical constraint names.
@@ -106,3 +106,18 @@ class LoginState(Base):
     next_path: Mapped[str] = mapped_column(String(500))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class AuditEvent(Base):
+    """Append-only record of a user action; the application never updates or deletes these rows."""
+    __tablename__ = 'audit_events'
+    __table_args__ = (Index('ix_audit_events_entity', 'entity_type', 'entity_id'),)
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), index=True)
+    action: Mapped[str] = mapped_column(String(64))
+    entity_type: Mapped[str | None] = mapped_column(String(64))
+    entity_id: Mapped[str | None] = mapped_column(String(64))
+    summary: Mapped[str] = mapped_column(russian_text(300))
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    ip: Mapped[str | None] = mapped_column(String(45))

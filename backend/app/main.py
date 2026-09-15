@@ -2,11 +2,13 @@ from contextlib import asynccontextmanager
 from datetime import date
 
 import httpx
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from sqlalchemy import create_engine, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, require_roles, router as auth_router
+from .audit import record_event
+from .audit_routes import router as audit_router
+from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_roles, router as auth_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
 from .models import University, Launch, Task, StageEvent, AnnualMetric
@@ -74,6 +76,7 @@ def create_app(settings=None, *, http_client=None):
     app.state.cipher = TokenCipher(settings.session_encryption_key)
     install_error_handlers(app)
     app.include_router(auth_router)
+    app.include_router(audit_router)
 
     @app.get('/api/v1/health')
     def health(db: Session = Depends(get_db)):
@@ -88,10 +91,13 @@ def create_app(settings=None, *, http_client=None):
     def universities(db: Session = Depends(get_db)):
         return [serialize(x) for x in db.scalars(select(University).order_by(University.id))]
 
-    @app.post('/api/v1/universities', status_code=201, dependencies=[Depends(catalog_editor)])
-    def add_university(data: UniversityInput, db: Session = Depends(get_db)):
+    @app.post('/api/v1/universities', status_code=201)
+    def add_university(data: UniversityInput, request: Request, auth: AuthContext = Depends(catalog_editor), db: Session = Depends(get_db)):
         record = University(**data.model_dump())
         db.add(record)
+        db.flush()
+        record_event(db, request, auth.user, 'university.create', entity_type='university', entity_id=record.id,
+                     summary=f'Добавлено учебное заведение «{record.name}»', payload={'name': record.name, 'city': record.city})
         db.commit()
         db.refresh(record)
         return serialize(record)
@@ -100,23 +106,30 @@ def create_app(settings=None, *, http_client=None):
     def launches(db: Session = Depends(get_db)):
         return [{**serialize(l), 'university': u.name, 'city': u.city, 'overdue': is_overdue(l)} for l, u in db.execute(select(Launch, University).join(University).order_by(Launch.id))]
 
-    @app.post('/api/v1/launches', status_code=201, dependencies=[Depends(any_role)])
-    def add_launch(data: LaunchInput, db: Session = Depends(get_db)):
-        require(db, University, data.university_id)
+    @app.post('/api/v1/launches', status_code=201)
+    def add_launch(data: LaunchInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+        university = require(db, University, data.university_id)
         record = Launch(**data.model_dump(), stage=0)
         db.add(record)
         db.flush()
         db.add(StageEvent(launch_id=record.id, stage=0))
+        record_event(db, request, auth.user, 'launch.create', entity_type='launch', entity_id=record.id,
+                     summary=f'Создано взаимодействие «{record.program}» с «{university.name}»',
+                     payload={**data.model_dump(mode='json'), 'stage': 0})
         db.commit()
         db.refresh(record)
         return serialize(record)
 
-    @app.patch('/api/v1/launches/{id}', dependencies=[Depends(any_role)])
-    def update_stage(id: int, data: StageInput, db: Session = Depends(get_db)):
+    @app.patch('/api/v1/launches/{id}')
+    def update_stage(id: int, data: StageInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
         record = require(db, Launch, id)
         if record.stage != data.stage:
+            previous = record.stage
             record.stage = data.stage
             db.add(StageEvent(launch_id=id, stage=data.stage))
+            record_event(db, request, auth.user, 'launch.stage_change', entity_type='launch', entity_id=id,
+                         summary=f'«{record.program}»: этап «{STAGES[previous]}» → «{STAGES[data.stage]}»',
+                         payload={'from': previous, 'to': data.stage})
             db.commit()
         return serialize(record)
 
@@ -129,11 +142,16 @@ def create_app(settings=None, *, http_client=None):
     def tasks(db: Session = Depends(get_db)):
         return [serialize(x) for x in db.scalars(select(Task).order_by(Task.deadline, Task.id))]
 
-    @app.patch('/api/v1/tasks/{id}', dependencies=[Depends(any_role)])
-    def update_task(id: int, data: TaskInput, db: Session = Depends(get_db)):
+    @app.patch('/api/v1/tasks/{id}')
+    def update_task(id: int, data: TaskInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
         record = require(db, Task, id)
-        record.done = data.done
-        db.commit()
+        if record.done != data.done:
+            previous = record.done
+            record.done = data.done
+            record_event(db, request, auth.user, 'task.update', entity_type='task', entity_id=id,
+                         summary=f'Задача «{record.title}» {"выполнена" if data.done else "возвращена в работу"}',
+                         payload={'done': {'from': previous, 'to': data.done}})
+            db.commit()
         return serialize(record)
 
     @app.get('/api/v1/dashboard', dependencies=[Depends(any_role)])
