@@ -52,6 +52,7 @@ Run started. No milestone verified yet.
 | T-021 (partial) | `pytest tests/test_security.py tests/test_oidc.py` | 31 passed |
 | T-021, T-022 | Full backend suite with Keycloak sessions, CSRF, role policies (fake identity provider) | 114 passed; CI run 34935661251 success |
 | T-023 | Suite with audit trail; backup `edu_crm-20260915T161918Z-before-0004-audit.dump`; API rebuilt | 130 passed; live `alembic_version` `0004`; existing row counts unchanged; `/api/v1/audit/recent` → 401 without session |
+| Security fixes | Full suite; backup `edu_crm-20260915T162638Z-before-0005-login-binding.dump`; API rebuilt | 140 passed; live `alembic_version` `0005`; existing row counts unchanged; login start through nginx 302 and sets `edu_crm_login` scoped to `/api/v1/auth`; callback without that cookie → `/?auth_error=LOGIN_EXPIRED`; `/api/v1/launches` 401; `/api/docs/oauth2-redirect` 200 |
 | Security finding 6 | Login rate limit in nginx (config copied into the running `web` container, `nginx -t` OK) | 30 rapid `GET /api/v1/auth/login`: 21 × 302, 9 × 429 with `{"code":"RATE_LIMITED",...}` (`application/json`); `/api/v1/launches` 401, `/tasks` 200, Keycloak discovery through `/auth/` 200 |
 | T-020 | `scripts/generate-dev-secrets.sh`; backup `edu_crm-20260915T160853Z-before-0003-keycloak.dump`; `docker compose up -d --build keycloak-db-init keycloak api` | Init job exited 0 and created database `keycloak` owned by role `keycloak`; Keycloak 26.7.3 healthy (`/auth/health/ready` on port 9000); API healthy; live `alembic_version` `0003`; existing tables' row counts unchanged; `deploy/local/` gitignored (only variable names printed) |
 | T-020 | HTTP checks through nginx (new `nginx.conf` copied into the running `web` container and reloaded) | `GET /api/v1/auth/login?next=/tasks` → 302 to `http://localhost:8080/auth/realms/edu-crm/protocol/openid-connect/auth` with `response_type, client_id, redirect_uri, scope, state, nonce, code_challenge, code_challenge_method`; Keycloak login page 200 with title «Вход Образование CRM» and login form; discovery from the API container: issuer `http://localhost:8080/auth/realms/edu-crm`, token and JWKS endpoints on `http://keycloak:8080`, one RS256 signing key; `GET /api/v1/launches` → 401 `UNAUTHENTICATED`; `/api/docs` 200 |
@@ -94,6 +95,17 @@ Run started. No milestone verified yet.
 | `c598b7f` | T-016 frontend restructure (routing, TanStack Query, tests, lint) | 28 frontend tests, lint, build; independent review fixed; browser check |
 | `a5ba27d` | T-014 web healthcheck, restart policies, forwarded-header trust | `web` healthy; spoofed `X-Forwarded-For` not logged |
 | `5ff2050` | Frontend lint and tests in CI | CI configuration |
+| `4f0cb41` | T-021/T-022 Keycloak sessions, CSRF, role policies | 114 tests; CI run 34935661251 success |
+| `4d8a9dc` | T-020 Keycloak in Compose behind nginx, generated local secrets | Compose checks over HTTP (see evidence) |
+| `52bc6d2` | Migrations and seeding need only `DATABASE_URL` | CLI regression test |
+| `ddabb53` | T-023 audit trail and recent actions (backend) | 130 tests; live migration `0004` |
+| `15c6caf` | Security review fixes (9 findings), login rate limit, route discovery fix | 140 tests; live migration `0005`; nginx rate limit verified |
+
+## Versions
+
+| Tag | Commit | Contents | Verification | Limitations | Preview |
+|---|---|---|---|---|---|
+| `ai-m1-foundation-20260915` | `5ff2050` | M1: PostgreSQL only, Alembic, Russian collation, error codes, container entrypoint, Swagger under `/api`, healthchecks, routed frontend with tests | Backend 47 tests, frontend 28 tests, CI green; migrations rehearsed on restored backups | No authentication | Stop the current stack first (`docker compose stop`, volumes kept). Then `git worktree add ../edu-crm-m1 ai-m1-foundation-20260915 && cd ../edu-crm-m1 && cp .env.example .env && COMPOSE_PROJECT_NAME=edu-crm-m1 docker compose up --build -d` — the separate project name gives it its own volumes; open http://localhost:8080 |
 
 ## Blockers and owner checks
 
