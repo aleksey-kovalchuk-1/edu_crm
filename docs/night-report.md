@@ -51,6 +51,8 @@ Run started. No milestone verified yet.
 | T-016 | Browser (Claude Browser pane) on `http://localhost:8080/tasks` | Page renders with data; ticking a task updates the checkbox and sidebar counter (8 → 7) without reload; requests: `PATCH /tasks/1`, `GET /tasks`, and `GET /launches` (likely a window-focus refetch, see I-008); task unticked afterwards |
 | T-021 (partial) | `pytest tests/test_security.py tests/test_oidc.py` | 31 passed |
 | T-021, T-022 | Full backend suite with Keycloak sessions, CSRF, role policies (fake identity provider) | 114 passed; CI run 34935661251 success |
+| T-023 | Suite with audit trail; backup `edu_crm-20260915T161918Z-before-0004-audit.dump`; API rebuilt | 130 passed; live `alembic_version` `0004`; existing row counts unchanged; `/api/v1/audit/recent` → 401 without session |
+| Security finding 6 | Login rate limit in nginx (config copied into the running `web` container, `nginx -t` OK) | 30 rapid `GET /api/v1/auth/login`: 21 × 302, 9 × 429 with `{"code":"RATE_LIMITED",...}` (`application/json`); `/api/v1/launches` 401, `/tasks` 200, Keycloak discovery through `/auth/` 200 |
 | T-020 | `scripts/generate-dev-secrets.sh`; backup `edu_crm-20260915T160853Z-before-0003-keycloak.dump`; `docker compose up -d --build keycloak-db-init keycloak api` | Init job exited 0 and created database `keycloak` owned by role `keycloak`; Keycloak 26.7.3 healthy (`/auth/health/ready` on port 9000); API healthy; live `alembic_version` `0003`; existing tables' row counts unchanged; `deploy/local/` gitignored (only variable names printed) |
 | T-020 | HTTP checks through nginx (new `nginx.conf` copied into the running `web` container and reloaded) | `GET /api/v1/auth/login?next=/tasks` → 302 to `http://localhost:8080/auth/realms/edu-crm/protocol/openid-connect/auth` with `response_type, client_id, redirect_uri, scope, state, nonce, code_challenge, code_challenge_method`; Keycloak login page 200 with title «Вход Образование CRM» and login form; discovery from the API container: issuer `http://localhost:8080/auth/realms/edu-crm`, token and JWKS endpoints on `http://keycloak:8080`, one RS256 signing key; `GET /api/v1/launches` → 401 `UNAUTHENTICATED`; `/api/docs` 200 |
 
@@ -58,8 +60,24 @@ Run started. No milestone verified yet.
 
 | Agent task | Result | Evidence |
 |---|---|---|
+| Security review of Keycloak authentication (read-only subagent) | Verdict "acceptable after fixes": 1 HIGH, 3 MEDIUM, 5 LOW (see table below) | Reviewer reproduced the HIGH finding on a throwaway database; 114 tests passed during review |
+| Frontend login integration T-024 (subagent, `frontend/src`) | Auth gate, login redirect, CSRF header, real profile, logout, role-aware UI; 48 tests | Lead re-ran lint (clean), `npm test` (48 passed), build (success); independent review in progress; no browser sign-in (D-130) |
 | Frontend restructure (subagent, files limited to `frontend/`) | Routed pages, TanStack Query, error codes, 23 then 28 tests, ESLint | Lead re-ran lint/test/build; independent reviewer (read-only subagent) verdict "accept after fixes" with 4 medium and 6 low findings; the same subagent fixed all except the accepted brief `overdue` flicker; fixes re-verified by the lead |
 | Keycloak realm spike (subagent, files limited to `deploy/keycloak/`) | `deploy/keycloak/realm-edu-crm.json` created; image `26.7.3` | In a throwaway container: realm `edu-crm` (ru default), roles `crm-user`/`crm-supervisor`/`crm-admin`, client `edu-crm-api` confidential with standard flow only and PKCE S256, direct password grant refused (`unauthorized_client`), client secret equals the environment value, three synthetic users each with one role, passwords from environment accepted and the literal placeholder rejected, `roles` claim present in ID token/userinfo/access token; health on port 9000 needs `KC_HEALTH_ENABLED=true`; image has bash but no curl/wget; about 629 MiB idle in dev mode. Containers removed. Lead review of the file pending at T-020 |
+
+## Security review findings (authentication, commit `4f0cb41`)
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| 1 | HIGH | Row lock during revalidation returns the stale in-memory session, so concurrent requests reuse a rotated refresh token and revoke a legitimate session | Fixed: locked select with `populate_existing`; test reproduces the stale identity-map case |
+| 2 | MEDIUM | A Keycloak outage (network error, 5xx, signing keys unavailable) revokes sessions instead of returning 503 | Fixed: `OIDCUnavailable` → 503 without revocation; test |
+| 3 | MEDIUM | Login CSRF: the callback is not bound to the browser that started the login | Fixed: `edu_crm_login` cookie hash in `login_states` (migration `0005`); test with a planted callback in a second browser |
+| 4 | MEDIUM | Logout does not end the Keycloak SSO session server-side | Fixed: back-channel logout by refresh token; logout skips revalidation and works while Keycloak is down; tests |
+| 5 | LOW | A refresh response without `id_token` keeps old roles | Fixed: treated as rejection; test |
+| 6 | LOW | `GET /auth/login` writes a row per request without rate limiting | Fixed: nginx `limit_req` (verified) and cap of pending logins (429, test) |
+| 7 | LOW | ID token `azp` and `iat` age not checked | Fixed in `oidc.py`; tests |
+| 8 | LOW | Two simultaneous first logins for one account can hit the unique constraint (500) | Fixed: `INSERT … ON CONFLICT` upsert; repeat-login test |
+| 9 | LOW | Route-policy test matches path only, not method + path | Fixed: method + path, plus a consistency check that exposed a larger gap — FastAPI 0.141 keeps included routers as wrappers, so auth and audit routes had been skipped; the test now descends into them and asserts they are found |
 
 ## Checkpoints and versions
 

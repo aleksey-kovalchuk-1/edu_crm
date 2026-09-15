@@ -104,6 +104,8 @@ class LoginState(Base):
     nonce: Mapped[str] = mapped_column(String(64))
     code_verifier: Mapped[str] = mapped_column(String(128))
     next_path: Mapped[str] = mapped_column(String(500))
+    # SHA-256 of the edu_crm_login cookie: the callback must come from the browser that started the login.
+    browser_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
 

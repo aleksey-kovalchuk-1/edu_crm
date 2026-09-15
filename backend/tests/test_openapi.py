@@ -11,3 +11,5 @@ def test_swagger_ui_and_schema_are_served_under_api_prefix(client):
     assert '/api/v1/auth/login' in paths
 
     assert client.get('/docs').status_code == 404
+    assert client.get('/docs/oauth2-redirect').status_code == 404
+    assert client.get('/api/docs/oauth2-redirect').status_code == 200

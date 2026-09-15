@@ -61,6 +61,7 @@ def create_app(settings=None, *, http_client=None):
         lifespan=lifespan,
         description='CRM взаимодействия с учебными заведениями. Вход — через Keycloak (`/api/v1/auth/login`); коды ошибок — docs/api/errors.md.',
         docs_url='/api/docs',
+        swagger_ui_oauth2_redirect_url='/api/docs/oauth2-redirect',
         redoc_url='/api/redoc',
         openapi_url='/api/openapi.json',
     )

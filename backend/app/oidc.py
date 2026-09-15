@@ -1,7 +1,8 @@
-"""Minimal OpenID Connect client for Keycloak: authorization code with PKCE, refresh, ID token verification.
+"""Minimal OpenID Connect client for Keycloak: authorization code with PKCE, refresh, back-channel logout,
+ID token verification.
 
 Browser-facing URLs use the public issuer (the value in the token's `iss` claim); server-to-server calls
-(token and signing-key endpoints) use the internal base URL on the Compose network.
+(token, logout and signing-key endpoints) use the internal base URL on the Compose network.
 """
 import logging
 import time
@@ -18,10 +19,17 @@ logger = logging.getLogger(__name__)
 CRM_ROLES = frozenset({'crm-user', 'crm-supervisor', 'crm-admin'})
 SIGNING_ALGORITHMS = ['RS256']
 CLOCK_SKEW_SECONDS = 30
+# ID tokens arrive straight from the token endpoint, so anything older points to a replay or a clock problem.
+MAX_ID_TOKEN_AGE_SECONDS = 600
+HTTP_TIMEOUT_SECONDS = 10
 
 
 class OIDCError(Exception):
-    """Authentication with the identity provider failed. The message is for server logs only."""
+    """Keycloak rejected the request or the token is invalid. The message is for server logs only."""
+
+
+class OIDCUnavailable(OIDCError):
+    """Keycloak could not be reached or answered with a server error; nothing was decided about the user."""
 
 
 @dataclass(frozen=True)
@@ -40,7 +48,8 @@ class Identity:
 
 
 class OIDCClient:
-    def __init__(self, *, issuer, internal_base_url, client_id, client_secret, http, jwks_ttl_seconds=300, clock=time.monotonic):
+    def __init__(self, *, issuer, internal_base_url, client_id, client_secret, http,
+                 jwks_ttl_seconds=300, clock=time.monotonic, wall_clock=time.time):
         self.issuer = issuer.rstrip('/')
         self.client_id = client_id
         self._internal_base_url = internal_base_url.rstrip('/')
@@ -48,6 +57,7 @@ class OIDCClient:
         self._http = http
         self._jwks_ttl_seconds = jwks_ttl_seconds
         self._clock = clock
+        self._wall_clock = wall_clock
         self._jwks = None
         self._jwks_loaded_at = 0.0
 
@@ -79,6 +89,12 @@ class OIDCClient:
     def refresh(self, refresh_token):
         return self._token_request({'grant_type': 'refresh_token', 'refresh_token': refresh_token})
 
+    def end_session(self, refresh_token):
+        """Ends the Keycloak SSO session from the server, so a closed browser tab cannot leave it signed in."""
+        response = self._post('/protocol/openid-connect/logout', {'refresh_token': refresh_token})
+        if response.status_code not in (200, 204):
+            raise OIDCError(f'logout endpoint returned {response.status_code}: {response.text[:200]}')
+
     def verify_id_token(self, id_token, *, nonce=None):
         if not id_token:
             raise OIDCError('token response has no id_token')
@@ -101,6 +117,10 @@ class OIDCClient:
             )
         except jwt.PyJWTError as error:
             raise OIDCError(f'id_token rejected: {error}') from error
+        if claims.get('azp') not in (None, self.client_id):
+            raise OIDCError('id_token was issued to another client')
+        if claims['iat'] < self._wall_clock() - MAX_ID_TOKEN_AGE_SECONDS:
+            raise OIDCError('id_token is too old')
         if nonce is not None and not tokens_match(nonce, claims.get('nonce')):
             raise OIDCError('id_token nonce mismatch')
 
@@ -115,23 +135,29 @@ class OIDCClient:
             roles=tuple(sorted({role for role in roles if role in CRM_ROLES})),
         )
 
-    def _token_request(self, data):
+    def _post(self, path, data):
         try:
             response = self._http.post(
-                f'{self._internal_base_url}/protocol/openid-connect/token',
+                f'{self._internal_base_url}{path}',
                 data={**data, 'client_id': self.client_id, 'client_secret': self._client_secret},
-                timeout=10,
+                timeout=HTTP_TIMEOUT_SECONDS,
             )
         except httpx.HTTPError as error:
-            raise OIDCError(f'token endpoint unreachable: {error}') from error
+            raise OIDCUnavailable(f'{path} unreachable: {error}') from error
+        if response.status_code >= 500:
+            raise OIDCUnavailable(f'{path} returned {response.status_code}')
+        return response
+
+    def _token_request(self, data):
+        response = self._post('/protocol/openid-connect/token', data)
         if response.status_code != 200:
             raise OIDCError(f'token endpoint returned {response.status_code}: {response.text[:200]}')
         try:
             body = response.json()
         except ValueError as error:
-            raise OIDCError('token endpoint returned invalid JSON') from error
+            raise OIDCUnavailable('token endpoint returned invalid JSON') from error
         if not isinstance(body, dict) or not body.get('access_token'):
-            raise OIDCError('token response has no access_token')
+            raise OIDCUnavailable('token response has no access_token')
         return TokenSet(access_token=body['access_token'], id_token=body.get('id_token'), refresh_token=body.get('refresh_token'))
 
     def _signing_key(self, kid):
@@ -149,11 +175,11 @@ class OIDCClient:
 
     def _load_jwks(self):
         try:
-            response = self._http.get(f'{self._internal_base_url}/protocol/openid-connect/certs', timeout=10)
+            response = self._http.get(f'{self._internal_base_url}/protocol/openid-connect/certs', timeout=HTTP_TIMEOUT_SECONDS)
             response.raise_for_status()
             self._jwks = jwt.PyJWKSet.from_dict(response.json())
         except (httpx.HTTPError, ValueError, jwt.PyJWTError) as error:
-            raise OIDCError(f'cannot load signing keys: {error}') from error
+            raise OIDCUnavailable(f'cannot load signing keys: {error}') from error
         self._jwks_loaded_at = self._clock()
 
     def _find_key(self, kid):
