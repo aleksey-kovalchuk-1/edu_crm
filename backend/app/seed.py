@@ -1,8 +1,9 @@
 from datetime import date, timedelta
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
-from .models import University, Launch, Task, StageEvent, AnnualMetric
+from .models import University, Launch, Task, StageEvent, StatusChange, AnnualMetric
 from .settings import database_url_from_environment
+from .workflows import active_statuses, default_template
 
 def seed(db):
     if db.scalar(select(University.id).limit(1)) is not None:
@@ -30,11 +31,14 @@ def seed(db):
         (2, 'Прикладное программирование', 'Python / FastAPI', 11, 90, 45),
     ]
     owners = ['Анна Петрова', 'Михаил Смирнов', 'Ольга Кузнецова']
+    template = default_template(db)
+    statuses = {status.position: status for status in active_statuses(db, template.id)}
     for i, (u, program, product, stage, students, days) in enumerate(courses):
-        launch = Launch(university_id=records[u].id, program=program, product=product, stage=stage, students=students, owner=owners[i % 3], deadline=date.today() + timedelta(days=days))
+        launch = Launch(university_id=records[u].id, program=program, product=product, stage=stage, students=students, owner=owners[i % 3], deadline=date.today() + timedelta(days=days), workflow_template_id=template.id, status_id=statuses[stage].id)
         db.add(launch)
         db.flush()
         db.add(StageEvent(launch_id=launch.id, stage=stage))
+        db.add(StatusChange(launch_id=launch.id, from_status_id=None, to_status_id=statuses[stage].id))
         db.add(Task(launch_id=launch.id, title=['Согласовать программу обучения', 'Получить подписанный договор', 'Проверить установку продукта', 'Подтвердить состав потока'][i % 4], owner=launch.owner, deadline=date.today() + timedelta(days=i-2)))
     db.add_all([AnnualMetric(year=y, applications=a, students=s, streams=f) for y,a,s,f in [(2023,420,320,12),(2024,610,470,17),(2025,890,715,25)]])
     db.commit()
