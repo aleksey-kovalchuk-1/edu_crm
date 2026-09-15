@@ -1,9 +1,18 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import ForeignKey, String, Date, DateTime, Boolean
+from sqlalchemy import ForeignKey, String, Date, DateTime, Boolean, MetaData
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
+# Names match PostgreSQL's own defaults, so databases created before migrations existed keep identical constraint names.
+NAMING_CONVENTION = {
+    'ix': 'ix_%(column_0_label)s',
+    'uq': '%(table_name)s_%(column_0_name)s_key',
+    'ck': '%(table_name)s_%(constraint_name)s_check',
+    'fk': '%(table_name)s_%(column_0_name)s_fkey',
+    'pk': '%(table_name)s_pkey',
+}
+
 class Base(DeclarativeBase):
-    pass
+    metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 class University(Base):
     __tablename__ = 'universities'
