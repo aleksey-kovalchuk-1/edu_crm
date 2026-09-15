@@ -11,23 +11,31 @@ NAMING_CONVENTION = {
     'pk': '%(table_name)s_pkey',
 }
 
+# ICU collation gives correct Russian ordering (е/ё, case) without re-initialising the database cluster.
+RUSSIAN_COLLATION = 'ru-RU-x-icu'
+
+
+def russian_text(length):
+    return String(length, collation=RUSSIAN_COLLATION)
+
+
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
 class University(Base):
     __tablename__ = 'universities'
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(String(200))
-    city: Mapped[str] = mapped_column(String(100))
-    contact: Mapped[str] = mapped_column(String(200), default='')
+    name: Mapped[str] = mapped_column(russian_text(200))
+    city: Mapped[str] = mapped_column(russian_text(100))
+    contact: Mapped[str] = mapped_column(russian_text(200), default='')
 
 class Launch(Base):
     __tablename__ = 'launches'
     id: Mapped[int] = mapped_column(primary_key=True)
     university_id: Mapped[int] = mapped_column(ForeignKey('universities.id'))
-    program: Mapped[str] = mapped_column(String(200))
-    product: Mapped[str] = mapped_column(String(200))
-    owner: Mapped[str] = mapped_column(String(100))
+    program: Mapped[str] = mapped_column(russian_text(200))
+    product: Mapped[str] = mapped_column(russian_text(200))
+    owner: Mapped[str] = mapped_column(russian_text(100))
     students: Mapped[int] = mapped_column(default=0)
     stage: Mapped[int] = mapped_column(default=0)
     deadline: Mapped[date] = mapped_column(Date)
@@ -36,8 +44,8 @@ class Task(Base):
     __tablename__ = 'tasks'
     id: Mapped[int] = mapped_column(primary_key=True)
     launch_id: Mapped[int] = mapped_column(ForeignKey('launches.id'))
-    title: Mapped[str] = mapped_column(String(200))
-    owner: Mapped[str] = mapped_column(String(100))
+    title: Mapped[str] = mapped_column(russian_text(200))
+    owner: Mapped[str] = mapped_column(russian_text(100))
     deadline: Mapped[date] = mapped_column(Date)
     done: Mapped[bool] = mapped_column(Boolean, default=False)
 
