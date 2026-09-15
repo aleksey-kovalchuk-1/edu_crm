@@ -5,9 +5,11 @@ import {
   Columns3,
   FileText,
   LayoutDashboard,
+  FileUp,
   ListChecks,
   type LucideIcon,
 } from "lucide-react";
+import { ROLES } from "../lib/user";
 
 export const paths = {
   overview: "/",
@@ -17,6 +19,7 @@ export const paths = {
   tasks: "/tasks",
   analytics: "/analytics",
   catalogs: "/catalogs",
+  imports: "/imports",
 } as const;
 
 export const universityPath = (id: number) => `${paths.universities}/${id}`;
@@ -31,6 +34,8 @@ export interface PageMeta {
   subtitle: string;
   /** What the page heading button creates; null when the page has its own actions. */
   create: CreateKind | null;
+  /** Roles that see the page in the sidebar; absent — every CRM role. */
+  roles?: string[];
 }
 
 export const pages: PageMeta[] = [
@@ -91,7 +96,20 @@ export const pages: PageMeta[] = [
     subtitle: "ИТ-направления и ИТ-продукты, используемые в договорах.",
     create: null,
   },
+  {
+    path: paths.imports,
+    name: "Загрузка справочников",
+    icon: FileUp,
+    heading: "Загрузка справочников",
+    subtitle: "Обновление договоров, вузов и ИТ-продуктов из файлов xls и xlsx.",
+    create: null,
+    roles: [ROLES.supervisor, ROLES.admin],
+  },
 ];
+
+/** Pages shown in the sidebar for a user's roles (the server still enforces access). */
+export const visiblePages = (roles: string[]) =>
+  pages.filter((p) => !p.roles || p.roles.some((r) => roles.includes(r)));
 
 export const NOT_FOUND_TITLE = "Страница не найдена";
 

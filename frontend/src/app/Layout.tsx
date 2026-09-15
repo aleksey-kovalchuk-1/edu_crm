@@ -17,8 +17,8 @@ import {
   NOT_FOUND_TITLE,
   findPage,
   isPageRoot,
-  pages,
   paths,
+  visiblePages,
   type CreateKind,
 } from "./navigation";
 
@@ -71,7 +71,7 @@ export function Layout() {
           </div>
           <p className="nav-label">УПРАВЛЕНИЕ</p>
           <nav>
-            {pages.map((p) => (
+            {visiblePages(user.roles).map((p) => (
               <NavLink
                 key={p.path}
                 to={p.path}

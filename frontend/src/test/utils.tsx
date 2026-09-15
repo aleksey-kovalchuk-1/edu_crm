@@ -247,7 +247,12 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     const call = {
       method,
       path,
-      body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      body:
+        init?.body instanceof FormData
+          ? init.body
+          : init?.body
+            ? JSON.parse(String(init.body))
+            : undefined,
       headers: Object.fromEntries(new Headers(init?.headers).entries()),
     };
     calls.push(call);

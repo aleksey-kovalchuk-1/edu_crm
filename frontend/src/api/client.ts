@@ -118,7 +118,9 @@ async function send<T>(
   mayRetryCsrf: boolean,
 ): Promise<T> {
   const headers: Record<string, string> = {};
-  if (data !== undefined) headers["Content-Type"] = "application/json";
+  // Multipart bodies: the browser sets Content-Type with the boundary itself.
+  const isForm = typeof FormData !== "undefined" && data instanceof FormData;
+  if (data !== undefined && !isForm) headers["Content-Type"] = "application/json";
   if (UNSAFE_METHODS.has(verb)) {
     const token = clientConfig.csrfToken?.();
     if (token) headers["X-CSRF-Token"] = token;
@@ -129,7 +131,7 @@ async function send<T>(
       method: verb,
       credentials: "same-origin",
       headers,
-      body: data !== undefined ? JSON.stringify(data) : undefined,
+      body: isForm ? data : data !== undefined ? JSON.stringify(data) : undefined,
     });
   } catch {
     throw new ApiError(0, "NETWORK_ERROR", "Сервер недоступен");
