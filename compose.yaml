@@ -15,12 +15,72 @@ services:
       interval: 5s
       timeout: 3s
       retries: 15
+
+  # One-shot job: creates Keycloak's role and database on the shared server (idempotent).
+  keycloak-db-init:
+    image: postgres:16-alpine
+    restart: "no"
+    env_file:
+      - path: deploy/local/keycloak.env
+        required: true
+    environment:
+      PGHOST: db
+      PGUSER: crm
+      PGPASSWORD: ${POSTGRES_PASSWORD:-local-demo-only}
+      PGDATABASE: postgres
+    volumes:
+      - ./deploy/keycloak/init-db.sh:/init-db.sh:ro
+    entrypoint: [sh, /init-db.sh]
+    depends_on:
+      db:
+        condition: service_healthy
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.7.3
+    command: [start, --import-realm]
+    restart: unless-stopped
+    env_file:
+      - path: deploy/local/keycloak.env
+        required: true
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/keycloak
+      KC_DB_USERNAME: keycloak
+      # Published by nginx under /auth on the main port, so the token issuer stays http://localhost:8080/auth/realms/edu-crm.
+      KC_HTTP_ENABLED: 'true'
+      KC_HTTP_RELATIVE_PATH: /auth
+      KC_HOSTNAME: http://localhost:8080/auth
+      KC_HOSTNAME_BACKCHANNEL_DYNAMIC: 'true'
+      KC_PROXY_HEADERS: xforwarded
+      KC_HEALTH_ENABLED: 'true'
+    volumes:
+      - ./deploy/keycloak/realm-edu-crm.json:/opt/keycloak/data/import/realm-edu-crm.json:ro
+    depends_on:
+      keycloak-db-init:
+        condition: service_completed_successfully
+    healthcheck:
+      # The image has bash but no curl or wget; the management interface listens on port 9000.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/9000 && printf 'GET /auth/health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && grep -q '\"UP\"' <&3"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 90s
+
   api:
     build: ./backend
     restart: unless-stopped
+    env_file:
+      - path: deploy/local/api.env
+        required: true
     environment:
       DATABASE_URL: postgresql+psycopg://crm:${POSTGRES_PASSWORD:-local-demo-only}@db:5432/edu_crm
       SEED_DEMO: ${SEED_DEMO:-true}
+      OIDC_ISSUER: http://localhost:8080/auth/realms/edu-crm
+      OIDC_INTERNAL_BASE_URL: http://keycloak:8080/auth/realms/edu-crm
+      OIDC_CLIENT_ID: edu-crm-api
+      PUBLIC_BASE_URL: http://localhost:8080
+      # Local HTTP only; set to true behind HTTPS.
+      COOKIE_SECURE: 'false'
       # uvicorn reads both: worker processes, and which proxies may set X-Forwarded-* (only nginx reaches the API on the Compose network).
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       FORWARDED_ALLOW_IPS: '*'
@@ -35,12 +95,15 @@ services:
       timeout: 3s
       retries: 15
       start_period: 20s
+
   web:
     build: ./frontend
     restart: unless-stopped
     depends_on:
       api:
         condition: service_healthy
+      keycloak:
+        condition: service_started
     ports:
       - 127.0.0.1:8080:80
     healthcheck:
@@ -48,6 +111,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 5
+
   superset:
     profiles: [analytics]
     build: ./superset
@@ -60,6 +124,7 @@ services:
     depends_on:
       api:
         condition: service_healthy
+
 volumes:
   postgres_data:
   superset_data:
