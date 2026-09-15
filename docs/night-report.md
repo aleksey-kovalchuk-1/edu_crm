@@ -50,6 +50,9 @@ Run started. No milestone verified yet.
 | T-016 | Lead re-run after review fixes | `npm run lint` clean; `npm test` 28 passed; `npm run build` success |
 | T-016 | Browser (Claude Browser pane) on `http://localhost:8080/tasks` | Page renders with data; ticking a task updates the checkbox and sidebar counter (8 → 7) without reload; requests: `PATCH /tasks/1`, `GET /tasks`, and `GET /launches` (likely a window-focus refetch, see I-008); task unticked afterwards |
 | T-021 (partial) | `pytest tests/test_security.py tests/test_oidc.py` | 31 passed |
+| T-021, T-022 | Full backend suite with Keycloak sessions, CSRF, role policies (fake identity provider) | 114 passed; CI run 34935661251 success |
+| T-020 | `scripts/generate-dev-secrets.sh`; backup `edu_crm-20260915T160853Z-before-0003-keycloak.dump`; `docker compose up -d --build keycloak-db-init keycloak api` | Init job exited 0 and created database `keycloak` owned by role `keycloak`; Keycloak 26.7.3 healthy (`/auth/health/ready` on port 9000); API healthy; live `alembic_version` `0003`; existing tables' row counts unchanged; `deploy/local/` gitignored (only variable names printed) |
+| T-020 | HTTP checks through nginx (new `nginx.conf` copied into the running `web` container and reloaded) | `GET /api/v1/auth/login?next=/tasks` → 302 to `http://localhost:8080/auth/realms/edu-crm/protocol/openid-connect/auth` with `response_type, client_id, redirect_uri, scope, state, nonce, code_challenge, code_challenge_method`; Keycloak login page 200 with title «Вход Образование CRM» and login form; discovery from the API container: issuer `http://localhost:8080/auth/realms/edu-crm`, token and JWKS endpoints on `http://keycloak:8080`, one RS256 signing key; `GET /api/v1/launches` → 401 `UNAUTHENTICATED`; `/api/docs` 200 |
 
 ## Delegated work
 
@@ -74,6 +77,8 @@ Run started. No milestone verified yet.
 | `a5ba27d` | T-014 web healthcheck, restart policies, forwarded-header trust | `web` healthy; spoofed `X-Forwarded-For` not logged |
 | `5ff2050` | Frontend lint and tests in CI | CI configuration |
 
-## Blockers
+## Blockers and owner checks
 
-None.
+| Item | Why | What the owner can do |
+|---|---|---|
+| Browser sign-in with a demo account through Keycloak | Agents must not type passwords into login forms (D-130) | After `docker compose up --build -d`, open http://localhost:8080 and sign in as `anna.demo`, `pavel.demo` or `irina.demo` with the passwords in `deploy/local/keycloak.env` |
