@@ -44,7 +44,7 @@
 
 ## API (T-031)
 
-- `GET /api/v1/it-directions`, `GET /api/v1/it-products`, `GET /api/v1/universities`, `GET /api/v1/contracts`, `GET /api/v1/universities/{id}/contacts` — фильтры (`q`, `is_active`, для договоров: `university_id`, `it_product_id`, `it_direction_id`, `manager_user_id`, `transfer_status`, `signed_from`, `signed_to`, `valid_until_before`), сортировка, пагинация (`limit`, `offset`, в ответе `total`).
+- `GET /api/v1/it-directions`, `GET /api/v1/it-products`, `GET /api/v1/universities`, `GET /api/v1/universities/{id}`, `GET /api/v1/contracts`, `GET /api/v1/universities/{id}/contacts` — фильтры (`q`, `include_inactive`, для договоров: `university_id`, `it_product_id`, `it_direction_id`, `manager_user_id`, `transfer_status`, `signed_from`, `signed_to`, `valid_until_to`), сортировка, пагинация договоров (`limit`, `offset`, в ответе `total`). Точный контракт — `docs/api/catalogs.md`.
 - `POST`/`PATCH` для каждой сущности; деактивация через `PATCH {is_active: false}`.
 - `PUT /api/v1/universities/{id}/managers` — полный список ответственных пользователей вуза (руководитель, администратор).
 - Ошибки — коды из `docs/api/errors.md`; дубликаты уникальных полей → `409 CONFLICT` с полем в `details`.

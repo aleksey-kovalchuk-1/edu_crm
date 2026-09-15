@@ -18,7 +18,7 @@ def test_university_launch_and_stage_history_persist(database_url, keycloak, cli
 
     # A separate application instance reads the same persisted data.
     with TestClient(create_app(make_settings(database_url), http_client=keycloak.http_client())) as other:
-        login(other, keycloak, subject='kc-user-2')
+        login(other, keycloak, roles=('crm-supervisor',), subject='kc-user-2')
         assert other.get('/api/v1/launches').json()[0]['stage'] == 3
 
 
@@ -34,7 +34,7 @@ def test_rejects_invalid_relationship_stage_and_blank_name(client, keycloak):
 
 def test_demo_tasks_and_dashboard(database_url, client, keycloak):
     seed_database(database_url)
-    login(client, keycloak)
+    login(client, keycloak, roles=('crm-supervisor',))
     launches = client.get('/api/v1/launches').json()
     assert len(launches) > 0
     task = client.get('/api/v1/tasks').json()[0]

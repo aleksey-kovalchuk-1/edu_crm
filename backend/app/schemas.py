@@ -4,11 +4,6 @@ from pydantic import BaseModel, Field, StringConstraints
 
 Text = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
 
-class UniversityInput(BaseModel):
-    name: Text
-    city: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
-    contact: str = Field(default='', max_length=200)
-
 class LaunchInput(BaseModel):
     university_id: int = Field(gt=0)
     program: Text

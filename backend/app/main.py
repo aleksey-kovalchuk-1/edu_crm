@@ -3,25 +3,24 @@ from datetime import date
 
 import httpx
 from fastapi import Depends, FastAPI, Request
-from sqlalchemy import create_engine, select, text
+from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from .audit import record_event
 from .audit_routes import router as audit_router
-from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_roles, router as auth_router
+from .auth import ALL_ROLES, AuthContext, require_roles, router as auth_router
+from .catalog_routes import active_university_in_scope, router as catalog_router, university_scope
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
-from .models import University, Launch, Task, StageEvent, AnnualMetric
+from .models import AnnualMetric, Launch, StageEvent, Task, University
 from .oidc import OIDCClient
-from .schemas import UniversityInput, LaunchInput, StageInput, TaskInput
+from .schemas import LaunchInput, StageInput, TaskInput
 from .security import TokenCipher
 from .settings import load_settings, validate_database_url
 
 STAGES = ['Поиск контакта', 'Уточнение интереса', 'Встреча', 'Обмен документами', 'Согласование документов', 'Подписание', 'Передача материалов и лицензий', 'Внедрение продукта', 'Обучение преподавателей', 'Актуализация программы', 'Проведение занятий', 'Обновление материалов', 'Повышение квалификации']
 
 any_role = require_roles(*ALL_ROLES)
-# Universities are catalog data; heads and administrators maintain catalogs (D-128).
-catalog_editor = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
 
 
 def serialize(record):
@@ -32,11 +31,12 @@ def is_overdue(launch):
     return launch.deadline < date.today() and launch.stage < 10
 
 
-def require(db, model, id):
-    record = db.get(model, id)
-    if record is None:
+def launch_in_scope(db, user, launch_id):
+    # Launches belong to a university, so a manager only reaches launches of universities assigned to them (D-141).
+    launch = db.scalar(select(Launch).where(Launch.id == launch_id, university_scope(Launch.university_id, user)))
+    if launch is None:
         raise AppError(ErrorCode.RECORD_NOT_FOUND)
-    return record
+    return launch
 
 
 def create_app(settings=None, *, http_client=None):
@@ -78,6 +78,7 @@ def create_app(settings=None, *, http_client=None):
     install_error_handlers(app)
     app.include_router(auth_router)
     app.include_router(audit_router)
+    app.include_router(catalog_router)
 
     @app.get('/api/v1/health')
     def health(db: Session = Depends(get_db)):
@@ -88,28 +89,17 @@ def create_app(settings=None, *, http_client=None):
     def stages():
         return STAGES
 
-    @app.get('/api/v1/universities', dependencies=[Depends(any_role)])
-    def universities(db: Session = Depends(get_db)):
-        return [serialize(x) for x in db.scalars(select(University).order_by(University.id))]
-
-    @app.post('/api/v1/universities', status_code=201)
-    def add_university(data: UniversityInput, request: Request, auth: AuthContext = Depends(catalog_editor), db: Session = Depends(get_db)):
-        record = University(**data.model_dump())
-        db.add(record)
-        db.flush()
-        record_event(db, request, auth.user, 'university.create', entity_type='university', entity_id=record.id,
-                     summary=f'Добавлено учебное заведение «{record.name}»', payload={'name': record.name, 'city': record.city})
-        db.commit()
-        db.refresh(record)
-        return serialize(record)
-
-    @app.get('/api/v1/launches', dependencies=[Depends(any_role)])
-    def launches(db: Session = Depends(get_db)):
-        return [{**serialize(l), 'university': u.name, 'city': u.city, 'overdue': is_overdue(l)} for l, u in db.execute(select(Launch, University).join(University).order_by(Launch.id))]
+    @app.get('/api/v1/launches')
+    def launches(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+        rows = db.execute(
+            select(Launch, University).join(University)
+            .where(university_scope(Launch.university_id, auth.user)).order_by(Launch.id)
+        )
+        return [{**serialize(l), 'university': u.name, 'city': u.city, 'overdue': is_overdue(l)} for l, u in rows]
 
     @app.post('/api/v1/launches', status_code=201)
     def add_launch(data: LaunchInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-        university = require(db, University, data.university_id)
+        university = active_university_in_scope(db, auth.user, data.university_id)
         record = Launch(**data.model_dump(), stage=0)
         db.add(record)
         db.flush()
@@ -123,7 +113,7 @@ def create_app(settings=None, *, http_client=None):
 
     @app.patch('/api/v1/launches/{id}')
     def update_stage(id: int, data: StageInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-        record = require(db, Launch, id)
+        record = launch_in_scope(db, auth.user, id)
         if record.stage != data.stage:
             previous = record.stage
             record.stage = data.stage
@@ -134,18 +124,27 @@ def create_app(settings=None, *, http_client=None):
             db.commit()
         return serialize(record)
 
-    @app.get('/api/v1/launches/{id}/history', dependencies=[Depends(any_role)])
-    def history(id: int, db: Session = Depends(get_db)):
-        require(db, Launch, id)
+    @app.get('/api/v1/launches/{id}/history')
+    def history(id: int, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+        launch_in_scope(db, auth.user, id)
         return [serialize(x) for x in db.scalars(select(StageEvent).where(StageEvent.launch_id == id).order_by(StageEvent.id.desc()))]
 
-    @app.get('/api/v1/tasks', dependencies=[Depends(any_role)])
-    def tasks(db: Session = Depends(get_db)):
-        return [serialize(x) for x in db.scalars(select(Task).order_by(Task.deadline, Task.id))]
+    @app.get('/api/v1/tasks')
+    def tasks(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+        query = (
+            select(Task).join(Launch, Launch.id == Task.launch_id)
+            .where(university_scope(Launch.university_id, auth.user)).order_by(Task.deadline, Task.id)
+        )
+        return [serialize(x) for x in db.scalars(query)]
 
     @app.patch('/api/v1/tasks/{id}')
     def update_task(id: int, data: TaskInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-        record = require(db, Task, id)
+        record = db.scalar(
+            select(Task).join(Launch, Launch.id == Task.launch_id)
+            .where(Task.id == id, university_scope(Launch.university_id, auth.user))
+        )
+        if record is None:
+            raise AppError(ErrorCode.RECORD_NOT_FOUND)
         if record.done != data.done:
             previous = record.done
             record.done = data.done
@@ -155,9 +154,17 @@ def create_app(settings=None, *, http_client=None):
             db.commit()
         return serialize(record)
 
-    @app.get('/api/v1/dashboard', dependencies=[Depends(any_role)])
-    def dashboard(db: Session = Depends(get_db)):
-        rows = list(db.scalars(select(Launch)))
-        return {'universities': len(list(db.scalars(select(University.id)))), 'launches': len(rows), 'students': sum(x.students for x in rows), 'overdue': sum(is_overdue(x) for x in rows), 'annual': [serialize(x) for x in db.scalars(select(AnnualMetric).order_by(AnnualMetric.year))]}
+    @app.get('/api/v1/dashboard')
+    def dashboard(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+        # Counts cover active universities in the user's scope; yearly statistics are company-wide (D-147).
+        rows = list(db.scalars(
+            select(Launch).join(University, University.id == Launch.university_id)
+            .where(University.is_active.is_(True), university_scope(Launch.university_id, auth.user))
+        ))
+        universities = db.scalar(
+            select(func.count()).select_from(University)
+            .where(University.is_active.is_(True), university_scope(University.id, auth.user))
+        )
+        return {'universities': universities, 'launches': len(rows), 'students': sum(x.students for x in rows), 'overdue': sum(is_overdue(x) for x in rows), 'annual': [serialize(x) for x in db.scalars(select(AnnualMetric).order_by(AnnualMetric.year))]}
 
     return app
