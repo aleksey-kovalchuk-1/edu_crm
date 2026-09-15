@@ -30,8 +30,8 @@ Priority order: owner decisions and the official specification (`docs/specificat
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
 | T-020 | Keycloak service with realm import (realm, three roles, confidential client, synthetic users) | T-014 | Keycloak healthy in Compose; a synthetic user can authenticate; no secrets committed | VERIFIED (synthetic-user authentication proven in the spike container; Compose: healthy, realm served, secrets gitignored) |
-| T-021 | Server-side OIDC login (backend-for-frontend): login, callback, logout, current user; sessions in PostgreSQL; httpOnly cookie; CSRF token | T-020 | Browser login through Keycloak works end to end; unit tests cover callback, session expiry, logout, CSRF | IN_PROGRESS |
-| T-022 | Role policies on every route; data-visibility scopes; route-policy completeness test | T-021 | Role × route matrix tests pass; a User cannot read universities outside their scope | TODO |
+| T-021 | Server-side OIDC login (backend-for-frontend): login, callback, logout, current user; sessions in PostgreSQL; httpOnly cookie; CSRF token | T-020 | Browser login through Keycloak works end to end; unit tests cover callback, session expiry, logout, CSRF | VERIFIED (`4f0cb41`, hardened `15c6caf`; real redirect, login page, discovery checked over HTTP; browser sign-in left to the owner per D-130) |
+| T-022 | Role policies on every route; data-visibility scopes; route-policy completeness test | T-021 | Role × route matrix tests pass; a User cannot read universities outside their scope | IN_PROGRESS (role policies and matrix verified in `4f0cb41`/`15c6caf`; data scopes need manager assignments from T-030) |
 | T-023 | Audit log and "recent actions" (cache of user actions) | T-021 | Each mutation writes one audit event in the same transaction; recent actions visible in the UI | IN_PROGRESS |
 | T-024 | Frontend authentication: redirect to login, user menu, logout, role-aware navigation, 401 handling | T-021 | Verified in a browser for each role (agents may not type passwords into the Keycloak form, so the final sign-in check needs the owner) | IN_PROGRESS |
 | T-025 | Admin screen for data scopes; Supervisor reassigns responsible persons | T-022, T-030 | Admin assigns scopes; Supervisor changes a responsible person; audit events recorded | TODO |
@@ -40,7 +40,7 @@ Priority order: owner decisions and the official specification (`docs/specificat
 
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
-| T-030 | Catalog schema: IT directions, IT products (vendor, software), universities, university contacts, contracts and licences (number, signing date, validity = one year, transfer status, manager, university responsible persons, comment) | T-012 | Migration applies on the existing volume without data loss; model tests | TODO |
+| T-030 | Catalog schema: IT directions, IT products (vendor, software), universities, university contacts, contracts and licences (number, signing date, validity = one year, transfer status, manager, university responsible persons, comment) | T-012 | Migration applies on the existing volume without data loss; model tests | IN_PROGRESS (design `docs/design/catalogs.md`) |
 | T-031 | Catalog API with filtering and pagination | T-030, T-022 | Documented in Swagger; tests for filters, validation, scopes | TODO |
 | T-032 | Catalog screens | T-031 | Browser check: list, filter, create, edit without page reload | TODO |
 | T-033 | xls/xlsx import: upload, column mapping (saved profiles), validation preview, idempotent apply, import report | T-031 | A synthetic sample file imports; invalid rows reported with row number and reason; re-import creates no duplicates | TODO |
