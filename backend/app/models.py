@@ -223,3 +223,27 @@ class AuditEvent(Base):
     summary: Mapped[str] = mapped_column(russian_text(300))
     payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     ip: Mapped[str | None] = mapped_column(String(45))
+
+
+IMPORT_STATUSES = ('uploaded', 'applied')
+
+
+class CatalogImport(Base):
+    """An uploaded catalog file: parsed rows, the mapping used and the apply report; the file itself is not kept."""
+    __tablename__ = 'catalog_imports'
+    __table_args__ = (
+        CheckConstraint(f"status in ({', '.join(repr(s) for s in IMPORT_STATUSES)})", name='status'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    header_row: Mapped[int]
+    headers: Mapped[list] = mapped_column(JSONB)
+    # [[row number, [cell, ...]], ...]; dates are stored as {"$date": "YYYY-MM-DD"}.
+    rows: Mapped[list] = mapped_column(JSONB)
+    suggested_mapping: Mapped[dict] = mapped_column(JSONB)
+    mapping: Mapped[dict | None] = mapped_column(JSONB)
+    status: Mapped[str] = mapped_column(String(20), default='uploaded')
+    report: Mapped[dict | None] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

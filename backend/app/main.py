@@ -10,6 +10,7 @@ from .audit import record_event
 from .audit_routes import router as audit_router
 from .auth import ALL_ROLES, AuthContext, require_roles, router as auth_router
 from .catalog_routes import active_university_in_scope, router as catalog_router, university_scope
+from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
 from .models import AnnualMetric, Launch, StageEvent, Task, University
@@ -79,6 +80,7 @@ def create_app(settings=None, *, http_client=None):
     app.include_router(auth_router)
     app.include_router(audit_router)
     app.include_router(catalog_router)
+    app.include_router(import_router)
 
     @app.get('/api/v1/health')
     def health(db: Session = Depends(get_db)):
