@@ -6,6 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { apiRequest } from "./client";
 import type {
+  AuditEvent,
   Dashboard,
   Launch,
   LaunchInput,
@@ -23,7 +24,19 @@ export const queryKeys = {
   stages: ["stages"] as const,
   dashboard: ["dashboard"] as const,
   launchHistory: (id: number) => ["launch-history", id] as const,
+  audit: ["audit"] as const,
+  auditRecent: (limit: number) => ["audit", "recent", limit] as const,
 };
+
+export const useRecentActions = (limit = 10) =>
+  useQuery({
+    queryKey: queryKeys.auditRecent(limit),
+    queryFn: () => apiRequest<AuditEvent[]>(`/audit/recent?limit=${limit}`),
+  });
+
+/** Every successful change adds an audit event; refresh any recent-actions list in the background. */
+const invalidateAudit = (client: QueryClient) =>
+  void client.invalidateQueries({ queryKey: queryKeys.audit });
 
 export const useUniversities = () =>
   useQuery({
@@ -89,6 +102,7 @@ export function useToggleTask() {
       if (context?.previous)
         client.setQueryData(queryKeys.tasks, context.previous);
     },
+    onSuccess: () => invalidateAudit(client),
     onSettled: () => invalidate(client, queryKeys.tasks),
   });
 }
@@ -111,6 +125,7 @@ export function useChangeStage() {
       if (context?.previous)
         client.setQueryData(queryKeys.launches, context.previous);
     },
+    onSuccess: () => invalidateAudit(client),
     onSettled: (_data, _error, { id }) =>
       invalidate(
         client,
@@ -126,8 +141,10 @@ export function useCreateUniversity() {
   return useMutation({
     mutationFn: (data: UniversityInput) =>
       apiRequest<University>("/universities", "POST", data),
-    onSuccess: () =>
-      invalidate(client, queryKeys.universities, queryKeys.dashboard),
+    onSuccess: () => {
+      invalidate(client, queryKeys.universities, queryKeys.dashboard);
+      invalidateAudit(client);
+    },
   });
 }
 
@@ -136,6 +153,9 @@ export function useCreateLaunch() {
   return useMutation({
     mutationFn: (data: LaunchInput) =>
       apiRequest<Launch>("/launches", "POST", data),
-    onSuccess: () => invalidate(client, queryKeys.launches, queryKeys.dashboard),
+    onSuccess: () => {
+      invalidate(client, queryKeys.launches, queryKeys.dashboard);
+      invalidateAudit(client);
+    },
   });
 }

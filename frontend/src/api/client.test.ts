@@ -1,5 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
-import { ApiError, apiRequest, errorText, parseErrorBody } from "./client";
+import {
+  ApiError,
+  apiRequest,
+  configureApiClient,
+  errorText,
+  parseErrorBody,
+} from "./client";
 
 function stubFetch(status: number, body: string) {
   const fetchMock = vi.fn(async () => new Response(body, { status }));
@@ -26,9 +32,40 @@ describe("apiRequest", () => {
     });
     expect(fetchMock).toHaveBeenCalledWith("/api/v1/tasks/1", {
       method: "PATCH",
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: '{"done":true}',
     });
+  });
+
+  it("sends the CSRF token on state-changing methods only", async () => {
+    configureApiClient({ csrfToken: () => "token-1" });
+    const fetchMock = stubFetch(200, "{}");
+    await apiRequest("/universities", "POST", { name: "x" });
+    await apiRequest("/launches/1", "patch", { stage: 1 });
+    await apiRequest("/auth/logout", "POST");
+    await apiRequest("/tasks");
+    const headers = fetchMock.mock.calls.map(
+      (call) => (call as unknown as [string, RequestInit])[1].headers as Record<string, string>,
+    );
+    expect(headers.map((h) => h["X-CSRF-Token"])).toEqual([
+      "token-1",
+      "token-1",
+      "token-1",
+      undefined,
+    ]);
+  });
+
+  it("reports 401 from data requests but not from /auth/me", async () => {
+    const onUnauthenticated = vi.fn();
+    configureApiClient({ onUnauthenticated });
+    const body = JSON.stringify({ code: "UNAUTHENTICATED", message: "Требуется вход в систему", details: null });
+    stubFetch(401, body);
+    const error = await caught(apiRequest("/tasks"));
+    expect(error.code).toBe("UNAUTHENTICATED");
+    expect(onUnauthenticated).toHaveBeenCalledWith("/tasks");
+    await caught(apiRequest("/auth/me"));
+    expect(onUnauthenticated).toHaveBeenCalledTimes(1);
   });
 
   it("parses the D-120 error shape with field details", async () => {

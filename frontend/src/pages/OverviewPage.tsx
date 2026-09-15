@@ -19,6 +19,7 @@ import { paths } from "../app/navigation";
 import { AnnualChart } from "../components/AnnualChart";
 import { LaunchTable } from "../components/LaunchTable";
 import { RefreshError, queryFallback } from "../components/QueryState";
+import { RecentActions } from "../components/RecentActions";
 import { TaskList } from "../components/TaskList";
 import { formatNumber, stageGroup, stageGroups } from "../lib/format";
 
@@ -171,6 +172,7 @@ export function OverviewPage() {
           launches={launchList}
         />
       </section>
+      <RecentActions />
     </>
   );
 }

@@ -43,6 +43,16 @@ export interface Dashboard {
   overdue: number;
   annual: AnnualMetric[];
 }
+/** One entry of GET /audit/recent (newest first). */
+export interface AuditEvent {
+  id: number;
+  occurred_at: string;
+  action: string;
+  entity_type: string;
+  entity_id: number | null;
+  summary: string;
+  user: { id: number; full_name: string } | null;
+}
 export interface UniversityInput {
   name: string;
   city: string;
