@@ -31,19 +31,19 @@ Priority order: owner decisions and the official specification (`docs/specificat
 |---|---|---|---|---|
 | T-020 | Keycloak service with realm import (realm, three roles, confidential client, synthetic users) | T-014 | Keycloak healthy in Compose; a synthetic user can authenticate; no secrets committed | VERIFIED (synthetic-user authentication proven in the spike container; Compose: healthy, realm served, secrets gitignored) |
 | T-021 | Server-side OIDC login (backend-for-frontend): login, callback, logout, current user; sessions in PostgreSQL; httpOnly cookie; CSRF token | T-020 | Browser login through Keycloak works end to end; unit tests cover callback, session expiry, logout, CSRF | VERIFIED (`4f0cb41`, hardened `15c6caf`; real redirect, login page, discovery checked over HTTP; browser sign-in left to the owner per D-130) |
-| T-022 | Role policies on every route; data-visibility scopes; route-policy completeness test | T-021 | Role × route matrix tests pass; a User cannot read universities outside their scope | IN_PROGRESS (role policies and matrix verified in `4f0cb41`/`15c6caf`; data scopes need manager assignments from T-030) |
-| T-023 | Audit log and "recent actions" (cache of user actions) | T-021 | Each mutation writes one audit event in the same transaction; recent actions visible in the UI | IN_PROGRESS |
-| T-024 | Frontend authentication: redirect to login, user menu, logout, role-aware navigation, 401 handling | T-021 | Verified in a browser for each role (agents may not type passwords into the Keycloak form, so the final sign-in check needs the owner) | IN_PROGRESS |
+| T-022 | Role policies on every route; data-visibility scopes; route-policy completeness test | T-021 | Role × route matrix tests pass; a User cannot read universities outside their scope | VERIFIED (role policies `4f0cb41`/`15c6caf`; manager data scopes across catalogs, contracts, launches, tasks, history and dashboard with tests; review findings fixed) |
+| T-023 | Audit log and "recent actions" (cache of user actions) | T-021 | Each mutation writes one audit event in the same transaction; recent actions visible in the UI | VERIFIED (backend `ddabb53`; UI panel `3edbccc` covered by frontend tests; signed-in visual check pending owner per D-130) |
+| T-024 | Frontend authentication: redirect to login, user menu, logout, role-aware navigation, 401 handling | T-021 | Verified in a browser for each role (agents may not type passwords into the Keycloak form, so the final sign-in check needs the owner) | BLOCKED (implemented in `3edbccc`, 61 frontend tests, independent review fixed; browser shows the unauthenticated redirect to the Keycloak login page; signed-in checks per role need the owner) |
 | T-025 | Admin screen for data scopes; Supervisor reassigns responsible persons | T-022, T-030 | Admin assigns scopes; Supervisor changes a responsible person; audit events recorded | TODO |
 
 ## M3 — Catalogs, import, JSON export
 
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
-| T-030 | Catalog schema: IT directions, IT products (vendor, software), universities, university contacts, contracts and licences (number, signing date, validity = one year, transfer status, manager, university responsible persons, comment) | T-012 | Migration applies on the existing volume without data loss; model tests | IN_PROGRESS (design `docs/design/catalogs.md`) |
-| T-031 | Catalog API with filtering and pagination | T-030, T-022 | Documented in Swagger; tests for filters, validation, scopes | TODO |
-| T-032 | Catalog screens | T-031 | Browser check: list, filter, create, edit without page reload | TODO |
-| T-033 | xls/xlsx import: upload, column mapping (saved profiles), validation preview, idempotent apply, import report | T-031 | A synthetic sample file imports; invalid rows reported with row number and reason; re-import creates no duplicates | TODO |
+| T-030 | Catalog schema: IT directions, IT products (vendor, software), universities, university contacts, contracts and licences (number, signing date, validity = one year, transfer status, manager, university responsible persons, comment) | T-012 | Migration applies on the existing volume without data loss; model tests | VERIFIED (`4f19e51`; rehearsal on restored backup; live dev database migrated with row counts unchanged) |
+| T-031 | Catalog API with filtering and pagination | T-030, T-022 | Documented in Swagger; tests for filters, validation, scopes | VERIFIED (194 backend tests; independent review findings fixed; deployed to the dev stack) |
+| T-032 | Catalog screens | T-031 | Browser check: list, filter, create, edit without page reload | IN_PROGRESS (implemented; 85 frontend tests, lint, build; signed-in browser check needs the owner per D-130) |
+| T-033 | xls/xlsx import: upload, column mapping (saved profiles), validation preview, idempotent apply, import report | T-031 | A synthetic sample file imports; invalid rows reported with row number and reason; re-import creates no duplicates | IN_PROGRESS (file parsing and row rules with tests; API contract `docs/api/imports.md`; endpoints and UI in progress) |
 | T-034 | Resulting JSON file export | T-031 | Export endpoint returns a JSON file matching a documented schema | TODO |
 
 ## M4 — Workflows and attachments
