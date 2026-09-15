@@ -12,13 +12,10 @@ import type {
   LaunchInput,
   StageEvent,
   Task,
-  University,
-  UniversityInput,
 } from "./types";
 
 /** Stable query keys; one per endpoint. */
 export const queryKeys = {
-  universities: ["universities"] as const,
   launches: ["launches"] as const,
   tasks: ["tasks"] as const,
   stages: ["stages"] as const,
@@ -35,14 +32,8 @@ export const useRecentActions = (limit = 10) =>
   });
 
 /** Every successful change adds an audit event; refresh any recent-actions list in the background. */
-const invalidateAudit = (client: QueryClient) =>
+export const invalidateAudit = (client: QueryClient) =>
   void client.invalidateQueries({ queryKey: queryKeys.audit });
-
-export const useUniversities = () =>
-  useQuery({
-    queryKey: queryKeys.universities,
-    queryFn: () => apiRequest<University[]>("/universities"),
-  });
 
 export const useLaunches = () =>
   useQuery({
@@ -79,7 +70,7 @@ export const useLaunchHistory = (id: number) =>
  * Mark queries stale and refetch the active ones in the background. Not
  * awaited, so a mutation stops being pending as soon as the server answers.
  */
-const invalidate = (client: QueryClient, ...keys: (readonly unknown[])[]) => {
+export const invalidate = (client: QueryClient, ...keys: (readonly unknown[])[]) => {
   for (const queryKey of keys)
     void client.invalidateQueries({ queryKey, exact: true });
 };
@@ -133,18 +124,6 @@ export function useChangeStage() {
         queryKeys.launchHistory(id),
         queryKeys.dashboard,
       ),
-  });
-}
-
-export function useCreateUniversity() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (data: UniversityInput) =>
-      apiRequest<University>("/universities", "POST", data),
-    onSuccess: () => {
-      invalidate(client, queryKeys.universities, queryKeys.dashboard);
-      invalidateAudit(client);
-    },
   });
 }
 

@@ -1,7 +1,9 @@
 import {
+  BookMarked,
   Building2,
   ChartNoAxesCombined,
   Columns3,
+  FileText,
   LayoutDashboard,
   ListChecks,
   type LucideIcon,
@@ -10,10 +12,16 @@ import {
 export const paths = {
   overview: "/",
   universities: "/universities",
+  contracts: "/contracts",
   interactions: "/interactions",
   tasks: "/tasks",
   analytics: "/analytics",
+  catalogs: "/catalogs",
 } as const;
+
+export const universityPath = (id: number) => `${paths.universities}/${id}`;
+
+export type CreateKind = "university" | "launch" | "contract";
 
 export interface PageMeta {
   path: string;
@@ -21,7 +29,8 @@ export interface PageMeta {
   icon: LucideIcon;
   heading: string;
   subtitle: string;
-  create: "university" | "launch";
+  /** What the page heading button creates; null when the page has its own actions. */
+  create: CreateKind | null;
 }
 
 export const pages: PageMeta[] = [
@@ -40,6 +49,14 @@ export const pages: PageMeta[] = [
     heading: "Учебные заведения",
     subtitle: "Единая база партнёров, контактов и образовательных программ.",
     create: "university",
+  },
+  {
+    path: paths.contracts,
+    name: "Договоры",
+    icon: FileText,
+    heading: "Договоры",
+    subtitle: "Договоры и лицензии ИТ-продуктов, сроки действия и передача.",
+    create: "contract",
   },
   {
     path: paths.interactions,
@@ -66,11 +83,29 @@ export const pages: PageMeta[] = [
     subtitle: "Динамика спроса на обучение и результаты предыдущих лет.",
     create: "launch",
   },
+  {
+    path: paths.catalogs,
+    name: "Справочники",
+    icon: BookMarked,
+    heading: "Справочники",
+    subtitle: "ИТ-направления и ИТ-продукты, используемые в договорах.",
+    create: null,
+  },
 ];
 
 export const NOT_FOUND_TITLE = "Страница не найдена";
 
+const normalize = (pathname: string) => pathname.replace(/\/+$/, "") || "/";
+
+/** The page for a path, including its nested routes (e.g. /universities/5). */
 export function findPage(pathname: string): PageMeta | undefined {
-  const normalized = pathname.replace(/\/+$/, "") || "/";
-  return pages.find((p) => p.path === normalized);
+  const normalized = normalize(pathname);
+  return (
+    pages.find((p) => p.path === normalized) ??
+    pages.find((p) => p.path !== "/" && normalized.startsWith(`${p.path}/`))
+  );
 }
+
+/** True on the page itself, false on its nested routes. */
+export const isPageRoot = (page: PageMeta, pathname: string) =>
+  page.path === normalize(pathname);

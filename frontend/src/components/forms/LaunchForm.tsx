@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
-import { useCreateLaunch, useUniversities } from "../../api/queries";
+import { useUniversities } from "../../api/catalogs";
+import { useCreateLaunch } from "../../api/queries";
 import { FieldError, FormFooter, formText } from "./FormParts";
 
 export function LaunchForm({ onDone }: { onDone: () => void }) {

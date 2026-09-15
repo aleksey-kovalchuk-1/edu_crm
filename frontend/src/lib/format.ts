@@ -69,3 +69,33 @@ export const toCsv = (rows: (string | number)[][]) =>
 
 export const matches = (haystack: string, query: string) =>
   haystack.toLowerCase().includes(query.toLowerCase());
+
+/** Date-only ISO string → "15.01.2027". */
+export const formatFullDate = (s: string) =>
+  new Date(s + "T12:00:00").toLocaleDateString("ru-RU");
+
+/**
+ * Default licence validity: signing date + 1 year (29 Feb → 28 Feb), as the
+ * server computes it. Returns "" for an invalid date.
+ */
+export function addOneYear(isoDate: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(isoDate);
+  if (!match) return "";
+  const year = Number(match[1]) + 1;
+  const month = match[2];
+  let day = match[3];
+  if (month === "02" && day === "29") day = "28";
+  return `${String(year).padStart(4, "0")}-${month}-${day}`;
+}
+
+/** The URL when it is an absolute http(s) address, otherwise null (never a javascript: link). */
+export function safeWebsiteUrl(value: string): string | null {
+  const text = value.trim();
+  if (!text) return null;
+  try {
+    const url = new URL(/^[a-z][a-z\d+.-]*:/i.test(text) ? text : `https://${text}`);
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
+  }
+}
