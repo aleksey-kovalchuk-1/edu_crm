@@ -21,6 +21,7 @@ class ErrorCode(StrEnum):
     BAD_REQUEST = 'BAD_REQUEST'
     UNAUTHENTICATED = 'UNAUTHENTICATED'
     FORBIDDEN = 'FORBIDDEN'
+    CSRF_INVALID = 'CSRF_INVALID'
     NOT_FOUND = 'NOT_FOUND'
     RECORD_NOT_FOUND = 'RECORD_NOT_FOUND'
     METHOD_NOT_ALLOWED = 'METHOD_NOT_ALLOWED'
@@ -38,6 +39,7 @@ CATALOGUE = {
     ErrorCode.BAD_REQUEST: (400, 'Некорректный запрос'),
     ErrorCode.UNAUTHENTICATED: (401, 'Требуется вход в систему'),
     ErrorCode.FORBIDDEN: (403, 'Недостаточно прав для этого действия'),
+    ErrorCode.CSRF_INVALID: (403, 'Страница устарела: обновите её и повторите действие'),
     ErrorCode.NOT_FOUND: (404, 'Ресурс не найден'),
     ErrorCode.RECORD_NOT_FOUND: (404, 'Запись не найдена'),
     ErrorCode.METHOD_NOT_ALLOWED: (405, 'Метод не поддерживается'),

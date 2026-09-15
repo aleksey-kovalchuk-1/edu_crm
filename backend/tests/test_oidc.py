@@ -5,8 +5,8 @@ import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from app.oidc import OIDCClient, OIDCError
-from fake_keycloak import CLIENT_ID, CLIENT_SECRET, INTERNAL_BASE_URL, ISSUER, FakeKeycloak
+from app.oidc import MAX_ID_TOKEN_AGE_SECONDS, OIDCClient, OIDCError, OIDCUnavailable
+from fake_keycloak import CLIENT_ID, CLIENT_SECRET, INTERNAL_BASE_URL, ISSUER, FakeKeycloak, s256
 
 
 @pytest.fixture
@@ -86,11 +86,53 @@ def test_refresh_failure_raises(keycloak):
         make_client(keycloak).refresh('unknown-refresh-token')
 
 
-def test_unreachable_provider_raises():
+def test_unreachable_provider_is_reported_as_unavailable():
     def unreachable(request):
         raise httpx.ConnectError('connection refused', request=request)
 
     client = OIDCClient(issuer=ISSUER, internal_base_url=INTERNAL_BASE_URL, client_id=CLIENT_ID, client_secret=CLIENT_SECRET,
                         http=httpx.Client(transport=httpx.MockTransport(unreachable)))
-    with pytest.raises(OIDCError):
+    with pytest.raises(OIDCUnavailable):
         client.refresh('token')
+
+
+def test_provider_server_error_is_unavailable_not_a_rejection(keycloak):
+    keycloak.unavailable = True
+    with pytest.raises(OIDCUnavailable):
+        make_client(keycloak).refresh('token')
+
+
+def test_rejected_refresh_is_not_reported_as_unavailable(keycloak):
+    with pytest.raises(OIDCError) as raised:
+        make_client(keycloak).refresh('unknown-refresh-token')
+    assert not isinstance(raised.value, OIDCUnavailable)
+
+
+def test_signing_keys_outage_is_unavailable(keycloak):
+    token = keycloak.id_token({'sub': 'kc-1'})
+    keycloak.unavailable = True
+    with pytest.raises(OIDCUnavailable):
+        make_client(keycloak).verify_id_token(token)
+
+
+def test_token_issued_to_another_client_is_rejected(keycloak):
+    token = keycloak.id_token({'sub': 'kc-1', 'azp': 'another-client'})
+    with pytest.raises(OIDCError):
+        make_client(keycloak).verify_id_token(token)
+
+
+def test_old_token_is_rejected_even_if_not_expired(keycloak):
+    issued = int(time.time()) - MAX_ID_TOKEN_AGE_SECONDS - 120
+    token = keycloak.id_token({'sub': 'kc-1', 'iat': issued, 'exp': int(time.time()) + 3600})
+    with pytest.raises(OIDCError):
+        make_client(keycloak).verify_id_token(token)
+
+
+def test_end_session_revokes_refresh_token_at_keycloak(keycloak):
+    client = make_client(keycloak)
+    code = keycloak.issue_code(nonce='n', code_challenge=s256('verifier-' + 'x' * 40))
+    tokens = client.exchange_code(code=code, redirect_uri='http://localhost:8080/api/v1/auth/callback', code_verifier='verifier-' + 'x' * 40)
+    client.end_session(tokens.refresh_token)
+    assert keycloak.logouts == [tokens.refresh_token]
+    with pytest.raises(OIDCError):
+        client.refresh(tokens.refresh_token)

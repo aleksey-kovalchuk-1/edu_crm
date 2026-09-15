@@ -1,4 +1,4 @@
-"""A stand-in for Keycloak in tests: signs ID tokens with a local RSA key and answers token and JWKS requests."""
+"""A stand-in for Keycloak in tests: signs ID tokens with a local RSA key and answers token, logout and JWKS requests."""
 import base64
 import hashlib
 import secrets
@@ -26,8 +26,12 @@ class FakeKeycloak:
         self.codes = {}
         self.refresh_tokens = {}
         self.token_requests = []
+        self.logouts = []
         self.jwks_requests = 0
         self.fail_refresh = False
+        self.omit_id_token_on_refresh = False
+        # Simulates an outage: every endpoint answers 503.
+        self.unavailable = False
 
     def jwks(self):
         public = jwt.algorithms.RSAAlgorithm.to_jwk(self.private_key.public_key(), as_dict=True)
@@ -40,7 +44,7 @@ class FakeKeycloak:
 
     def id_token(self, claims, *, key=None, kid=None, algorithm='RS256'):
         now = int(time.time())
-        payload = {'iss': ISSUER, 'aud': CLIENT_ID, 'iat': now, 'exp': now + 300, **claims}
+        payload = {'iss': ISSUER, 'aud': CLIENT_ID, 'azp': CLIENT_ID, 'iat': now, 'exp': now + 300, **claims}
         return jwt.encode(payload, key or self.private_key, algorithm=algorithm, headers={'kid': kid or self.kid})
 
     def issue_code(self, *, nonce, code_challenge, subject='kc-user-1', email='anna.demo@demo.local', name='Анна Демо', roles=('crm-user',)):
@@ -58,17 +62,26 @@ class FakeKeycloak:
                 claims['roles'] = list(roles)
 
     def handler(self, request):
+        if self.unavailable:
+            return httpx.Response(503, text='Service Unavailable')
         path = request.url.path
         if path.endswith('/protocol/openid-connect/certs'):
             self.jwks_requests += 1
             return httpx.Response(200, json=self.jwks())
-        if not path.endswith('/protocol/openid-connect/token'):
-            return httpx.Response(404)
 
         form = {key: values[0] for key, values in parse_qs(request.content.decode()).items()}
-        self.token_requests.append(form)
         if form.get('client_id') != CLIENT_ID or form.get('client_secret') != CLIENT_SECRET:
             return httpx.Response(401, json={'error': 'unauthorized_client'})
+
+        if path.endswith('/protocol/openid-connect/logout'):
+            if self.refresh_tokens.pop(form.get('refresh_token'), None) is None:
+                return httpx.Response(400, json={'error': 'invalid_grant'})
+            self.logouts.append(form['refresh_token'])
+            return httpx.Response(204)
+
+        if not path.endswith('/protocol/openid-connect/token'):
+            return httpx.Response(404)
+        self.token_requests.append(form)
 
         if form.get('grant_type') == 'authorization_code':
             entry = self.codes.pop(form.get('code'), None)
@@ -77,18 +90,21 @@ class FakeKeycloak:
             return self._tokens(entry['claims'], nonce=entry['nonce'])
 
         if form.get('grant_type') == 'refresh_token':
+            # Refresh tokens are single use, as in the realm (revokeRefreshToken, refreshTokenMaxReuse 0).
             claims = self.refresh_tokens.pop(form.get('refresh_token'), None)
             if claims is None or self.fail_refresh:
                 return httpx.Response(400, json={'error': 'invalid_grant'})
-            return self._tokens(claims)
+            return self._tokens(claims, include_id_token=not self.omit_id_token_on_refresh)
 
         return httpx.Response(400, json={'error': 'unsupported_grant_type'})
 
-    def _tokens(self, claims, nonce=None):
+    def _tokens(self, claims, nonce=None, include_id_token=True):
         refresh = secrets.token_urlsafe(16)
         self.refresh_tokens[refresh] = claims
-        id_claims = {**claims, 'nonce': nonce} if nonce else dict(claims)
-        return httpx.Response(200, json={'access_token': 'access-token', 'refresh_token': refresh, 'id_token': self.id_token(id_claims)})
+        body = {'access_token': 'access-token', 'refresh_token': refresh}
+        if include_id_token:
+            body['id_token'] = self.id_token({**claims, 'nonce': nonce} if nonce else dict(claims))
+        return httpx.Response(200, json=body)
 
     def http_client(self):
         return httpx.Client(transport=httpx.MockTransport(self.handler))
