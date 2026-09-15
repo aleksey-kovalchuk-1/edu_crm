@@ -51,8 +51,8 @@ Priority order: owner decisions and the official specification (`docs/specificat
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
 | T-040 | Workflow templates, statuses (stable IDs, renamable, ordered), transitions; default 14-step template; existing launches migrated to workflow instances | T-030 | Migration preserves existing stage history; renaming a status does not alter history | IN_PROGRESS (data model and migration `0008` in `fd4422d`: rehearsal on restored backup mapped 8/8 launches and copied 10 history rows; live dev database at `0008` with counts unchanged; template editing API pending) |
-| T-041 | Status change with comment and history | T-040, T-023 | API tests; audit event per change | TODO |
-| T-042 | File attachments on status changes (png, jpeg, pdf, zip, gzip, rar, doc, docx, xls, xlsx): type check by content, size limit, authorised download | T-041 | Allowed types accepted, others rejected with error codes; tests | TODO |
+| T-041 | Status change with comment and history | T-040, T-023 | API tests; audit event per change | VERIFIED (`79218fa`; `POST/GET /launches/{id}/status-changes`, audit without comment text; 208 tests; CI run 34971669341; deployed; independent review running) |
+| T-042 | File attachments on status changes (png, jpeg, pdf, zip, gzip, rar, doc, docx, xls, xlsx): type check by content, size limit, authorised download | T-041 | Allowed types accepted, others rejected with error codes; tests | VERIFIED (`79218fa`; content signature + extension, 20 MB/5 files, files removed on failure, scoped download with `nosniff`; volume `attachments_data`; `scripts/attachments-backup.sh`; independent review running) |
 | T-043 | Workflow screens: board, interaction timeline, status change dialog with comment and files, workflow editor; no page reload | T-041, T-042 | Browser check; status change round trip under 1 s locally (measured) | TODO |
 | T-044 | Existing tasks module preserved and linked to interactions | T-040 | Existing task tests pass; tasks visible on the interaction | TODO |
 

@@ -6,7 +6,7 @@
 
 ## Current state
 
-Run started. No milestone verified yet.
+Three milestones tagged (M1 foundation, M2 Keycloak and audit, M3 catalogs and import). Workflows (T-040–T-042) are implemented in the backend with tests and deployed to the dev stack; the workflow screens (T-043) are being built and an independent review of the upload code is running. Reports, integrations, guides and load testing are not started. Signed-in browser checks still need the owner (D-130).
 
 ## Preflight evidence (2026-09-15)
 
@@ -30,6 +30,9 @@ Run started. No milestone verified yet.
 
 | 2026-09-15 08:09 | Migration rehearsal on a restored copy of the live backup (`edu_crm_stamp_check`) | `python -m app.db_migrate` stamped `0001`; `alembic check` → "No new upgrade operations detected"; row counts identical; check database dropped |
 | 2026-09-15 08:11 | Backup `edu_crm-20260915T081100Z-before-alembic-baseline.dump`, then API rebuilt; entrypoint migrated the live dev database | `alembic_version` = `0001`; live row counts unchanged; after `docker compose restart api` the container log shows exactly one `Running stamp_revision` across three migration runs (idempotent); API healthy; `:8080/api/v1/launches` 200 |
+| 2026-09-15 22:38 | Backup `edu_crm-20260915T223814Z-before-0007-imports.dump`; API rebuilt | Live `alembic_version` `0007`; existing row counts unchanged |
+| 2026-09-15 22:44 | Backup `edu_crm-20260915T224414Z-before-0008-workflows.dump`; restored into `rehearsal_0008`; `alembic upgrade head` and `alembic check` there; rehearsal database dropped; API rebuilt | Rehearsal: 13 statuses, 8 of 8 launches mapped to the status at their stage, 10 `stage_events` copied into `status_changes`, `alembic check` clean. Live: `alembic_version` `0008`; launches 8, stage_events 10, tasks 8, universities 6 (unchanged); 0 launches whose status position differs from their stage |
+| 2026-09-15 22:54 | API rebuilt with the attachments volume | New named volume `attachments_data` mounted at `/data/attachments`, owned by `crm`, writable; no existing volume touched |
 
 ## Verification evidence
 
@@ -53,6 +56,10 @@ Run started. No milestone verified yet.
 | T-021, T-022 | Full backend suite with Keycloak sessions, CSRF, role policies (fake identity provider) | 114 passed; CI run 34935661251 success |
 | T-023 | Suite with audit trail; backup `edu_crm-20260915T161918Z-before-0004-audit.dump`; API rebuilt | 130 passed; live `alembic_version` `0004`; existing row counts unchanged; `/api/v1/audit/recent` → 401 without session |
 | Security fixes | Full suite; backup `edu_crm-20260915T162638Z-before-0005-login-binding.dump`; API rebuilt | 140 passed; live `alembic_version` `0005`; existing row counts unchanged; login start through nginx 302 and sets `edu_crm_login` scoped to `/api/v1/auth`; callback without that cookie → `/?auth_error=LOGIN_EXPIRED`; `/api/v1/launches` 401; `/api/docs/oauth2-redirect` 200 |
+| T-024 | Lead re-run after review fixes and recent-actions panel | `npm run lint` clean; `npm test` 61 passed (6 files); build success |
+| T-024 | `docker compose up -d --build web`; Claude Browser pane at `http://localhost:8080/tasks` without a session (2026-09-16 01:15 MSK) | `web` healthy; `/`, `/tasks`, `/?auth_error=NO_ACCESS`, `/?logged_out=1` return 200; browser was redirected to the Keycloak page «Sign in to Образование CRM» (no credentials entered) |
+| T-030 | Suite with catalog models; rehearsal of `0006` on restored `edu_crm-20260915T162638Z-before-0005-login-binding.dump`; backup `edu_crm-20260915T221936Z-before-0006-catalogs.dump`; API rebuilt | 150 passed; rehearsal: upgrades `0004 → 0005 → 0006`, `alembic check` clean, 6 of 6 universities received defaults; live `alembic_version` `0006`, existing row counts unchanged, new tables empty |
+| T-031, T-022 | Catalog API and manager data scopes (not yet committed) | 166 passed |
 | Security finding 6 | Login rate limit in nginx (config copied into the running `web` container, `nginx -t` OK) | 30 rapid `GET /api/v1/auth/login`: 21 × 302, 9 × 429 with `{"code":"RATE_LIMITED",...}` (`application/json`); `/api/v1/launches` 401, `/tasks` 200, Keycloak discovery through `/auth/` 200 |
 | T-020 | `scripts/generate-dev-secrets.sh`; backup `edu_crm-20260915T160853Z-before-0003-keycloak.dump`; `docker compose up -d --build keycloak-db-init keycloak api` | Init job exited 0 and created database `keycloak` owned by role `keycloak`; Keycloak 26.7.3 healthy (`/auth/health/ready` on port 9000); API healthy; live `alembic_version` `0003`; existing tables' row counts unchanged; `deploy/local/` gitignored (only variable names printed) |
 | T-020 | HTTP checks through nginx (new `nginx.conf` copied into the running `web` container and reloaded) | `GET /api/v1/auth/login?next=/tasks` → 302 to `http://localhost:8080/auth/realms/edu-crm/protocol/openid-connect/auth` with `response_type, client_id, redirect_uri, scope, state, nonce, code_challenge, code_challenge_method`; Keycloak login page 200 with title «Вход Образование CRM» and login form; discovery from the API container: issuer `http://localhost:8080/auth/realms/edu-crm`, token and JWKS endpoints on `http://keycloak:8080`, one RS256 signing key; `GET /api/v1/launches` → 401 `UNAUTHENTICATED`; `/api/docs` 200 |
@@ -100,12 +107,22 @@ Run started. No milestone verified yet.
 | `52bc6d2` | Migrations and seeding need only `DATABASE_URL` | CLI regression test |
 | `ddabb53` | T-023 audit trail and recent actions (backend) | 130 tests; live migration `0004` |
 | `15c6caf` | Security review fixes (9 findings), login rate limit, route discovery fix | 140 tests; live migration `0005`; nginx rate limit verified |
+| `f8f2a99` | T-031 catalog and contract API with manager data scopes | 194 tests; independent review findings fixed |
+| `2e8732b` | T-032 catalog, contract and university detail screens | 85 frontend tests, lint, build; CI green |
+| `64c2642` | T-033 xls/xlsx import API (upload, mapping, check, apply) | 203 tests; live migration `0007`; CI green |
+| `6b7a8cf` | Workflow design (`docs/design/workflows.md`) | Documentation only; CI green |
+| `cffa153` | Synthetic import sample workbook | Parsed by the importer: 7 rows, 6 valid, row 9 invalid date; CI green |
+| `43115a0` | T-033 import wizard | 98 frontend tests, lint, build |
+| `fd4422d` | T-040 workflow data model, migration `0008`, decisions D-149–D-154 | 204 tests incl. migration of existing history; rehearsal and live migration (see data safety); CI run 34970631932 success |
+| `79218fa` | T-041/T-042 status changes with comments and files, template editing, nginx body limit | 208 tests; API rebuilt; 7 workflow paths in OpenAPI; `/api/v1/workflows` 401 without session |
 
 ## Versions
 
 | Tag | Commit | Contents | Verification | Limitations | Preview |
 |---|---|---|---|---|---|
 | `ai-m1-foundation-20260915` | `5ff2050` | M1: PostgreSQL only, Alembic, Russian collation, error codes, container entrypoint, Swagger under `/api`, healthchecks, routed frontend with tests | Backend 47 tests, frontend 28 tests, CI green; migrations rehearsed on restored backups | No authentication | Stop the current stack first (`docker compose stop`, volumes kept). Then `git worktree add ../edu-crm-m1 ai-m1-foundation-20260915 && cd ../edu-crm-m1 && cp .env.example .env && COMPOSE_PROJECT_NAME=edu-crm-m1 docker compose up --build -d` — the separate project name gives it its own volumes; open http://localhost:8080 |
+| `ai-m2-keycloak-audit-20260916` | `e81eb89` | M2: Keycloak in Compose behind nginx, server-side OIDC sessions with PKCE and browser binding, CSRF, revalidation, back-channel logout, login rate limit, role policy on every route, audit trail and recent actions, interface session handling | Backend 140 tests, frontend 61 tests, CI green (run 34967614642); independent security and frontend reviews with findings fixed; migrations `0003`–`0005` applied to the dev database after backups | Data scopes by assigned university not enforced yet; signed-in checks per role need the owner (D-130); no compliance claims | Stop the current stack (`docker compose stop`). `git worktree add ../edu-crm-m2 ai-m2-keycloak-audit-20260916 && cd ../edu-crm-m2 && cp .env.example .env && scripts/generate-dev-secrets.sh && COMPOSE_PROJECT_NAME=edu-crm-m2 docker compose up --build -d`; wait about a minute for Keycloak; open http://localhost:8080 and sign in with a demo account from `deploy/local/keycloak.env` |
+| `ai-m3-catalogs-import-20260916` | `fd4422d` | M3: IT directions, IT products, universities with contacts and assigned managers, contracts with one-year validity and transfer statuses, manager data scopes, xls/xlsx import with mapping, check report and apply, import wizard, default workflow data model | Backend 204 tests, frontend 98 tests, CI green (run 34970631932); independent catalog review with findings fixed; migrations `0006`–`0008` rehearsed on restored backups and applied after backups | xlsx files over 1 MB are rejected by nginx at this tag (fixed in `79218fa`); workflow API and screens not included; signed-in checks need the owner (D-130) | Same as M2 with `../edu-crm-m3`, tag `ai-m3-catalogs-import-20260916` and `COMPOSE_PROJECT_NAME=edu-crm-m3`; try the import with `docs/samples/catalog-import-sample.xlsx` as `pavel.demo` (head) |
 
 ## Blockers and owner checks
 
