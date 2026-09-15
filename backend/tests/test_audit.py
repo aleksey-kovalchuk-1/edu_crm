@@ -52,7 +52,7 @@ def test_forbidden_request_records_nothing(client, keycloak, database_url):
 
 def test_task_update_records_before_and_after(client, keycloak, database_url):
     seed_database(database_url)
-    login(client, keycloak)
+    login(client, keycloak, roles=('crm-supervisor',))
     task = client.get('/api/v1/tasks').json()[0]
     assert client.patch(f"/api/v1/tasks/{task['id']}", json={'done': not task['done']}).status_code == 200
     [event] = recorded_events(database_url)
@@ -63,8 +63,9 @@ def test_task_update_records_before_and_after(client, keycloak, database_url):
 def test_managers_see_only_their_own_recent_actions(app, keycloak):
     with TestClient(app) as head, TestClient(app) as manager:
         login(head, keycloak, roles=('crm-supervisor',), subject='kc-head', name='Павел Демо')
-        login(manager, keycloak, roles=('crm-user',), subject='kc-manager', name='Анна Демо')
+        me = login(manager, keycloak, roles=('crm-user',), subject='kc-manager', name='Анна Демо')
         university = head.post('/api/v1/universities', json={'name': 'Вуз', 'city': 'Москва'}).json()
+        assert head.put(f"/api/v1/universities/{university['id']}/managers", json={'user_ids': [me['user']['id']]}).status_code == 200
         assert manager.post('/api/v1/launches', json={**LAUNCH, 'university_id': university['id']}).status_code == 201
 
         mine = manager.get('/api/v1/audit/recent').json()
@@ -72,7 +73,7 @@ def test_managers_see_only_their_own_recent_actions(app, keycloak):
         assert mine[0]['user']['full_name'] == 'Анна Демо'
 
         everyone = head.get('/api/v1/audit/recent').json()
-        assert [event['action'] for event in everyone] == ['launch.create', 'university.create']
+        assert [event['action'] for event in everyone] == ['launch.create', 'university.managers', 'university.create']
 
 
 def test_recent_actions_limit_is_bounded(client, keycloak):

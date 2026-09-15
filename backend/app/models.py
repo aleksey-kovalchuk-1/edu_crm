@@ -34,6 +34,15 @@ class University(Base):
     region: Mapped[str] = mapped_column(russian_text(100), default='', server_default='')
     website: Mapped[str] = mapped_column(String(300), default='', server_default='')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Read-only view of assigned managers; assignments are changed through UniversityManager rows.
+    managers: Mapped[list['User']] = relationship(
+        'User',
+        secondary='university_managers',
+        primaryjoin='University.id == UniversityManager.university_id',
+        secondaryjoin='User.id == UniversityManager.user_id',
+        viewonly=True,
+        order_by='User.full_name',
+    )
 
 class Launch(Base):
     __tablename__ = 'launches'
@@ -196,6 +205,9 @@ class Contract(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
     contacts: Mapped[list['UniversityContact']] = relationship(secondary=contract_contacts, order_by='UniversityContact.full_name')
+    university: Mapped['University'] = relationship()
+    it_product: Mapped['ITProduct'] = relationship()
+    manager: Mapped['User | None'] = relationship(foreign_keys=[manager_user_id])
 
 
 class AuditEvent(Base):
