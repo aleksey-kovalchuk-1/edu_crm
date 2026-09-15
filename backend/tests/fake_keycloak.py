@@ -1,0 +1,94 @@
+"""A stand-in for Keycloak in tests: signs ID tokens with a local RSA key and answers token and JWKS requests."""
+import base64
+import hashlib
+import secrets
+import time
+from urllib.parse import parse_qs
+
+import httpx
+import jwt
+from cryptography.hazmat.primitives.asymmetric import rsa
+
+ISSUER = 'http://localhost:8080/auth/realms/edu-crm'
+INTERNAL_BASE_URL = 'http://keycloak.test/auth/realms/edu-crm'
+CLIENT_ID = 'edu-crm-api'
+CLIENT_SECRET = 'test-client-secret'
+
+
+def s256(verifier):
+    return base64.urlsafe_b64encode(hashlib.sha256(verifier.encode('ascii')).digest()).rstrip(b'=').decode('ascii')
+
+
+class FakeKeycloak:
+    def __init__(self):
+        self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.kid = 'test-key-1'
+        self.codes = {}
+        self.refresh_tokens = {}
+        self.token_requests = []
+        self.jwks_requests = 0
+        self.fail_refresh = False
+
+    def jwks(self):
+        public = jwt.algorithms.RSAAlgorithm.to_jwk(self.private_key.public_key(), as_dict=True)
+        public.update(kid=self.kid, use='sig', alg='RS256')
+        return {'keys': [public]}
+
+    def rotate_key(self):
+        self.private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        self.kid = f'test-key-{secrets.token_hex(4)}'
+
+    def id_token(self, claims, *, key=None, kid=None, algorithm='RS256'):
+        now = int(time.time())
+        payload = {'iss': ISSUER, 'aud': CLIENT_ID, 'iat': now, 'exp': now + 300, **claims}
+        return jwt.encode(payload, key or self.private_key, algorithm=algorithm, headers={'kid': kid or self.kid})
+
+    def issue_code(self, *, nonce, code_challenge, subject='kc-user-1', email='anna.demo@demo.local', name='Анна Демо', roles=('crm-user',)):
+        code = secrets.token_urlsafe(16)
+        self.codes[code] = {
+            'claims': {'sub': subject, 'email': email, 'name': name, 'roles': list(roles)},
+            'nonce': nonce,
+            'code_challenge': code_challenge,
+        }
+        return code
+
+    def set_roles(self, subject, roles):
+        for claims in self.refresh_tokens.values():
+            if claims['sub'] == subject:
+                claims['roles'] = list(roles)
+
+    def handler(self, request):
+        path = request.url.path
+        if path.endswith('/protocol/openid-connect/certs'):
+            self.jwks_requests += 1
+            return httpx.Response(200, json=self.jwks())
+        if not path.endswith('/protocol/openid-connect/token'):
+            return httpx.Response(404)
+
+        form = {key: values[0] for key, values in parse_qs(request.content.decode()).items()}
+        self.token_requests.append(form)
+        if form.get('client_id') != CLIENT_ID or form.get('client_secret') != CLIENT_SECRET:
+            return httpx.Response(401, json={'error': 'unauthorized_client'})
+
+        if form.get('grant_type') == 'authorization_code':
+            entry = self.codes.pop(form.get('code'), None)
+            if entry is None or s256(form.get('code_verifier', '')) != entry['code_challenge']:
+                return httpx.Response(400, json={'error': 'invalid_grant'})
+            return self._tokens(entry['claims'], nonce=entry['nonce'])
+
+        if form.get('grant_type') == 'refresh_token':
+            claims = self.refresh_tokens.pop(form.get('refresh_token'), None)
+            if claims is None or self.fail_refresh:
+                return httpx.Response(400, json={'error': 'invalid_grant'})
+            return self._tokens(claims)
+
+        return httpx.Response(400, json={'error': 'unsupported_grant_type'})
+
+    def _tokens(self, claims, nonce=None):
+        refresh = secrets.token_urlsafe(16)
+        self.refresh_tokens[refresh] = claims
+        id_claims = {**claims, 'nonce': nonce} if nonce else dict(claims)
+        return httpx.Response(200, json={'access_token': 'access-token', 'refresh_token': refresh, 'id_token': self.id_token(id_claims)})
+
+    def http_client(self):
+        return httpx.Client(transport=httpx.MockTransport(self.handler))

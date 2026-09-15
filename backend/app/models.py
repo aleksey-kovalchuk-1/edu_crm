@@ -1,5 +1,6 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import ForeignKey, String, Date, DateTime, Boolean, MetaData
+from sqlalchemy import ForeignKey, String, Date, DateTime, Boolean, MetaData, Text
+from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 # Names match PostgreSQL's own defaults, so databases created before migrations existed keep identical constraint names.
@@ -62,3 +63,46 @@ class AnnualMetric(Base):
     applications: Mapped[int]
     students: Mapped[int]
     streams: Mapped[int]
+
+
+def utcnow():
+    return datetime.now(timezone.utc)
+
+
+class User(Base):
+    """Local mirror of a Keycloak account; Keycloak stays the source of identity and roles."""
+    __tablename__ = 'users'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    keycloak_sub: Mapped[str] = mapped_column(String(255), unique=True)
+    email: Mapped[str] = mapped_column(String(254), default='')
+    full_name: Mapped[str] = mapped_column(russian_text(200))
+    roles: Mapped[list[str]] = mapped_column(ARRAY(String(32)), default=list)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class UserSession(Base):
+    __tablename__ = 'sessions'
+    # SHA-256 of the cookie value; the raw token is never stored.
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    csrf_token: Mapped[str] = mapped_column(String(64))
+    refresh_token_encrypted: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    validated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    ip: Mapped[str | None] = mapped_column(String(45))
+    user_agent: Mapped[str | None] = mapped_column(String(300))
+
+
+class LoginState(Base):
+    """One pending browser login; stored in the database so any API worker can finish the callback."""
+    __tablename__ = 'login_states'
+    state_hash: Mapped[str] = mapped_column(String(64), primary_key=True)
+    nonce: Mapped[str] = mapped_column(String(64))
+    code_verifier: Mapped[str] = mapped_column(String(128))
+    next_path: Mapped[str] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

@@ -2,11 +2,15 @@ import os
 import uuid
 
 import pytest
+from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.exc import OperationalError
 
 from app.db_migrate import upgrade_database
+from app.main import create_app
+from fake_keycloak import FakeKeycloak
+from helpers import make_settings
 
 # Public local-development default from compose.yaml; CI sets TEST_DATABASE_URL explicitly.
 DEFAULT_TEST_DATABASE_URL = 'postgresql+psycopg://crm:local-demo-only@127.0.0.1:5432/postgres'
@@ -74,3 +78,19 @@ def empty_database_url(admin_engine):
     name = _temporary_database(admin_engine)
     yield _url_for(name)
     _drop_database(admin_engine, name)
+
+
+@pytest.fixture
+def keycloak():
+    return FakeKeycloak()
+
+
+@pytest.fixture
+def app(database_url, keycloak):
+    return create_app(make_settings(database_url), http_client=keycloak.http_client())
+
+
+@pytest.fixture
+def client(app):
+    with TestClient(app) as test_client:
+        yield test_client
