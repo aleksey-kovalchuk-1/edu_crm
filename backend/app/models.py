@@ -1,7 +1,7 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import BigInteger, ForeignKey, Index, String, Date, DateTime, Boolean, MetaData, Text
+from sqlalchemy import BigInteger, CheckConstraint, Column, ForeignKey, Index, String, Date, DateTime, Boolean, MetaData, Table, Text, UniqueConstraint, false, true
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
+from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 # Names match PostgreSQL's own defaults, so databases created before migrations existed keep identical constraint names.
 NAMING_CONVENTION = {
@@ -26,9 +26,14 @@ class Base(DeclarativeBase):
 class University(Base):
     __tablename__ = 'universities'
     id: Mapped[int] = mapped_column(primary_key=True)
-    name: Mapped[str] = mapped_column(russian_text(200))
+    name: Mapped[str] = mapped_column(russian_text(200), unique=True)
     city: Mapped[str] = mapped_column(russian_text(100))
+    # Free-text contact from the first template; structured contacts live in university_contacts.
     contact: Mapped[str] = mapped_column(russian_text(200), default='')
+    short_name: Mapped[str] = mapped_column(russian_text(100), default='', server_default='')
+    region: Mapped[str] = mapped_column(russian_text(100), default='', server_default='')
+    website: Mapped[str] = mapped_column(String(300), default='', server_default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
 
 class Launch(Base):
     __tablename__ = 'launches'
@@ -108,6 +113,89 @@ class LoginState(Base):
     browser_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+TRANSFER_STATUSES = ('not_started', 'in_progress', 'transferred', 'cancelled')
+
+it_product_directions = Table(
+    'it_product_directions',
+    Base.metadata,
+    Column('it_product_id', ForeignKey('it_products.id', ondelete='CASCADE'), primary_key=True),
+    Column('it_direction_id', ForeignKey('it_directions.id'), primary_key=True),
+)
+
+contract_contacts = Table(
+    'contract_contacts',
+    Base.metadata,
+    Column('contract_id', ForeignKey('contracts.id', ondelete='CASCADE'), primary_key=True),
+    Column('university_contact_id', ForeignKey('university_contacts.id'), primary_key=True),
+)
+
+
+class ITDirection(Base):
+    __tablename__ = 'it_directions'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(russian_text(120), unique=True)
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+
+
+class ITProduct(Base):
+    __tablename__ = 'it_products'
+    __table_args__ = (UniqueConstraint('vendor', 'name'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    vendor: Mapped[str] = mapped_column(russian_text(200))
+    # "Программное обеспечение" in the specification's import fields.
+    name: Mapped[str] = mapped_column(russian_text(200))
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    directions: Mapped[list['ITDirection']] = relationship(secondary=it_product_directions, order_by='ITDirection.name')
+
+
+class UniversityContact(Base):
+    """Responsible person on the university side; personal data, visible only within the user's data scope."""
+    __tablename__ = 'university_contacts'
+    __table_args__ = (UniqueConstraint('university_id', 'full_name'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    university_id: Mapped[int] = mapped_column(ForeignKey('universities.id'), index=True)
+    full_name: Mapped[str] = mapped_column(russian_text(200))
+    position: Mapped[str] = mapped_column(russian_text(200), default='', server_default='')
+    email: Mapped[str] = mapped_column(String(254), default='', server_default='')
+    phone: Mapped[str] = mapped_column(String(50), default='', server_default='')
+    comment: Mapped[str] = mapped_column(Text, default='', server_default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+
+
+class UniversityManager(Base):
+    """A CRM user responsible for a university; defines a manager's data scope (D-141)."""
+    __tablename__ = 'university_managers'
+    university_id: Mapped[int] = mapped_column(ForeignKey('universities.id', ondelete='CASCADE'), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True, index=True)
+    assigned_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    assigned_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+
+
+class Contract(Base):
+    """A licence contract for an IT product at a university (the specification's import fields)."""
+    __tablename__ = 'contracts'
+    __table_args__ = (
+        CheckConstraint('valid_until >= signed_at', name='valid_period'),
+        CheckConstraint(f"transfer_status in ({', '.join(repr(s) for s in TRANSFER_STATUSES)})", name='transfer_status'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    contract_number: Mapped[str] = mapped_column(String(100), unique=True)
+    university_id: Mapped[int] = mapped_column(ForeignKey('universities.id'), index=True)
+    it_product_id: Mapped[int] = mapped_column(ForeignKey('it_products.id'), index=True)
+    signed_at: Mapped[date] = mapped_column(Date)
+    valid_until: Mapped[date] = mapped_column(Date)
+    transfer_status: Mapped[str] = mapped_column(String(20), default='not_started', server_default='not_started')
+    manager_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), index=True)
+    # Manager name as imported when it could not be matched to exactly one CRM user (D-140).
+    manager_name: Mapped[str] = mapped_column(russian_text(200), default='', server_default='')
+    comment: Mapped[str] = mapped_column(Text, default='', server_default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    contacts: Mapped[list['UniversityContact']] = relationship(secondary=contract_contacts, order_by='UniversityContact.full_name')
 
 
 class AuditEvent(Base):
