@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
+  CSRF_TOKEN,
   apiError,
   deferred,
   mockApi,
@@ -25,23 +26,23 @@ describe("routing", () => {
   ])("renders %s", async (path, title, content) => {
     mockApi();
     renderApp(path);
-    expect(screen.getByRole("heading", { level: 1, name: title })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 1, name: title })).toBeTruthy();
     expect((await screen.findAllByText(content)).length).toBeGreaterThan(0);
   });
 
-  it("marks the current page in the sidebar", () => {
+  it("marks the current page in the sidebar", async () => {
     mockApi();
     renderApp("/tasks");
-    const link = screen.getByRole("link", { name: /Задачи/ });
+    const link = await screen.findByRole("link", { name: /Задачи/ });
     expect(link.className).toContain("active");
     expect(link.getAttribute("aria-current")).toBe("page");
   });
 
-  it("shows a not-found page with a link home", () => {
+  it("shows a not-found page with a link home", async () => {
     mockApi();
     renderApp("/no-such-page");
     expect(
-      screen.getByRole("heading", { level: 1, name: "Страница не найдена" }),
+      await screen.findByRole("heading", { level: 1, name: "Страница не найдена" }),
     ).toBeTruthy();
     expect(
       screen.getByRole("link", { name: /Перейти на главную/ }).getAttribute("href"),
@@ -109,11 +110,15 @@ describe("task toggle", () => {
 
     await waitFor(() => expect(checkbox.checked).toBe(true));
     await waitFor(() => expect(api.count("GET", "/tasks")).toBe(2));
-    expect(api.calls.find((c) => c.method === "PATCH")).toEqual({
+    expect(api.calls.find((c) => c.method === "PATCH")).toMatchObject({
       method: "PATCH",
       path: "/tasks/1",
       body: { done: true },
+      headers: { "x-csrf-token": CSRF_TOKEN },
     });
+    expect(
+      api.calls.filter((c) => c.method === "GET").some((c) => "x-csrf-token" in c.headers),
+    ).toBe(false);
     expect(api.count("GET", "/launches")).toBe(1);
     expect(api.count("GET", "/universities")).toBe(0);
     expect(api.count("GET", "/stages")).toBe(0);

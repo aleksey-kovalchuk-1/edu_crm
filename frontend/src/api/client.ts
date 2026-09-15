@@ -31,7 +31,25 @@ export class ApiError extends Error {
 }
 
 export const API_BASE = "/api/v1";
+export const AUTH_ME_PATH = "/auth/me";
 
+export interface ApiClientConfig {
+  /** CSRF token of the current session, sent on state-changing requests. */
+  csrfToken?: () => string | undefined;
+  /** Called when a data request (not /auth/*) gets 401: the session may have ended. */
+  onUnauthenticated?: (path: string) => void;
+  /** Re-reads the session (new CSRF token) before retrying a CSRF_INVALID request once. */
+  refreshSession?: () => Promise<unknown>;
+}
+
+let clientConfig: ApiClientConfig = {};
+
+/** Connects the client to the session state (done once by AppProviders). */
+export function configureApiClient(config: ApiClientConfig) {
+  clientConfig = config;
+}
+
+const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const LOCATION_PREFIXES = new Set(["body", "query", "path", "header", "cookie"]);
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -85,17 +103,32 @@ export function parseErrorBody(status: number, body: unknown): ApiError {
   return new ApiError(status, fallbackCode, defaultMessage(status));
 }
 
-export async function apiRequest<T>(
+export function apiRequest<T>(
   path: string,
   method = "GET",
   data?: unknown,
 ): Promise<T> {
+  return send<T>(path, method.toUpperCase(), data, true);
+}
+
+async function send<T>(
+  path: string,
+  verb: string,
+  data: unknown,
+  mayRetryCsrf: boolean,
+): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (data !== undefined) headers["Content-Type"] = "application/json";
+  if (UNSAFE_METHODS.has(verb)) {
+    const token = clientConfig.csrfToken?.();
+    if (token) headers["X-CSRF-Token"] = token;
+  }
   let response: Response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      method,
-      headers:
-        data !== undefined ? { "Content-Type": "application/json" } : undefined,
+      method: verb,
+      credentials: "same-origin",
+      headers,
       body: data !== undefined ? JSON.stringify(data) : undefined,
     });
   } catch {
@@ -110,7 +143,23 @@ export async function apiRequest<T>(
       body = null;
     }
   }
-  if (!response.ok) throw parseErrorBody(response.status, body);
+  if (!response.ok) {
+    const error = parseErrorBody(response.status, body);
+    if (
+      response.status === 403 &&
+      error.code === "CSRF_INVALID" &&
+      mayRetryCsrf &&
+      clientConfig.refreshSession
+    ) {
+      // The token may be stale (e.g. re-login in another tab): re-read it and retry once.
+      await clientConfig.refreshSession().catch(() => undefined);
+      return send<T>(path, verb, data, false);
+    }
+    if (response.status === 401 && !path.startsWith("/auth/")) {
+      clientConfig.onUnauthenticated?.(path);
+    }
+    throw error;
+  }
   if (text && body === null && text.trim() !== "null") {
     throw new ApiError(
       response.status,
@@ -119,6 +168,15 @@ export async function apiRequest<T>(
     );
   }
   return body as T;
+}
+
+/** Retry once, only when the server was unreachable or failed; 4xx (including 401) is final. */
+export function retryTransient(failureCount: number, error: unknown): boolean {
+  return (
+    failureCount < 1 &&
+    error instanceof ApiError &&
+    (error.status === 0 || error.status >= 500)
+  );
 }
 
 /** Text shown to users for any error: "<message> (код <code>)". */

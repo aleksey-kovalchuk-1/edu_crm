@@ -1,5 +1,7 @@
-import { afterEach, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
+import { configureApiClient } from "../api/client";
+import { browser } from "../lib/browser";
 
 // jsdom may lack the modal dialog API used by <Modal>.
 if (
@@ -14,7 +16,15 @@ if (
   };
 }
 
+beforeEach(() => {
+  // Full-page navigations (login, logout) are recorded instead of performed.
+  vi.spyOn(browser, "assign").mockImplementation(() => {});
+});
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  configureApiClient({});
+  sessionStorage.clear();
 });

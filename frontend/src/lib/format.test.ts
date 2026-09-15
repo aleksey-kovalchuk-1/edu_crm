@@ -4,6 +4,7 @@ import {
   formatDate,
   formatDateTime,
   formatNumber,
+  formatRelativeTime,
   initials,
   launchCode,
   matches,
@@ -33,6 +34,17 @@ describe("format helpers", () => {
     expect(formatDateTime("2026-09-15T10:00:00.123456z")).not.toBe(
       "Invalid Date",
     );
+  });
+
+  it("formats relative times in Russian", () => {
+    const now = Date.parse("2026-09-15T12:00:00Z");
+    expect(formatRelativeTime("2026-09-15T11:59:40Z", now)).toBe("только что");
+    expect(formatRelativeTime("2026-09-15T12:00:30Z", now)).toBe("только что");
+    expect(formatRelativeTime("2026-09-15T11:55:00", now)).toBe("5 мин назад");
+    expect(formatRelativeTime("2026-09-15T09:00:00Z", now)).toBe("3 ч назад");
+    expect(formatRelativeTime("2026-09-10T09:00:00Z", now)).toMatch(/^10 сент/);
+    expect(formatRelativeTime("2025-01-15T09:00:00Z", now)).toMatch(/2025/);
+    expect(formatRelativeTime("not a date", now)).toBe("");
   });
 
   it("maps stages to board columns", () => {

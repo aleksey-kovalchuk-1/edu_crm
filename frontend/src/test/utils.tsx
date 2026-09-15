@@ -1,6 +1,7 @@
 import { render } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { vi } from "vitest";
+import type { Session } from "../api/auth";
 import { API_BASE } from "../api/client";
 import type { Dashboard, Launch, Task, University } from "../api/types";
 import { AppProviders } from "../app/AppProviders";
@@ -63,10 +64,29 @@ export function fixtures() {
   return { universities, launches, tasks, stages, dashboard };
 }
 
+export const CSRF_TOKEN = "csrf-test-token";
+
+export const sessionFixture = (
+  roles: string[] = ["crm-supervisor"],
+  csrfToken = CSRF_TOKEN,
+): Session => ({
+  user: {
+    id: 1,
+    email: "anna.petrova@example.test",
+    full_name: "Анна Петрова",
+    roles,
+  },
+  csrf_token: csrfToken,
+});
+
+export const AUDIT_PATH = "/audit/recent?limit=10";
+
 export interface Call {
   method: string;
   path: string;
   body: unknown;
+  /** Request headers with lower-case names. */
+  headers: Record<string, string>;
 }
 
 /** Response body, or [status, body]; may be a promise to simulate slow or hanging requests. */
@@ -95,6 +115,8 @@ export function mockApi(extra: Record<string, Handler> = {}) {
   const count = (method: string, path: string) =>
     calls.filter((c) => c.method === method && c.path === path).length;
   const handlers: Record<string, Handler> = {
+    "GET /auth/me": () => sessionFixture(),
+    [`GET ${AUDIT_PATH}`]: () => [],
     "GET /universities": () => data.universities,
     "GET /launches": () => data.launches,
     "GET /tasks": () => data.tasks,
@@ -112,6 +134,7 @@ export function mockApi(extra: Record<string, Handler> = {}) {
       method,
       path,
       body: init?.body ? JSON.parse(String(init.body)) : undefined,
+      headers: Object.fromEntries(new Headers(init?.headers).entries()),
     };
     calls.push(call);
     const handler = handlers[`${method} ${path}`];
@@ -131,11 +154,22 @@ export function mockApi(extra: Record<string, Handler> = {}) {
   return { data, calls, count };
 }
 
+/** Exposes the router location as text (data-testid="location"). */
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <output data-testid="location" hidden>
+      {location.pathname + location.search}
+    </output>
+  );
+}
+
 export function renderApp(path: string) {
   return render(
     <AppProviders client={createQueryClient()}>
       <MemoryRouter initialEntries={[path]}>
         <AppRoutes />
+        <LocationProbe />
       </MemoryRouter>
     </AppProviders>,
   );

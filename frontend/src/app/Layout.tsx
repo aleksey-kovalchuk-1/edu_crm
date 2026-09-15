@@ -3,22 +3,33 @@ import { Link, NavLink, Outlet, useLocation } from "react-router";
 import {
   ChevronRight,
   GraduationCap,
+  LogOut,
   PanelLeftClose,
   Plus,
 } from "lucide-react";
 import { useTasks } from "../api/queries";
 import { CreateModal, type CreateKind } from "../components/forms/CreateModal";
+import { ErrorAlert } from "../components/QueryState";
+import { canEditCatalog, roleLabel, userInitials } from "../lib/user";
+import { useSession, useSignOut } from "./AuthGate";
 import { LaunchDetailProvider } from "./LaunchDetail";
 import { NOT_FOUND_TITLE, findPage, pages, paths } from "./navigation";
 
 export function Layout() {
   const location = useLocation();
+  const { user } = useSession();
+  const logout = useSignOut();
   const [menu, setMenu] = useState(false);
   const [create, setCreate] = useState<CreateKind | null>(null);
   const tasks = useTasks();
   const page = findPage(location.pathname);
   const openTasks = tasks.data?.filter((t) => !t.done).length;
   const closeMenu = () => setMenu(false);
+  const initials = userInitials(user);
+  // The server enforces roles; the interface only hides actions that would be refused.
+  const canCreate =
+    page !== undefined &&
+    (page.create !== "university" || canEditCatalog(user.roles));
 
   return (
     <LaunchDetailProvider>
@@ -71,11 +82,22 @@ export function Layout() {
               </p>
             </div>
             <div className="profile">
-              <span className="avatar">ДМ</span>
+              <span className="avatar" aria-hidden="true">
+                {initials}
+              </span>
               <div>
-                <strong>Демо-менеджер</strong>
-                <small>Предпросмотр системы</small>
+                <strong>{user.full_name || user.email}</strong>
+                <small>{roleLabel(user.roles)}</small>
               </div>
+              <button
+                className="icon-button logout-button"
+                onClick={() => logout.mutate()}
+                disabled={logout.isPending || logout.isSuccess}
+                aria-label="Выйти"
+                title="Выйти"
+              >
+                <LogOut size={17} />
+              </button>
             </div>
           </div>
         </aside>
@@ -95,7 +117,9 @@ export function Layout() {
             </div>
             <div className="topbar-right">
               <span className="demo-label">ДЕМО</span>
-              <span className="avatar tiny">ДМ</span>
+              <span className="avatar tiny" aria-hidden="true">
+                {initials}
+              </span>
             </div>
           </header>
           <main>
@@ -105,7 +129,7 @@ export function Layout() {
                 <h1>{page?.heading ?? NOT_FOUND_TITLE}</h1>
                 {page && <p className="subtitle">{page.subtitle}</p>}
               </div>
-              {page && (
+              {page && canCreate && (
                 <button
                   className="primary"
                   onClick={() => setCreate(page.create)}
@@ -117,6 +141,7 @@ export function Layout() {
                 </button>
               )}
             </div>
+            {logout.error && <ErrorAlert error={logout.error} />}
             {/* A new key per navigation resets page-local state (search, filters). */}
             <Outlet key={location.key} />
             <footer>
