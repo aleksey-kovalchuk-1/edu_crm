@@ -1,0 +1,144 @@
+{
+  "realm": "edu-crm",
+  "displayName": "Образование CRM",
+  "displayNameHtml": "Образование CRM",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": false,
+  "rememberMe": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "editUsernameAllowed": false,
+  "internationalizationEnabled": true,
+  "supportedLocales": ["ru", "en"],
+  "defaultLocale": "ru",
+  "bruteForceProtected": true,
+  "permanentLockout": false,
+  "failureFactor": 5,
+  "waitIncrementSeconds": 60,
+  "maxFailureWaitSeconds": 900,
+  "minimumQuickLoginWaitSeconds": 60,
+  "quickLoginCheckMilliSeconds": 1000,
+  "maxDeltaTimeSeconds": 43200,
+  "passwordPolicy": "length(12) and notUsername and notEmail and passwordHistory(3)",
+  "accessTokenLifespan": 300,
+  "accessCodeLifespan": 60,
+  "accessCodeLifespanLogin": 1800,
+  "ssoSessionIdleTimeout": 1800,
+  "ssoSessionMaxLifespan": 36000,
+  "offlineSessionIdleTimeout": 2592000,
+  "revokeRefreshToken": true,
+  "refreshTokenMaxReuse": 0,
+  "roles": {
+    "realm": [
+      {
+        "name": "crm-user",
+        "description": "Менеджер ключевых клиентов: видит и редактирует закреплённые за ним вузы"
+      },
+      {
+        "name": "crm-supervisor",
+        "description": "Руководитель: видит все вузы и переназначает ответственных"
+      },
+      {
+        "name": "crm-admin",
+        "description": "Администратор: видит все данные и управляет доступом"
+      }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "edu-crm-api",
+      "name": "Образование CRM",
+      "description": "Серверный OIDC-клиент CRM (backend-for-frontend)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${EDU_CRM_CLIENT_SECRET}",
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": false,
+      "frontchannelLogout": true,
+      "consentRequired": false,
+      "fullScopeAllowed": true,
+      "rootUrl": "",
+      "baseUrl": "",
+      "redirectUris": [
+        "http://localhost:8080/api/v1/auth/callback",
+        "http://localhost:5173/api/v1/auth/callback"
+      ],
+      "webOrigins": [
+        "http://localhost:8080",
+        "http://localhost:5173"
+      ],
+      "attributes": {
+        "pkce.code.challenge.method": "S256",
+        "post.logout.redirect.uris": "http://localhost:8080/*##http://localhost:5173/*",
+        "oauth2.device.authorization.grant.enabled": "false",
+        "oidc.ciba.grant.enabled": "false",
+        "backchannel.logout.session.required": "true",
+        "use.refresh.tokens": "true"
+      },
+      "defaultClientScopes": ["web-origins", "acr", "basic", "profile", "email", "roles"],
+      "optionalClientScopes": ["offline_access"],
+      "protocolMappers": [
+        {
+          "name": "realm-roles-flat",
+          "protocol": "openid-connect",
+          "protocolMapper": "oidc-usermodel-realm-role-mapper",
+          "consentRequired": false,
+          "config": {
+            "claim.name": "roles",
+            "jsonType.label": "String",
+            "multivalued": "true",
+            "id.token.claim": "true",
+            "access.token.claim": "true",
+            "userinfo.token.claim": "true",
+            "introspection.token.claim": "true"
+          }
+        }
+      ]
+    }
+  ],
+  "users": [
+    {
+      "username": "anna.demo",
+      "firstName": "Анна",
+      "lastName": "Демо",
+      "email": "anna.demo@demo.local",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        { "type": "password", "value": "${EDU_CRM_DEMO_USER_PASSWORD}", "temporary": false }
+      ],
+      "realmRoles": ["default-roles-edu-crm", "crm-user"]
+    },
+    {
+      "username": "pavel.demo",
+      "firstName": "Павел",
+      "lastName": "Демо",
+      "email": "pavel.demo@demo.local",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        { "type": "password", "value": "${EDU_CRM_DEMO_SUPERVISOR_PASSWORD}", "temporary": false }
+      ],
+      "realmRoles": ["default-roles-edu-crm", "crm-supervisor"]
+    },
+    {
+      "username": "irina.demo",
+      "firstName": "Ирина",
+      "lastName": "Демо",
+      "email": "irina.demo@demo.local",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        { "type": "password", "value": "${EDU_CRM_DEMO_ADMIN_PASSWORD}", "temporary": false }
+      ],
+      "realmRoles": ["default-roles-edu-crm", "crm-admin"]
+    }
+  ]
+}
