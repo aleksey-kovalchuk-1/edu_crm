@@ -1,0 +1,86 @@
+from fastapi.testclient import TestClient
+from sqlalchemy import select
+
+from app.models import AuditEvent
+from app.seed import seed_database
+from helpers import database, login
+
+LAUNCH = {'program': 'Python', 'product': 'Учебная среда', 'owner': 'Менеджер', 'students': 30, 'deadline': '2026-10-01'}
+
+
+def recorded_events(database_url):
+    with database(database_url) as db:
+        return list(db.scalars(select(AuditEvent).order_by(AuditEvent.id)))
+
+
+def test_each_change_is_recorded_once_with_actor_and_summary(client, keycloak, database_url):
+    me = login(client, keycloak, roles=('crm-supervisor',))
+    university = client.post('/api/v1/universities', json={'name': 'Вуз', 'city': 'Москва'}).json()
+    launch = client.post('/api/v1/launches', json={**LAUNCH, 'university_id': university['id']}).json()
+    assert client.patch(f"/api/v1/launches/{launch['id']}", json={'stage': 2}).status_code == 200
+
+    events = recorded_events(database_url)
+    assert [event.action for event in events] == ['university.create', 'launch.create', 'launch.stage_change']
+    assert {event.user_id for event in events} == {me['user']['id']}
+    assert events[0].entity_id == str(university['id'])
+    assert events[1].payload['university_id'] == university['id']
+    assert events[2].payload == {'from': 0, 'to': 2}
+    assert events[2].summary == '«Python»: этап «Поиск контакта» → «Встреча»'
+    assert all(event.ip for event in events)
+
+
+def test_requests_that_change_nothing_or_fail_record_nothing(client, keycloak, database_url):
+    seed_database(database_url)
+    login(client, keycloak, roles=('crm-supervisor',))
+    launch = client.get('/api/v1/launches').json()[0]
+    task = client.get('/api/v1/tasks').json()[0]
+
+    assert client.patch(f"/api/v1/launches/{launch['id']}", json={'stage': launch['stage']}).status_code == 200
+    assert client.patch(f"/api/v1/tasks/{task['id']}", json={'done': task['done']}).status_code == 200
+    assert client.post('/api/v1/universities', json={'name': ' ', 'city': 'Москва'}).status_code == 422
+    assert client.patch('/api/v1/tasks/999', json={'done': True}).status_code == 404
+    assert client.post('/api/v1/launches', json={**LAUNCH, 'university_id': 999}).status_code == 404
+
+    assert recorded_events(database_url) == []
+
+
+def test_forbidden_request_records_nothing(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-user',))
+    assert client.post('/api/v1/universities', json={'name': 'Вуз', 'city': 'Москва'}).status_code == 403
+    assert recorded_events(database_url) == []
+
+
+def test_task_update_records_before_and_after(client, keycloak, database_url):
+    seed_database(database_url)
+    login(client, keycloak)
+    task = client.get('/api/v1/tasks').json()[0]
+    assert client.patch(f"/api/v1/tasks/{task['id']}", json={'done': not task['done']}).status_code == 200
+    [event] = recorded_events(database_url)
+    assert event.action == 'task.update'
+    assert event.payload == {'done': {'from': task['done'], 'to': not task['done']}}
+
+
+def test_managers_see_only_their_own_recent_actions(app, keycloak):
+    with TestClient(app) as head, TestClient(app) as manager:
+        login(head, keycloak, roles=('crm-supervisor',), subject='kc-head', name='Павел Демо')
+        login(manager, keycloak, roles=('crm-user',), subject='kc-manager', name='Анна Демо')
+        university = head.post('/api/v1/universities', json={'name': 'Вуз', 'city': 'Москва'}).json()
+        assert manager.post('/api/v1/launches', json={**LAUNCH, 'university_id': university['id']}).status_code == 201
+
+        mine = manager.get('/api/v1/audit/recent').json()
+        assert [event['action'] for event in mine] == ['launch.create']
+        assert mine[0]['user']['full_name'] == 'Анна Демо'
+
+        everyone = head.get('/api/v1/audit/recent').json()
+        assert [event['action'] for event in everyone] == ['launch.create', 'university.create']
+
+
+def test_recent_actions_limit_is_bounded(client, keycloak):
+    login(client, keycloak)
+    assert client.get('/api/v1/audit/recent', params={'limit': 0}).status_code == 422
+    assert client.get('/api/v1/audit/recent', params={'limit': 101}).status_code == 422
+    assert client.get('/api/v1/audit/recent', params={'limit': 100}).status_code == 200
+
+
+def test_recent_actions_require_login(client):
+    assert client.get('/api/v1/audit/recent').status_code == 401
