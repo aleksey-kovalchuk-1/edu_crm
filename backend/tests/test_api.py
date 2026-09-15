@@ -1,9 +1,14 @@
 from fastapi.testclient import TestClient
+from sqlalchemy import create_engine, func, select
+from sqlalchemy.orm import Session
+
 from app.main import create_app
+from app.models import University
+from app.seed import seed_database
 
 
-def client(database_url, seed_demo=False):
-    return TestClient(create_app(database_url, seed_demo=seed_demo))
+def client(database_url):
+    return TestClient(create_app(database_url))
 
 
 def test_university_launch_and_stage_history_persist(database_url):
@@ -29,7 +34,8 @@ def test_rejects_invalid_relationship_stage_and_blank_name(database_url):
 
 
 def test_demo_tasks_and_dashboard(database_url):
-    with client(database_url, seed_demo=True) as c:
+    seed_database(database_url)
+    with client(database_url) as c:
         launches = c.get('/api/v1/launches').json()
         assert len(launches) > 0
         task = c.get('/api/v1/tasks').json()[0]
@@ -37,3 +43,14 @@ def test_demo_tasks_and_dashboard(database_url):
         assert c.get('/api/v1/dashboard').json()['students'] == sum(x['students'] for x in launches)
         assert c.get('/api/v1/dashboard').json()['overdue'] == sum(x['overdue'] for x in launches)
         assert c.patch('/api/v1/tasks/999', json={'done': True}).status_code == 404
+
+
+def test_seeding_twice_does_not_duplicate_data(database_url):
+    seed_database(database_url)
+    seed_database(database_url)
+    engine = create_engine(database_url)
+    try:
+        with Session(engine) as db:
+            assert db.scalar(select(func.count()).select_from(University)) == 6
+    finally:
+        engine.dispose()

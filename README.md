@@ -25,10 +25,11 @@ docker compose up --build -d
 ```
 
 - CRM: http://localhost:8080
-- API Swagger: http://localhost:8000/docs
-- Проверка API: http://localhost:8000/api/v1/health
+- API Swagger: http://localhost:8080/api/docs (схема OpenAPI: http://localhost:8080/api/openapi.json)
+- Проверка API: http://localhost:8080/api/v1/health
+- Коды ошибок API: [docs/api/errors.md](docs/api/errors.md)
 
-Данные PostgreSQL сохраняются в volume `postgres_data`. `docker compose down` сохраняет этот volume. Для пустой БД установите `SEED_DEMO=false` до первого запуска. Повторный запуск не перезаписывает существующий реестр.
+Данные PostgreSQL сохраняются в volume `postgres_data`. `docker compose down` сохраняет этот volume. Для пустой БД установите `SEED_DEMO=false` до первого запуска. Демоданные добавляются один раз при старте контейнера `api` (`python -m app.seed`) и не дублируются при перезапуске. API запускается в нескольких процессах (`WEB_CONCURRENCY`, по умолчанию 4).
 
 Пароль в `.env` используется в URL БД: для демо оставьте пример; при замене используйте URL-безопасное значение либо задайте корректно закодированный DATABASE_URL в Compose.
 
