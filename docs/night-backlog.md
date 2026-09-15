@@ -17,19 +17,20 @@ Priority order: owner decisions and the official specification (`docs/specificat
 
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
-| T-010 | Settings module; PostgreSQL only (`DATABASE_URL` required) | T-001 | App fails fast with a clear message without `DATABASE_URL`; no SQLite code paths remain | TODO |
-| T-011 | Tests run on PostgreSQL (migrated template database, one clone per test); CI PostgreSQL service | T-010 | `pytest` passes locally against PostgreSQL; CI green | TODO |
-| T-012 | Alembic baseline of the current schema; naming convention; `create_all` removed; existing databases stamped automatically | T-011, T-002 | Fresh database reaches the full schema via `alembic upgrade head`; existing dev volume is stamped with row counts unchanged; `alembic check` test passes | TODO |
-| T-013 | Error-code catalogue and JSON error handlers; frontend shows the code | T-010 | 401/403/404/409/422/500 responses carry documented codes; tests cover each | TODO |
-| T-014 | Docker: entrypoint (migrate → optional seed → multi-worker server), `web` healthcheck, Swagger reachable through nginx, forwarded-IP headers | T-012 | `docker compose up --build -d` → every service healthy; Swagger UI returns 200 on port 8080 | TODO |
-| T-015 | Russian collation for name columns (per-column ICU, no volume recreation) | T-012 | Ordering test returns `Анна, ёж, елка, Жанна, Яков` | TODO |
+| T-010 | Settings module; PostgreSQL only (`DATABASE_URL` required) | T-001 | App fails fast with a clear message without `DATABASE_URL`; no SQLite code paths remain | VERIFIED (`443b8d8`) |
+| T-011 | Tests run on PostgreSQL (migrated template database, one clone per test); CI PostgreSQL service | T-010 | `pytest` passes locally against PostgreSQL; CI green | VERIFIED (`443b8d8`, CI run 34902955520) |
+| T-012 | Alembic baseline of the current schema; naming convention; `create_all` removed; existing databases stamped automatically | T-011, T-002 | Fresh database reaches the full schema via `alembic upgrade head`; existing dev volume is stamped with row counts unchanged; `alembic check` test passes | VERIFIED (`b90d7ff`) |
+| T-013 | Error-code catalogue and JSON error handlers; frontend shows the code | T-010 | 401/403/404/409/422/500 responses carry documented codes; tests cover each | VERIFIED (`b8611f6`) |
+| T-014 | Docker: entrypoint (migrate → optional seed → multi-worker server), `web` healthcheck, Swagger reachable through nginx, forwarded-IP headers | T-012 | `docker compose up --build -d` → every service healthy; Swagger UI returns 200 on port 8080 | VERIFIED (`c2c1366`, `a5ba27d`) |
+| T-015 | Russian collation for name columns (per-column ICU, no volume recreation) | T-012 | Ordering test returns `Анна, ёж, елка, Жанна, Яков` | VERIFIED (`6ed8c10`) |
+| T-016 | Frontend restructure: routed pages, TanStack Query with targeted invalidation and optimistic updates, typed error handling, Vitest and ESLint | T-013 | Independent review findings fixed; `npm run lint`, `npm test`, `npm run build` pass; browser check of routes and a no-reload task toggle in the Compose stack | VERIFIED (`c598b7f`, CI steps `5ff2050`) |
 
 ## M2 — Keycloak, roles, audit
 
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
 | T-020 | Keycloak service with realm import (realm, three roles, confidential client, synthetic users) | T-014 | Keycloak healthy in Compose; a synthetic user can authenticate; no secrets committed | TODO |
-| T-021 | Server-side OIDC login (backend-for-frontend): login, callback, logout, current user; sessions in PostgreSQL; httpOnly cookie; CSRF token | T-020 | Browser login through Keycloak works end to end; unit tests cover callback, session expiry, logout, CSRF | TODO |
+| T-021 | Server-side OIDC login (backend-for-frontend): login, callback, logout, current user; sessions in PostgreSQL; httpOnly cookie; CSRF token | T-020 | Browser login through Keycloak works end to end; unit tests cover callback, session expiry, logout, CSRF | IN_PROGRESS |
 | T-022 | Role policies on every route; data-visibility scopes; route-policy completeness test | T-021 | Role × route matrix tests pass; a User cannot read universities outside their scope | TODO |
 | T-023 | Audit log and "recent actions" (cache of user actions) | T-021 | Each mutation writes one audit event in the same transaction; recent actions visible in the UI | TODO |
 | T-024 | Frontend authentication: redirect to login, user menu, logout, role-aware navigation, 401 handling | T-021 | Verified in a browser for each role | TODO |
