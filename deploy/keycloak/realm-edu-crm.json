@@ -46,6 +46,15 @@
     "password": "${SMTP_PASSWORD:}"
   },
   "loginTheme": "edu-crm",
+  "browserSecurityHeaders": {
+    "contentSecurityPolicyReportOnly": "",
+    "xContentTypeOptions": "nosniff",
+    "referrerPolicy": "no-referrer",
+    "xRobotsTag": "none",
+    "xFrameOptions": "SAMEORIGIN",
+    "contentSecurityPolicy": "frame-src 'self' https://www.google.com https://recaptcha.net; frame-ancestors 'self'; object-src 'none';",
+    "strictTransportSecurity": "max-age=31536000; includeSubDomains"
+  },
   "roles": {
     "realm": [
       {
@@ -59,16 +68,6 @@
       {
         "name": "crm-admin",
         "description": "Администратор: видит все данные и управляет доступом"
-      },
-      {
-        "name": "default-roles-edu-crm",
-        "description": "${role_default-roles}",
-        "composite": true,
-        "composites": {
-          "realm": [
-            "crm-user"
-          ]
-        }
       }
     ]
   },

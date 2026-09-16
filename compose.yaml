@@ -101,6 +101,24 @@ services:
       keycloak:
         condition: service_healthy
 
+  # One-shot job: adds crm-user to the realm default role's composites (idempotent, see
+  # deploy/keycloak/configure-default-role.py and D-157; realm-import silently ignores a
+  # composites list on a roles[] entry that names the already-autocreated default role).
+  keycloak-default-role-init:
+    image: python:3.12-alpine
+    restart: "no"
+    env_file:
+      - path: deploy/local/keycloak.env
+        required: true
+    environment:
+      KEYCLOAK_INTERNAL_BASE_URL: http://keycloak:8080/auth
+    volumes:
+      - ./deploy/keycloak/configure-default-role.py:/configure-default-role.py:ro
+    entrypoint: [python3, /configure-default-role.py]
+    depends_on:
+      keycloak:
+        condition: service_healthy
+
   api:
     build: ./backend
     restart: unless-stopped

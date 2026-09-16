@@ -15,6 +15,7 @@ Run as the `keycloak-recaptcha-init` Compose service (see compose.yaml), which w
 import json
 import os
 import sys
+import time
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -23,6 +24,26 @@ REALM = 'edu-crm'
 FLOW_ALIAS = 'registration-with-recaptcha form'
 PROVIDER_ID = 'registration-recaptcha-action'
 CONFIG_ALIAS = 'edu-crm-recaptcha'
+# The container healthcheck (port 9000 /health/ready) can flip healthy slightly before a *fresh* realm
+# import finishes on the main port -- observed empirically (docker compose logs show a 503 here right
+# before "Realm 'edu-crm' imported"). Poll the realm's own public discovery endpoint before doing anything
+# that needs it to exist. Steady-state restarts (realm already imported) pass on the first try.
+READY_RETRIES = 24
+READY_DELAY_SECONDS = 5
+
+
+def wait_for_realm(base_url):
+    url = f'{base_url}/realms/{REALM}/.well-known/openid-configuration'
+    for attempt in range(1, READY_RETRIES + 1):
+        try:
+            with urllib.request.urlopen(url, timeout=10) as response:
+                if response.status == 200:
+                    return
+        except (urllib.error.URLError, OSError) as error:
+            if attempt == READY_RETRIES:
+                print(f'Realm {REALM!r} never became reachable at {url}: {error}', file=sys.stderr)
+                sys.exit(1)
+        time.sleep(READY_DELAY_SECONDS)
 
 
 def env(name):
@@ -55,6 +76,7 @@ def main():
     site_key = env('RECAPTCHA_SITE_KEY')
     secret_key = env('RECAPTCHA_SECRET_KEY')
 
+    wait_for_realm(base_url)
     token_body = urllib.parse.urlencode({
         'client_id': 'admin-cli', 'grant_type': 'password', 'username': admin_user, 'password': admin_password,
     }).encode()

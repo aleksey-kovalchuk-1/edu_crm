@@ -75,7 +75,13 @@ api() {
 TOKEN="$(admin_token)"
 password="$(random_password)"
 
-user_id="$(api GET "/users?username=$username&exact=true" | python3 -c "
+# Look up by email, not username: the realm has registrationEmailAsUsername=true (D-157), and Keycloak
+# applies it to admin-created users too -- it silently sets the account's actual username to the email
+# address regardless of what is passed here (confirmed empirically: a user created with
+# username=test.script.user, email=test.script.user@educrm-demo.ru came back with
+# username=test.script.user@educrm-demo.ru). The username argument is kept for the command's own
+# documentation value and is still sent on create, but email is the reliable identifier to search by.
+user_id="$(api GET "/users?email=$email&exact=true" | python3 -c "
 import sys, json
 users = json.load(sys.stdin)
 print(users[0]['id'] if users else '')
@@ -93,11 +99,13 @@ print(json.dumps({
 
 if [[ -z "$user_id" ]]; then
   api POST "/users" "$user_json" > /dev/null
-  user_id="$(api GET "/users?username=$username&exact=true" | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['id'])")"
-  echo "Created user $username ($user_id)"
+  user_id="$(api GET "/users?email=$email&exact=true" | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['id'])")"
+  actual_username="$(api GET "/users/$user_id" | python3 -c "import sys, json; print(json.load(sys.stdin)['username'])")"
+  echo "Created user $actual_username ($user_id)"
 else
   api PUT "/users/$user_id" "$user_json" > /dev/null
-  echo "Updated user $username ($user_id)"
+  actual_username="$(api GET "/users/$user_id" | python3 -c "import sys, json; print(json.load(sys.stdin)['username'])")"
+  echo "Updated user $actual_username ($user_id)"
 fi
 
 credential_json=$(python3 -c "
