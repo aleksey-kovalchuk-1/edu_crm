@@ -26,6 +26,14 @@ scripts/attachments-backup.sh before-migration
 
 Архив `../edu-crm-backups/attachments-<время UTC>-<метка>.tar.gz` проверяется `tar -tzf` до переименования. Чтобы проверить копию, распакуйте её во временный каталог и сравните список файлов с колонкой `attachments.storage_key`.
 
+Документы (T-093) — том `documents_data`, тем же способом:
+
+```bash
+scripts/documents-backup.sh before-migration
+```
+
+Архив `../edu-crm-backups/documents-<время UTC>-<метка>.tar.gz`; сравнивайте с колонкой `document_versions.storage_key` (только файлы в подкаталоге `documents/` — прошедшие проверку; `quarantine/` не содержит ничего долговременного).
+
 ## Проверить или восстановить копию
 
 Восстановление всегда выполняется в **новую** базу. Скрипт отказывается работать, если база с таким именем уже существует, поэтому рабочие данные не перезаписываются.

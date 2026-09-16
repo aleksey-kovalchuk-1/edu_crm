@@ -1,24 +1,41 @@
-"""Catalog upload API (contract: docs/api/imports.md; rules: docs/design/import.md, decisions D-142–D-146)."""
-from datetime import date, datetime
+"""Catalog upload API (contract: docs/api/imports.md; rules: docs/design/import.md, decisions D-142–D-146)
+and the generic entity-import wizard built on top of it (T-091/T-092, docs/design/file-ingestion-plan.md §3.1/§3.2).
 
-from fastapi import APIRouter, Depends, File, Request, UploadFile
-from pydantic import BaseModel
+The contract importer (`entity=contracts`, the default when the form omits `entity`) is the original T-033
+implementation: its upload/check/apply behaviour, response shapes and status codes are unchanged. The three
+generic entities (`universities`, `university_contacts`, `interactions`) share the same `CatalogImport`
+upload/check/apply routes, branching on the entity stored on the record (see `entity_import.py` for how);
+their apply step runs as a background job instead of writing inline (D-156) and additionally support saved
+mapping profiles, a downloadable error report, and a safe rollback.
+"""
+import io
+from datetime import date, datetime
+from typing import Annotated
+
+import openpyxl
+from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel, StringConstraints
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
-from . import importer
+from . import entity_import, importer, jobs
 from .audit import record_event
-from .auth import ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_roles
-from .catalog_routes import PersonOut
+from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_roles
+from .catalog_routes import PersonOut, sees_all
 from .db import get_db
 from .errors import AppError, ErrorCode
 from .importer import FIELD_LABELS, FIELDS, ImportFileError, UnsupportedFileType, interpret_row, name_key, read_upload, suggest_mapping, validate_mapping
-from .models import CatalogImport, Contract, ITDirection, ITProduct, University, UniversityContact, User, utcnow
+from .models import BackgroundJob, CatalogImport, Contract, ITDirection, ITProduct, ImportMapping, University, UniversityContact, User, utcnow
 
 router = APIRouter(prefix='/api/v1/imports', tags=['Загрузка справочников'])
-importer_role = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
+mapping_router = APIRouter(prefix='/api/v1/import-mappings', tags=['Профили сопоставления импорта'])
+importer_role = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)  # kept for list_imports (history stays supervisor/admin-only)
+any_role = require_roles(*ALL_ROLES)
 PREVIEW_ROWS = 20
 HISTORY_SIZE = 20
+VALID_ENTITIES = ('contracts', *entity_import.ENTITIES)
 
 
 class FieldOut(BaseModel):
@@ -40,6 +57,7 @@ class ImportOut(BaseModel):
     id: int
     filename: str
     status: str
+    entity: str
     header_row: int
     headers: list[str]
     mapping: dict[str, str | None]
@@ -48,6 +66,7 @@ class ImportOut(BaseModel):
     created_at: datetime
     created_by: PersonOut | None
     report: dict | None
+    job_id: int | None = None
 
 
 class ImportListItem(BaseModel):
@@ -59,6 +78,26 @@ class ImportListItem(BaseModel):
     created_by: PersonOut | None
     applied_at: datetime | None
     summary: dict | None
+
+
+class JobRefOut(BaseModel):
+    job_id: int
+    status: str
+
+
+class ImportMappingOut(BaseModel):
+    id: int
+    entity: str
+    name: str
+    mapping: dict[str, str | None]
+    created_at: datetime
+    created_by: PersonOut | None
+
+
+class ImportMappingIn(BaseModel):
+    entity: str
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+    mapping: dict[str, str | None]
 
 
 # Parsed rows are stored as JSON; dates are tagged so they survive the round trip.
@@ -81,20 +120,56 @@ def _display(value):
     return value.isoformat() if isinstance(value, date) else value
 
 
+def _check_entity(entity):
+    if entity not in VALID_ENTITIES:
+        raise AppError(ErrorCode.VALIDATION_ERROR, 'Неизвестная сущность импорта', [{'field': 'entity', 'message': 'Неизвестная сущность импорта'}])
+
+
+def _require_access(auth, entity):
+    """Route-level permission for starting an import: `universities` and `contracts` require the same role
+    as creating those records through the API (`catalog_routes.catalog_editor`, supervisor/admin, D-128);
+    `university_contacts`/`interactions` are open to any CRM role, scoped per-row (D-157)."""
+    if entity_import.ROLE_BY_ENTITY[entity] == 'editor' and not sees_all(auth.user):
+        raise AppError(ErrorCode.FORBIDDEN)
+
+
+def _require_record_access(record, auth):
+    """Who may view/check/apply/roll back an already-uploaded import: supervisor/admin see everything
+    (matching their existing full catalog visibility); anyone else only their own uploads."""
+    entity = entity_import.decode_entity(record)
+    _require_access(auth, entity)
+    if not sees_all(auth.user) and record.created_by_user_id != auth.user.id:
+        raise AppError(ErrorCode.RECORD_NOT_FOUND)
+    return entity
+
+
+def _latest_job_id(db, kind, import_id, *, statuses=None):
+    query = select(BackgroundJob).where(BackgroundJob.kind == kind, BackgroundJob.payload['catalog_import_id'].astext == str(import_id))
+    if statuses:
+        query = query.where(BackgroundJob.status.in_(statuses))
+    job = db.scalar(query.order_by(BackgroundJob.id.desc()).limit(1))
+    return job.id if job else None
+
+
 def _import_out(record, db):
     creator = db.get(User, record.created_by_user_id) if record.created_by_user_id else None
+    entity = entity_import.decode_entity(record)
+    mapping = entity_import.public_mapping(record.mapping or record.suggested_mapping)
+    job_id = _latest_job_id(db, 'import_apply', record.id) if entity != 'contracts' else None
     return ImportOut(
         id=record.id,
         filename=record.filename,
         status=record.status,
+        entity=entity,
         header_row=record.header_row,
         headers=record.headers,
-        mapping=record.mapping or record.suggested_mapping,
+        mapping=mapping,
         row_count=len(record.rows),
         preview=[PreviewRow(row_number=number, cells=[_display(cell) for cell in cells]) for number, cells in record.rows[:PREVIEW_ROWS]],
         created_at=record.created_at,
         created_by=PersonOut(id=creator.id, full_name=creator.full_name) if creator else None,
         report=record.report,
+        job_id=job_id,
     )
 
 
@@ -115,9 +190,24 @@ def _checked_mapping(record, mapping):
     return {field: mapping.get(field) for field in FIELDS}
 
 
-@router.get('/fields', response_model=list[FieldOut], summary='Поля CRM для сопоставления', dependencies=[Depends(importer_role)])
-def import_fields():
-    return [FieldOut(name=name, label=FIELD_LABELS[name], required=required) for name, (required, _, _) in FIELDS.items()]
+def _checked_entity_mapping(entity, record, mapping):
+    fields = entity_import.FIELDS_BY_ENTITY[entity]
+    labels = entity_import.LABELS_BY_ENTITY[entity]
+    problems = entity_import.validate_mapping(fields, labels, record.headers, mapping)
+    if problems:
+        raise AppError(ErrorCode.VALIDATION_ERROR, problems[0], [{'field': 'mapping', 'message': problem} for problem in problems])
+    return {field: mapping.get(field) for field in fields}
+
+
+@router.get('/fields', response_model=list[FieldOut], summary='Поля CRM для сопоставления')
+def import_fields(entity: str = Query('contracts'), auth: AuthContext = Depends(any_role)):
+    _check_entity(entity)
+    _require_access(auth, entity)
+    if entity == 'contracts':
+        return [FieldOut(name=name, label=FIELD_LABELS[name], required=required) for name, (required, _, _) in FIELDS.items()]
+    fields = entity_import.FIELDS_BY_ENTITY[entity]
+    labels = entity_import.LABELS_BY_ENTITY[entity]
+    return [FieldOut(name=name, label=labels[name], required=required) for name, (required, _, _) in fields.items()]
 
 
 @router.get('', response_model=list[ImportListItem], summary='История загрузок', dependencies=[Depends(importer_role)])
@@ -136,7 +226,9 @@ def list_imports(db: Session = Depends(get_db)):
 
 
 @router.post('', response_model=ImportOut, status_code=201, summary='Загрузить файл xls/xlsx')
-def upload(request: Request, file: UploadFile = File(...), auth: AuthContext = Depends(importer_role), db: Session = Depends(get_db)):
+def upload(request: Request, file: UploadFile = File(...), entity: str = Form('contracts'), auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    _check_entity(entity)
+    _require_access(auth, entity)
     # Read one byte past the limit to detect oversize files without loading arbitrarily large uploads.
     content = file.file.read(importer.MAX_FILE_BYTES + 1)
     if len(content) > importer.MAX_FILE_BYTES:
@@ -149,13 +241,19 @@ def upload(request: Request, file: UploadFile = File(...), auth: AuthContext = D
     except ImportFileError as error:
         raise AppError(ErrorCode.VALIDATION_ERROR, str(error), [{'field': 'file', 'message': str(error)}]) from error
 
+    if entity == 'contracts':
+        suggested_mapping = suggest_mapping(sheet.headers)
+    else:
+        fields = entity_import.FIELDS_BY_ENTITY[entity]
+        suggested_mapping = entity_import.encode_suggested_mapping(entity, entity_import.suggest_mapping(fields, sheet.headers))
+
     record = CatalogImport(
         created_by_user_id=auth.user.id,
         filename=filename,
         header_row=sheet.header_row,
         headers=sheet.headers,
         rows=[[number, [_to_json(cell) for cell in cells]] for number, cells in sheet.rows],
-        suggested_mapping=suggest_mapping(sheet.headers),
+        suggested_mapping=suggested_mapping,
         status='uploaded',
     )
     db.add(record)
@@ -163,36 +261,142 @@ def upload(request: Request, file: UploadFile = File(...), auth: AuthContext = D
     return _import_out(record, db)
 
 
-@router.get('/{import_id}', response_model=ImportOut, summary='Загрузка и её отчёт', dependencies=[Depends(importer_role)])
-def get_import(import_id: int, db: Session = Depends(get_db)):
-    return _import_out(_load(db, import_id), db)
-
-
-@router.post('/{import_id}/check', summary='Проверить загрузку без записи', dependencies=[Depends(importer_role)])
-def check_import(import_id: int, data: MappingIn, db: Session = Depends(get_db)):
+@router.get('/{import_id}', response_model=ImportOut, summary='Загрузка и её отчёт')
+def get_import(import_id: int, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
     record = _load(db, import_id)
-    mapping = _checked_mapping(record, data.mapping)
-    report = CatalogWriter(db, apply=False).run(record, mapping)
+    _require_record_access(record, auth)
+    return _import_out(record, db)
+
+
+@router.post('/{import_id}/check', summary='Проверить загрузку без записи')
+def check_import(import_id: int, data: MappingIn, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    record = _load(db, import_id)
+    entity = _require_record_access(record, auth)
+    if entity == 'contracts':
+        mapping = _checked_mapping(record, data.mapping)
+        report = CatalogWriter(db, apply=False).run(record, mapping)
+        db.rollback()
+        return report
+
+    mapping = _checked_entity_mapping(entity, record, data.mapping)
+    rows = entity_import.build_rows(record.headers, record.rows, mapping)
+    report = entity_import.run_import(db, auth.user, entity, record.headers, mapping, rows, apply=False)
     db.rollback()
     return report
 
 
 @router.post('/{import_id}/apply', summary='Применить загрузку')
-def apply_import(import_id: int, data: MappingIn, request: Request, auth: AuthContext = Depends(importer_role), db: Session = Depends(get_db)):
+def apply_import(import_id: int, data: MappingIn, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
     record = _load(db, import_id, lock=True)
+    entity = _require_record_access(record, auth)
     if record.status == 'applied':
         raise AppError(ErrorCode.CONFLICT, 'Эта загрузка уже применена')
-    mapping = _checked_mapping(record, data.mapping)
-    report = CatalogWriter(db, apply=True).run(record, mapping)
-    record.status = 'applied'
-    record.mapping = mapping
-    record.report = report
-    record.applied_at = utcnow()
-    record_event(db, request, auth.user, 'import.apply', entity_type='catalog_import', entity_id=record.id,
-                 summary=f'Применена загрузка «{record.filename}»: строк {report["summary"]["valid"]} из {report["summary"]["rows"]}',
-                 payload={'filename': record.filename, 'summary': report['summary']})
+
+    if entity == 'contracts':
+        mapping = _checked_mapping(record, data.mapping)
+        report = CatalogWriter(db, apply=True).run(record, mapping)
+        record.status = 'applied'
+        record.mapping = mapping
+        record.report = report
+        record.applied_at = utcnow()
+        record_event(db, request, auth.user, 'import.apply', entity_type='catalog_import', entity_id=record.id,
+                     summary=f'Применена загрузка «{record.filename}»: строк {report["summary"]["valid"]} из {report["summary"]["rows"]}',
+                     payload={'filename': record.filename, 'summary': report['summary']})
+        db.commit()
+        return report
+
+    # Idempotency (D-156): a queued/running apply job for this import already covers this request.
+    existing_job_id = _latest_job_id(db, 'import_apply', import_id, statuses=('queued', 'running'))
+    if existing_job_id is not None:
+        db.rollback()
+        return JSONResponse(status_code=202, content={'job_id': existing_job_id, 'status': 'queued'})
+
+    mapping = _checked_entity_mapping(entity, record, data.mapping)
+    job = jobs.enqueue(
+        db, 'import_apply', {'catalog_import_id': import_id, 'entity': entity, 'mapping': mapping, 'user_id': auth.user.id},
+        correlation_id=getattr(request.state, 'correlation_id', None), user_id=auth.user.id,
+    )
     db.commit()
-    return report
+    return JSONResponse(status_code=202, content={'job_id': job.id, 'status': 'queued'})
+
+
+@router.post('/{import_id}/rollback', summary='Откатить применённую загрузку (T-092)')
+def rollback_import(import_id: int, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    record = _load(db, import_id, lock=True)
+    entity = _require_record_access(record, auth)
+    if entity == 'contracts':
+        raise AppError(ErrorCode.CONFLICT, 'Откат не поддерживается для импорта договоров')
+    if record.status != 'applied':
+        raise AppError(ErrorCode.CONFLICT, 'Эта загрузка ещё не применена')
+
+    existing_job_id = _latest_job_id(db, 'import_rollback', import_id, statuses=('queued', 'running'))
+    if existing_job_id is not None:
+        db.rollback()
+        return JSONResponse(status_code=202, content={'job_id': existing_job_id, 'status': 'queued'})
+
+    job = jobs.enqueue(
+        db, 'import_rollback', {'catalog_import_id': import_id, 'user_id': auth.user.id},
+        correlation_id=getattr(request.state, 'correlation_id', None), user_id=auth.user.id,
+    )
+    db.commit()
+    return JSONResponse(status_code=202, content={'job_id': job.id, 'status': 'queued'})
+
+
+@router.get('/{import_id}/errors.xlsx', summary='Скачать построчный отчёт об ошибках и предупреждениях')
+def import_errors_report(import_id: int, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    record = _load(db, import_id)
+    _require_record_access(record, auth)
+    if not record.report:
+        raise AppError(ErrorCode.CONFLICT, 'Отчёт ещё не готов: сначала выполните проверку или применение')
+
+    workbook = openpyxl.Workbook()
+    sheet = workbook.active
+    sheet.title = 'Ошибки и предупреждения'
+    sheet.append(['Строка', 'Тип', 'Сообщение'])
+    for row in record.report.get('rows', []):
+        for message in row.get('errors', []):
+            sheet.append([row['row_number'], 'Ошибка', message])
+        for message in row.get('warnings', []):
+            sheet.append([row['row_number'], 'Предупреждение', message])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    buffer.seek(0)
+    headers = {'Content-Disposition': f'attachment; filename="import-{import_id}-errors.xlsx"'}
+    return StreamingResponse(buffer, media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', headers=headers)
+
+
+# ---------- saved mapping profiles (brief: "save a named mapping and show required fields") ----------
+
+@mapping_router.get('', response_model=list[ImportMappingOut], summary='Сохранённые профили сопоставления')
+def list_mappings(entity: str = Query(...), auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    _check_entity(entity)
+    records = db.scalars(select(ImportMapping).where(ImportMapping.entity == entity).order_by(ImportMapping.name)).all()
+    creators = {user.id: user for user in db.scalars(select(User).where(User.id.in_({r.created_by_user_id for r in records if r.created_by_user_id})))}
+    return [
+        ImportMappingOut(
+            id=record.id, entity=record.entity, name=record.name, mapping=record.mapping, created_at=record.created_at,
+            created_by=PersonOut(id=creators[record.created_by_user_id].id, full_name=creators[record.created_by_user_id].full_name) if record.created_by_user_id in creators else None,
+        )
+        for record in records
+    ]
+
+
+@mapping_router.post('', response_model=ImportMappingOut, status_code=201, summary='Сохранить профиль сопоставления')
+def create_mapping(data: ImportMappingIn, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    _check_entity(data.entity)
+    record = ImportMapping(entity=data.entity, name=data.name, mapping=data.mapping, created_by_user_id=auth.user.id)
+    db.add(record)
+    try:
+        db.commit()
+    except IntegrityError as error:
+        db.rollback()
+        raise AppError(ErrorCode.CONFLICT, 'Профиль с таким названием для этой сущности уже есть') from error
+    db.refresh(record)
+    creator = db.get(User, record.created_by_user_id)
+    return ImportMappingOut(
+        id=record.id, entity=record.entity, name=record.name, mapping=record.mapping, created_at=record.created_at,
+        created_by=PersonOut(id=creator.id, full_name=creator.full_name) if creator else None,
+    )
 
 
 class CatalogWriter:
