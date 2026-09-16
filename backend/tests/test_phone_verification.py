@@ -1,4 +1,6 @@
 import re
+import threading
+import time
 from datetime import timedelta
 
 import pytest
@@ -64,7 +66,14 @@ def test_normalize_phone_accepts_the_three_input_formats():
     assert normalize_phone('8 999 123 45 67') == PHONE
 
 
-@pytest.mark.parametrize('bad', ['', '12345', '+19991234567', '9991234567', 'not a phone', '+7999123456700', '+7999123456'])
+@pytest.mark.parametrize('bad', [
+    '', '12345', '+19991234567', '9991234567', 'not a phone', '+7999123456700', '+7999123456',
+    # Strict on purpose: free text that merely contains 11 digits must not be silently accepted by
+    # extracting the digits from it — only the documented separators (space, hyphen, parens) may
+    # accompany the digits, nothing else.
+    'call me at 89991234567 please', 'Позвоните на 8 999 123-45-67, пожалуйста!',
+    '89991234567 spam', 'spam 89991234567', '8999123456+7', '+7999+1234567', '89991234567abc',
+])
 def test_normalize_phone_rejects_anything_else(bad):
     with pytest.raises(PhoneFormatError):
         normalize_phone(bad)
@@ -170,6 +179,59 @@ def test_second_request_within_60_seconds_is_rejected(client, keycloak, sent):
     second = client.post(PHONE_PATH, json={'phone': PHONE})
     assert second.status_code == 429
     assert len(sent.calls) == 1
+
+
+def test_concurrent_requests_for_the_same_user_never_send_two_codes(database_url, keycloak):
+    """Two near-simultaneous requests must not both pass the cooldown check before either has
+    written its row -- exactly the race a naive check-then-insert would allow. This is deterministic
+    despite using real threads: the second request genuinely blocks on the Postgres advisory lock
+    held by the first (app/profile_routes.py:_lock_phone_requests_for_user), so it can only proceed
+    once the first has committed -- there is no window where "who wins" is left to Python thread
+    scheduling luck, only a brief real-time wait to let the second request reach that blocked state
+    before the first is allowed to finish.
+    """
+    holding_lock = threading.Event()
+    release_first = threading.Event()
+    calls = []
+    calls_lock = threading.Lock()
+
+    def blocking_sender(settings, phone, message):
+        with calls_lock:
+            calls.append(message)
+            is_first = len(calls) == 1
+        if is_first:
+            holding_lock.set()
+            assert release_first.wait(timeout=5), 'test did not release the first request in time'
+
+    app = create_app(make_settings(database_url), http_client=keycloak.http_client(), sms_sender=blocking_sender)
+    with TestClient(app) as client_a, TestClient(app) as client_b:
+        login(client_a, keycloak)
+        # Same logged-in user, two "tabs": share the session cookie and its CSRF token.
+        client_b.cookies.update(client_a.cookies)
+        client_b.headers['X-CSRF-Token'] = client_a.headers['X-CSRF-Token']
+
+        responses = {}
+
+        def call(name, client):
+            responses[name] = client.post(PHONE_PATH, json={'phone': PHONE})
+
+        thread_a = threading.Thread(target=call, args=('a', client_a))
+        thread_a.start()
+        assert holding_lock.wait(timeout=5), 'first request never reached the SMS-send step'
+
+        thread_b = threading.Thread(target=call, args=('b', client_b))
+        thread_b.start()
+        # Give the second request real wall-clock time to actually reach and block on the advisory
+        # lock before releasing the first -- otherwise this would only prove sequential behaviour.
+        time.sleep(0.3)
+        release_first.set()
+
+        thread_a.join(timeout=5)
+        thread_b.join(timeout=5)
+
+    assert len(calls) == 1, f'expected exactly one SMS to be sent, got {len(calls)}'
+    statuses = sorted(r.status_code for r in responses.values())
+    assert statuses == [202, 429], (responses['a'].status_code, responses['b'].status_code)
 
 
 def test_request_is_allowed_again_after_the_cooldown_elapses(client, keycloak, database_url, sent):

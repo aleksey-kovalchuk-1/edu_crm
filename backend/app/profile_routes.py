@@ -11,7 +11,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, StringConstraints
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
 from .audit import record_event
@@ -63,6 +63,20 @@ def _hash_code(code: str) -> str:
     return token_hash(code)
 
 
+def _lock_phone_requests_for_user(db: Session, user_id: int) -> None:
+    """Serializes concurrent /profile/phone requests for one user (transaction-scoped Postgres advisory
+    lock; released automatically on commit/rollback, no new table or migration needed).
+
+    Without this, two near-simultaneous requests (a double click, a retried request) can both pass the
+    cooldown check before either has inserted its row, and both end up sending an SMS. The lock forces
+    the second request to wait for the first's transaction to finish, so by the time it re-reads the
+    cooldown it sees the first request's row and is correctly rejected.
+    """
+    # hashtext(...) keys the lock to this feature specifically, so it can never collide with an
+    # unrelated advisory lock some other feature might use with a raw id as the key.
+    db.execute(text("SELECT pg_advisory_xact_lock(hashtext('phone_verification_request:' || :user_id))"), {'user_id': user_id})
+
+
 def _sms_sender(request: Request):
     # app.state.sms_sender is set by create_app (defaulting to sms.send_sms); tests override it with
     # a fake so they can assert what would have been sent without hitting real HTTP or reading logs.
@@ -84,6 +98,11 @@ def request_phone_code(
             ErrorCode.VALIDATION_ERROR,
             details=[{'field': 'phone', 'message': str(error), 'type': 'value_error'}],
         ) from error
+
+    # Held for the rest of this transaction (through the cooldown check, the SMS send, and the insert
+    # below): a second concurrent request for the same user blocks here until this one commits or
+    # rolls back, so it always sees an up-to-date cooldown instead of racing this one to the insert.
+    _lock_phone_requests_for_user(db, auth.user.id)
 
     now = utcnow()
     last = db.scalar(
