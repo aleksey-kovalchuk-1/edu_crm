@@ -161,6 +161,12 @@ services:
         condition: service_healthy
       keycloak:
         condition: service_started
+      # Without these, web (and registration through it) is reachable before the CAPTCHA secret and the
+      # crm-user default-role grant are actually in place on a fresh boot.
+      keycloak-recaptcha-init:
+        condition: service_completed_successfully
+      keycloak-default-role-init:
+        condition: service_completed_successfully
     ports:
       - 127.0.0.1:8080:80
     healthcheck:

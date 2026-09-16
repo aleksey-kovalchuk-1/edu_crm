@@ -55,6 +55,14 @@ random_password() {
   LC_ALL=C openssl rand -base64 64 | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c 20
 }
 
+# URL-encodes a value for use in a query string. The .ru pattern validator only excludes '@' and
+# whitespace (docs/decisions.md D-157), so an admin-supplied email here could still contain '&', '#'
+# or similar — this script skips that validator entirely for admin-created accounts (see the warning
+# above), so nothing else guarantees a "safe" value.
+urlencode() {
+  QUOTE_ME="$1" python3 -c "import os, urllib.parse; print(urllib.parse.quote(os.environ['QUOTE_ME'], safe=''))"
+}
+
 admin_token() {
   curl -sf -X POST "$KEYCLOAK_BASE_URL/realms/master/protocol/openid-connect/token" \
     -d "client_id=admin-cli" -d "grant_type=password" \
@@ -74,6 +82,7 @@ api() {
 
 TOKEN="$(admin_token)"
 password="$(random_password)"
+email_query="$(urlencode "$email")"
 
 # Look up by email, not username: the realm has registrationEmailAsUsername=true (D-157), and Keycloak
 # applies it to admin-created users too -- it silently sets the account's actual username to the email
@@ -81,17 +90,23 @@ password="$(random_password)"
 # username=test.script.user, email=test.script.user@educrm-demo.ru came back with
 # username=test.script.user@educrm-demo.ru). The username argument is kept for the command's own
 # documentation value and is still sent on create, but email is the reliable identifier to search by.
-user_id="$(api GET "/users?email=$email&exact=true" | python3 -c "
-import sys, json
-users = json.load(sys.stdin)
+#
+# username/email/password are passed to python3 via environment variables, never interpolated into the
+# source text: they are admin-supplied CLI arguments (unlike role, they are not checked against a known
+# set above), so building '...': '$email' directly into a python -c string would let a value containing
+# a quote break out of the string literal -- at best a crash, at worst arbitrary code execution.
+existing="$(api GET "/users?email=$email_query&exact=true")"
+user_id="$(USERS_JSON="$existing" python3 -c "
+import json, os
+users = json.loads(os.environ['USERS_JSON'])
 print(users[0]['id'] if users else '')
 ")"
 
-user_json=$(python3 -c "
-import json
+user_json=$(CRM_USERNAME="$username" CRM_EMAIL="$email" python3 -c "
+import json, os
 print(json.dumps({
-    'username': '$username',
-    'email': '$email',
+    'username': os.environ['CRM_USERNAME'],
+    'email': os.environ['CRM_EMAIL'],
     'emailVerified': True,
     'enabled': True,
 }))
@@ -99,18 +114,22 @@ print(json.dumps({
 
 if [[ -z "$user_id" ]]; then
   api POST "/users" "$user_json" > /dev/null
-  user_id="$(api GET "/users?email=$email&exact=true" | python3 -c "import sys, json; print(json.load(sys.stdin)[0]['id'])")"
-  actual_username="$(api GET "/users/$user_id" | python3 -c "import sys, json; print(json.load(sys.stdin)['username'])")"
-  echo "Created user $actual_username ($user_id)"
+  user_id="$(USERS_JSON="$(api GET "/users?email=$email_query&exact=true")" python3 -c "
+import json, os
+print(json.loads(os.environ['USERS_JSON'])[0]['id'])
+")"
+  action=Created
 else
   api PUT "/users/$user_id" "$user_json" > /dev/null
-  actual_username="$(api GET "/users/$user_id" | python3 -c "import sys, json; print(json.load(sys.stdin)['username'])")"
-  echo "Updated user $actual_username ($user_id)"
+  action=Updated
 fi
+user_rep="$(api GET "/users/$user_id")"
+actual_username="$(USER_REP="$user_rep" python3 -c "import json, os; print(json.loads(os.environ['USER_REP'])['username'])")"
+echo "$action user $actual_username ($user_id)"
 
-credential_json=$(python3 -c "
-import json
-print(json.dumps({'type': 'password', 'value': '''$password''', 'temporary': False}))
+credential_json=$(CRM_PASSWORD="$password" python3 -c "
+import json, os
+print(json.dumps({'type': 'password', 'value': os.environ['CRM_PASSWORD'], 'temporary': False}))
 ")
 api PUT "/users/$user_id/reset-password" "$credential_json" > /dev/null
 
