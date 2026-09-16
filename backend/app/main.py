@@ -14,12 +14,14 @@ from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
 from .models import AnnualMetric, Launch, StageEvent, StatusChange, Task, University, WorkflowStatus
+from .profile_routes import router as profile_router
 from .workflow_routes import router as workflow_router
 from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
 from .schemas import LaunchInput, StageInput, TaskInput
 from .security import TokenCipher
 from .settings import load_settings, validate_database_url
+from .sms import send_sms
 
 STAGES = ['Поиск контакта', 'Уточнение интереса', 'Встреча', 'Обмен документами', 'Согласование документов', 'Подписание', 'Передача материалов и лицензий', 'Внедрение продукта', 'Обучение преподавателей', 'Актуализация программы', 'Проведение занятий', 'Обновление материалов', 'Повышение квалификации']
 
@@ -34,7 +36,7 @@ def is_overdue(launch):
     return launch.deadline < date.today() and launch.stage < 10
 
 
-def create_app(settings=None, *, http_client=None):
+def create_app(settings=None, *, http_client=None, sms_sender=None):
     # The server calls create_app() and reads the environment; tests pass settings and a fake identity provider.
     settings = load_settings() if settings is None else settings
     validate_database_url(settings.database_url)
@@ -70,11 +72,15 @@ def create_app(settings=None, *, http_client=None):
         http=http,
     )
     app.state.cipher = TokenCipher(settings.session_encryption_key)
+    # Defaults to the real sender (log-only or HTTP, per settings.sms_provider_url — see app/sms.py);
+    # tests substitute a fake here so phone verification tests assert on calls, not logs or real HTTP.
+    app.state.sms_sender = sms_sender or send_sms
     install_error_handlers(app)
     app.include_router(auth_router)
     app.include_router(audit_router)
     app.include_router(catalog_router)
     app.include_router(import_router)
+    app.include_router(profile_router)
     app.include_router(workflow_router)
 
     @app.get('/api/v1/health')

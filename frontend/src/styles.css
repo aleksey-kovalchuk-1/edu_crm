@@ -210,6 +210,15 @@ svg {
   gap: 10px;
   align-items: center;
 }
+.profile-link {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+  color: inherit;
+  text-decoration: none;
+}
 .profile strong {
   color: #e3dced;
   font-size: 11px;
@@ -1837,6 +1846,12 @@ dialog.wide {
 .step-title:focus-visible {
   outline: 3px solid #aa8bff;
   outline-offset: 3px;
+}
+/* Profile page: phone verification status line (icon + text). */
+.profile-phone-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 .step-note {
   font-size: 12px;

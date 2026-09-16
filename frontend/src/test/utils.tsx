@@ -196,12 +196,15 @@ export const CSRF_TOKEN = "csrf-test-token";
 export const sessionFixture = (
   roles: string[] = ["crm-supervisor"],
   csrfToken = CSRF_TOKEN,
+  user: { phone?: string; phone_verified_at?: string | null } = {},
 ): Session => ({
   user: {
     id: 1,
     email: "anna.petrova@example.test",
     full_name: "Анна Петрова",
     roles,
+    phone: user.phone ?? "",
+    phone_verified_at: user.phone_verified_at ?? null,
   },
   csrf_token: csrfToken,
 });

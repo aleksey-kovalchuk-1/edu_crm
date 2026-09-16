@@ -13,6 +13,9 @@ export interface CurrentUser {
   email: string;
   full_name: string;
   roles: string[];
+  /** CRM-owned phone verification (D-155): "" until a number is verified. */
+  phone: string;
+  phone_verified_at: string | null;
 }
 
 /** Response of GET /auth/me. */
