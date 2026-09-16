@@ -17,4 +17,7 @@ def record_event(db, request, actor, action, *, entity_type=None, entity_id=None
         summary=summary[:MAX_SUMMARY_LENGTH],
         payload=payload or {},
         ip=request.client.host if request is not None and request.client else None,
+        # Set by the correlation-id middleware (D-156); picked up automatically so existing call sites
+        # need no change. None outside a request (e.g. a background job records its own explicitly).
+        correlation_id=getattr(request.state, 'correlation_id', None) if request is not None else None,
     ))

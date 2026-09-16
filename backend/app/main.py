@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import date
+from uuid import uuid4
 
 import httpx
 from fastapi import Depends, FastAPI, Request
@@ -70,6 +71,17 @@ def create_app(settings=None, *, http_client=None):
         http=http,
     )
     app.state.cipher = TokenCipher(settings.session_encryption_key)
+
+    @app.middleware('http')
+    async def correlation_id_middleware(request, call_next):
+        # Ties one request's chain of audit events (and any job it enqueues) together (D-156). A caller
+        # may supply its own id (e.g. a frontend action spanning several requests); otherwise a fresh one.
+        incoming = request.headers.get('x-correlation-id', '').strip()
+        request.state.correlation_id = incoming[:36] if incoming else str(uuid4())
+        response = await call_next(request)
+        response.headers['X-Correlation-Id'] = request.state.correlation_id
+        return response
+
     install_error_handlers(app)
     app.include_router(auth_router)
     app.include_router(audit_router)

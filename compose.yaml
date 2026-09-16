@@ -66,6 +66,22 @@ services:
       retries: 12
       start_period: 90s
 
+  # Malware scanning for document uploads (D-155, owner-approved). No published port: only the worker
+  # talks to it, over the Compose network. freshclam downloads virus definitions on first boot, which
+  # needs internet access and can take a few minutes -- CI does not run this service (backend tests use a
+  # fake clamd double); it is only part of the local/dev Compose stack.
+  clamav:
+    image: clamav/clamav-debian:1.4
+    restart: unless-stopped
+    volumes:
+      - clamav_data:/var/lib/clamav
+    healthcheck:
+      test: [CMD, /usr/local/bin/clamdcheck.sh]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 180s
+
   api:
     build: ./backend
     restart: unless-stopped
@@ -85,9 +101,14 @@ services:
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       FORWARDED_ALLOW_IPS: '*'
       ATTACHMENTS_DIR: /data/attachments
+      DOCUMENTS_DIR: /data/documents
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: '3310'
     volumes:
       # Files attached to status changes; include this volume in backups together with the database.
       - attachments_data:/data/attachments
+      # Uploaded documents (quarantine + validated library, T-093); back up alongside the database.
+      - documents_data:/data/documents
     depends_on:
       db:
         condition: service_healthy
@@ -99,6 +120,37 @@ services:
       timeout: 3s
       retries: 15
       start_period: 20s
+
+  # Background job runner (D-156): same image and settings as api, different entrypoint. Picks up import
+  # apply/rollback (T-091/T-092) and document scanning (T-093) from `background_jobs`.
+  worker:
+    build: ./backend
+    command: [python, -m, app.worker]
+    restart: unless-stopped
+    env_file:
+      - path: deploy/local/api.env
+        required: true
+    environment:
+      DATABASE_URL: postgresql+psycopg://crm:${POSTGRES_PASSWORD:-local-demo-only}@db:5432/edu_crm
+      OIDC_ISSUER: http://localhost:8080/auth/realms/edu-crm
+      OIDC_INTERNAL_BASE_URL: http://keycloak:8080/auth/realms/edu-crm
+      OIDC_CLIENT_ID: edu-crm-api
+      PUBLIC_BASE_URL: http://localhost:8080
+      COOKIE_SECURE: 'false'
+      ATTACHMENTS_DIR: /data/attachments
+      DOCUMENTS_DIR: /data/documents
+      CLAMAV_HOST: clamav
+      CLAMAV_PORT: '3310'
+      # api already migrated by the time it's healthy; avoids a concurrent, unlocked migration race.
+      SKIP_MIGRATE: 'true'
+    volumes:
+      - attachments_data:/data/attachments
+      - documents_data:/data/documents
+    depends_on:
+      api:
+        condition: service_healthy
+      clamav:
+        condition: service_healthy
 
   web:
     build: ./frontend
@@ -132,4 +184,6 @@ services:
 volumes:
   postgres_data:
   attachments_data:
+  documents_data:
+  clamav_data:
   superset_data:
