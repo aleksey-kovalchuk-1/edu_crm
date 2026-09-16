@@ -1,11 +1,13 @@
 """documents
 
-Revision ID: 0010
-Revises: 0009
+Revision ID: 0011
+Revises: 0010
 Create Date: 2026-09-16
 
-Versioned document library linked to universities, interactions or contracts (D-159), separate from the
+Versioned document library linked to universities, interactions or contracts (D-169), separate from the
 workflow `attachments` table (T-042), which is one file per status-change event with no versioning.
+
+Renumbered during integration from 0010 -> 0011; see 0010_ingestion_foundation.py's docstring.
 """
 from typing import Sequence, Union
 
@@ -13,8 +15,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision: str = '0010'
-down_revision: Union[str, Sequence[str], None] = '0009'
+revision: str = '0011'
+down_revision: Union[str, Sequence[str], None] = '0010'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

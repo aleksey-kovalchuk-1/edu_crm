@@ -1,12 +1,17 @@
 """ingestion foundation: correlation ids, background jobs, saved mappings
 
-Revision ID: 0009
-Revises: 0008
+Revision ID: 0010
+Revises: 0009
 Create Date: 2026-09-16
 
-Shared foundation for file ingestion (docs/design/file-ingestion-plan.md, D-155-D-160): a correlation id on
-audit events, a PostgreSQL-backed job queue (no Redis, D-156), and saved column-mapping profiles for the
+Shared foundation for file ingestion (docs/design/file-ingestion-plan.md, D-165-D-170): a correlation id on
+audit events, a PostgreSQL-backed job queue (no Redis, D-166), and saved column-mapping profiles for the
 generic entity-import wizard (T-091). No existing tables lose columns; this migration only adds.
+
+Renumbered during integration (`ai/integration-candidate`, D-164/D-174): this migration and 0011_documents
+were originally 0009/0010 on `ai/file-ingestion`, colliding with `ai/phone-verification`'s own 0009. Shifted
+by one so phone verification keeps its original revision id and the three branches form one linear chain
+(0008 -> 0009 phone verification -> 0010 ingestion foundation -> 0011 documents).
 """
 from typing import Sequence, Union
 
@@ -14,8 +19,8 @@ from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import postgresql
 
-revision: str = '0009'
-down_revision: Union[str, Sequence[str], None] = '0008'
+revision: str = '0010'
+down_revision: Union[str, Sequence[str], None] = '0009'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

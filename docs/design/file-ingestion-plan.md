@@ -158,9 +158,9 @@ Middleware в `main.py`: читает `X-Correlation-Id` от клиента и�
 
 | # | Содержимое |
 |---|---|
-| `0009` | `import_mappings`, `background_jobs`, `audit_events.correlation_id` (nullable, backfill не нужен — историческим записям остаётся `null`) |
-| `0010` | `documents`, `document_versions`, `ingestion_policies` |
-| `0011` | Обобщение `import_routes`: добавление `entity` в `catalog_imports` (если существующая таблица переиспользуется) или отдельная `imports_generic` — решится на этапе реализации по факту схемы `catalog_imports` |
+| `0010` | `import_mappings`, `background_jobs`, `audit_events.correlation_id` (nullable, backfill не нужен — историческим записям остаётся `null`) |
+| `0011` | `documents`, `document_versions`, `ingestion_policies` (`ingestion_policies` planned, not yet built — see T-095) |
+| — | Обобщение `import_routes`: добавление `entity` в `catalog_imports` — реализовано без новой миграции: `entity` хранится как ключ `__entity__` внутри существующего `catalog_imports.suggested_mapping` (JSONB), см. D-171 |
 
 Каждая — по существующему процессу: репетиция на восстановленной копии, `alembic check`, применение
 после `scripts/db-backup.sh`.
