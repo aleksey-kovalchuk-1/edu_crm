@@ -1,5 +1,6 @@
 from contextlib import asynccontextmanager
 from datetime import date
+from uuid import uuid4
 
 import httpx
 from fastapi import Depends, FastAPI, Request
@@ -10,7 +11,9 @@ from .audit import record_event
 from .audit_routes import router as audit_router
 from .auth import ALL_ROLES, AuthContext, require_roles, router as auth_router
 from .catalog_routes import active_university_in_scope, router as catalog_router, university_scope
-from .import_routes import router as import_router
+from .document_routes import router as document_router
+from .import_routes import mapping_router as import_mapping_router, router as import_router
+from .jobs_routes import router as jobs_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
 from .models import AnnualMetric, Launch, StageEvent, StatusChange, Task, University, WorkflowStatus
@@ -75,11 +78,25 @@ def create_app(settings=None, *, http_client=None, sms_sender=None):
     # Defaults to the real sender (log-only or HTTP, per settings.sms_provider_url — see app/sms.py);
     # tests substitute a fake here so phone verification tests assert on calls, not logs or real HTTP.
     app.state.sms_sender = sms_sender or send_sms
+
+    @app.middleware('http')
+    async def correlation_id_middleware(request, call_next):
+        # Ties one request's chain of audit events (and any job it enqueues) together (D-166). A caller
+        # may supply its own id (e.g. a frontend action spanning several requests); otherwise a fresh one.
+        incoming = request.headers.get('x-correlation-id', '').strip()
+        request.state.correlation_id = incoming[:36] if incoming else str(uuid4())
+        response = await call_next(request)
+        response.headers['X-Correlation-Id'] = request.state.correlation_id
+        return response
+
     install_error_handlers(app)
     app.include_router(auth_router)
     app.include_router(audit_router)
     app.include_router(catalog_router)
+    app.include_router(document_router)
     app.include_router(import_router)
+    app.include_router(import_mapping_router)
+    app.include_router(jobs_router)
     app.include_router(profile_router)
     app.include_router(workflow_router)
 

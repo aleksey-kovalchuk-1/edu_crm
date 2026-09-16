@@ -41,6 +41,12 @@ class Settings:
     sms_provider_url: str = ''
     sms_provider_api_key: str = ''
     sms_sender: str = 'CRM'
+    documents_dir: str = '/data/documents'
+    clamav_host: str = 'clamav'
+    clamav_port: int = 3310
+    # Signs short-lived download links (D-170); separate from session_encryption_key so rotating one
+    # does not also invalidate every active login session.
+    download_link_key: str = ''
 
     @property
     def callback_url(self):
@@ -133,4 +139,8 @@ def load_settings(environ=None):
         sms_provider_url=(environ.get('SMS_PROVIDER_URL') or '').strip(),
         sms_provider_api_key=(environ.get('SMS_PROVIDER_API_KEY') or '').strip(),
         sms_sender=(environ.get('SMS_SENDER') or '').strip() or 'CRM',
+        documents_dir=(environ.get('DOCUMENTS_DIR') or '').strip() or '/data/documents',
+        clamav_host=(environ.get('CLAMAV_HOST') or '').strip() or 'clamav',
+        clamav_port=_positive_int(environ, 'CLAMAV_PORT', 3310),
+        download_link_key=(environ.get('DOWNLOAD_LINK_KEY') or '').strip() or encryption_key,
     )

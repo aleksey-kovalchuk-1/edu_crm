@@ -26,6 +26,8 @@ def make_settings(database_url, **overrides):
         session_encryption_key=TEST_ENCRYPTION_KEY,
         cookie_secure=False,
         attachments_dir=tempfile.mkdtemp(prefix='edu-crm-attachments-'),
+        documents_dir=tempfile.mkdtemp(prefix='edu-crm-documents-'),
+        download_link_key=TEST_ENCRYPTION_KEY,
     )
     values.update(overrides)
     return Settings(**values)
