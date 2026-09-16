@@ -33,6 +33,10 @@ export const safeNextPath = (path: string) =>
 export const loginUrl = (next: string) =>
   `${API_BASE}/auth/login?next=${encodeURIComponent(safeNextPath(next))}`;
 
+/** Backend registration start (Keycloak's hosted registration page); a full-page navigation, never fetch. */
+export const registerUrl = (next: string) =>
+  `${API_BASE}/auth/register?next=${encodeURIComponent(safeNextPath(next))}`;
+
 export const useCurrentUser = () =>
   useQuery({
     queryKey: authKeys.me,

@@ -4,14 +4,18 @@
   "displayNameHtml": "Образование CRM",
   "enabled": true,
   "sslRequired": "external",
-  "registrationAllowed": false,
-  "resetPasswordAllowed": false,
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": true,
+  "resetPasswordAllowed": true,
   "rememberMe": false,
   "loginWithEmailAllowed": true,
   "duplicateEmailsAllowed": false,
   "editUsernameAllowed": false,
+  "verifyEmail": true,
   "internationalizationEnabled": true,
-  "supportedLocales": ["ru", "en"],
+  "supportedLocales": [
+    "ru"
+  ],
   "defaultLocale": "ru",
   "bruteForceProtected": true,
   "permanentLockout": false,
@@ -30,6 +34,18 @@
   "offlineSessionIdleTimeout": 2592000,
   "revokeRefreshToken": true,
   "refreshTokenMaxReuse": 0,
+  "smtpServer": {
+    "host": "${SMTP_HOST:mailpit}",
+    "port": "${SMTP_PORT:1025}",
+    "from": "${SMTP_FROM:noreply@educrm-demo.ru}",
+    "fromDisplayName": "Образование CRM",
+    "ssl": "${SMTP_SSL:false}",
+    "starttls": "${SMTP_STARTTLS:false}",
+    "auth": "${SMTP_AUTH:false}",
+    "user": "${SMTP_USER:}",
+    "password": "${SMTP_PASSWORD:}"
+  },
+  "loginTheme": "edu-crm",
   "roles": {
     "realm": [
       {
@@ -43,6 +59,16 @@
       {
         "name": "crm-admin",
         "description": "Администратор: видит все данные и управляет доступом"
+      },
+      {
+        "name": "default-roles-edu-crm",
+        "description": "${role_default-roles}",
+        "composite": true,
+        "composites": {
+          "realm": [
+            "crm-user"
+          ]
+        }
       }
     ]
   },
@@ -82,8 +108,17 @@
         "backchannel.logout.session.required": "true",
         "use.refresh.tokens": "true"
       },
-      "defaultClientScopes": ["web-origins", "acr", "basic", "profile", "email", "roles"],
-      "optionalClientScopes": ["offline_access"],
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "basic",
+        "profile",
+        "email",
+        "roles"
+      ],
+      "optionalClientScopes": [
+        "offline_access"
+      ],
       "protocolMappers": [
         {
           "name": "realm-roles-flat",
@@ -108,37 +143,128 @@
       "username": "anna.demo",
       "firstName": "Анна",
       "lastName": "Демо",
-      "email": "anna.demo@demo.local",
+      "email": "anna.demo@educrm-demo.ru",
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${EDU_CRM_DEMO_USER_PASSWORD}", "temporary": false }
+        {
+          "type": "password",
+          "value": "${EDU_CRM_DEMO_USER_PASSWORD}",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["default-roles-edu-crm", "crm-user"]
+      "realmRoles": [
+        "default-roles-edu-crm",
+        "crm-user"
+      ]
     },
     {
       "username": "pavel.demo",
       "firstName": "Павел",
       "lastName": "Демо",
-      "email": "pavel.demo@demo.local",
+      "email": "pavel.demo@educrm-demo.ru",
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${EDU_CRM_DEMO_SUPERVISOR_PASSWORD}", "temporary": false }
+        {
+          "type": "password",
+          "value": "${EDU_CRM_DEMO_SUPERVISOR_PASSWORD}",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["default-roles-edu-crm", "crm-supervisor"]
+      "realmRoles": [
+        "default-roles-edu-crm",
+        "crm-supervisor"
+      ]
     },
     {
       "username": "irina.demo",
       "firstName": "Ирина",
       "lastName": "Демо",
-      "email": "irina.demo@demo.local",
+      "email": "irina.demo@educrm-demo.ru",
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${EDU_CRM_DEMO_ADMIN_PASSWORD}", "temporary": false }
+        {
+          "type": "password",
+          "value": "${EDU_CRM_DEMO_ADMIN_PASSWORD}",
+          "temporary": false
+        }
       ],
-      "realmRoles": ["default-roles-edu-crm", "crm-admin"]
+      "realmRoles": [
+        "default-roles-edu-crm",
+        "crm-admin"
+      ]
     }
-  ]
+  ],
+  "components": {
+    "org.keycloak.userprofile.UserProfileProvider": [
+      {
+        "providerId": "declarative-user-profile",
+        "subComponents": {},
+        "config": {
+          "kc.user.profile.config": [
+            "{\"attributes\": [{\"name\": \"username\", \"displayName\": \"${username}\", \"validations\": {\"length\": {\"min\": 3, \"max\": 255}, \"username-prohibited-characters\": {}, \"up-username-not-idn-homograph\": {}}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"email\", \"displayName\": \"${email}\", \"validations\": {\"email\": {}, \"length\": {\"max\": 255}, \"pattern\": {\"pattern\": \"^[^@\\\\s]+@[^@\\\\s]+\\\\.ru$\", \"error-message\": \"emailRuOnly\"}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"firstName\", \"displayName\": \"${firstName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}, {\"name\": \"lastName\", \"displayName\": \"${lastName}\", \"validations\": {\"length\": {\"max\": 255}, \"person-name-prohibited-characters\": {}}, \"required\": {\"roles\": [\"user\"]}, \"permissions\": {\"view\": [\"admin\", \"user\"], \"edit\": [\"admin\", \"user\"]}, \"multivalued\": false}], \"groups\": [{\"name\": \"user-metadata\", \"displayHeader\": \"User metadata\", \"displayDescription\": \"Attributes, which refer to user metadata\"}]}"
+          ]
+        }
+      }
+    ]
+  },
+  "authenticationFlows": [
+    {
+      "alias": "registration-with-recaptcha",
+      "description": "Форма регистрации CRM с обязательной проверкой reCAPTCHA (D-158)",
+      "providerId": "basic-flow",
+      "topLevel": true,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "registration-page-form",
+          "authenticatorFlow": true,
+          "requirement": "REQUIRED",
+          "priority": 10,
+          "flowAlias": "registration-with-recaptcha form",
+          "userSetupAllowed": false
+        }
+      ]
+    },
+    {
+      "alias": "registration-with-recaptcha form",
+      "description": "Форма регистрации CRM с обязательной проверкой reCAPTCHA (D-158)",
+      "providerId": "form-flow",
+      "topLevel": false,
+      "builtIn": false,
+      "authenticationExecutions": [
+        {
+          "authenticator": "registration-user-creation",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 20,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "registration-password-action",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 50,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "registration-recaptcha-action",
+          "authenticatorFlow": false,
+          "requirement": "REQUIRED",
+          "priority": 60,
+          "userSetupAllowed": false
+        },
+        {
+          "authenticator": "registration-terms-and-conditions",
+          "authenticatorFlow": false,
+          "requirement": "DISABLED",
+          "priority": 70,
+          "userSetupAllowed": false
+        }
+      ]
+    }
+  ],
+  "registrationFlow": "registration-with-recaptcha"
 }
