@@ -83,3 +83,11 @@ Priority order: owner decisions and the official specification (`docs/specificat
 | T-074 | Superset profile kept working with the new schema (read-only views only) | T-050 | Profile starts; BI role reads only analytics views | TODO |
 | T-075 | Frontend tests and lint | T-024 | `npm test` and lint run in CI | TODO |
 | T-076 | Mobile layout and accessibility audit (contrast, keyboard, labels) | T-043 | Findings fixed or recorded | TODO |
+
+## M10 — CRM-owned phone verification (D-155–D-157)
+
+| ID | Task | Depends on | Acceptance criteria | Status |
+|---|---|---|---|---|
+| T-100 | Foundation: `users.phone`/`phone_verified_at`, `phone_verification_codes` (migration `0009`), `sms_provider_*` settings | T-023 | Migration applies cleanly; `alembic check` clean | VERIFIED (208 backend tests) |
+| T-101 | `app/sms.py` injectable SMS sender (logging default, configurable HTTP provider); `POST /api/v1/profile/phone` (request code, rate-limited) and `POST /api/v1/profile/phone/verify` (attempt-limited, expiring) | T-100 | Code requested and verified round-trip; wrong code rejected with attempts tracked; expired code rejected; rate limit enforced; audit event per request/verify | TODO |
+| T-102 | Frontend: a place to enter/verify a phone number (new minimal profile surface, since none exists yet) | T-101 | A user can request and enter a code without a page reload; server field errors shown | TODO |
