@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileUp,
   ListChecks,
+  UserRound,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -23,6 +24,7 @@ export const paths = {
   imports: "/imports",
   workflows: "/workflows",
   statusBoard: "/interactions/board",
+  profile: "/profile",
 } as const;
 
 export const universityPath = (id: number) => `${paths.universities}/${id}`;
@@ -41,6 +43,8 @@ export interface PageMeta {
   create: CreateKind | null;
   /** Roles that see the page in the sidebar; absent — every CRM role. */
   roles?: string[];
+  /** Reachable by path (e.g. from the profile link) but left out of the sidebar nav list. */
+  hidden?: boolean;
 }
 
 export const pages: PageMeta[] = [
@@ -119,11 +123,22 @@ export const pages: PageMeta[] = [
     create: null,
     roles: [ROLES.supervisor, ROLES.admin],
   },
+  {
+    path: paths.profile,
+    name: "Профиль",
+    icon: UserRound,
+    heading: "Профиль",
+    subtitle: "Данные вашей учётной записи и подтверждение телефона.",
+    create: null,
+    hidden: true,
+  },
 ];
 
 /** Pages shown in the sidebar for a user's roles (the server still enforces access). */
 export const visiblePages = (roles: string[]) =>
-  pages.filter((p) => !p.roles || p.roles.some((r) => roles.includes(r)));
+  pages.filter(
+    (p) => !p.hidden && (!p.roles || p.roles.some((r) => roles.includes(r))),
+  );
 
 export const NOT_FOUND_TITLE = "Страница не найдена";
 
