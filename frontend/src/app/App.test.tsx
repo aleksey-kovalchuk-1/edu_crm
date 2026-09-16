@@ -153,64 +153,26 @@ describe("task toggle", () => {
   });
 });
 
-describe("stage change", () => {
-  async function openLaunchAndPickStage(stage: string) {
+describe("interaction detail navigation", () => {
+  it("opens the interaction detail page from the board card", async () => {
+    mockApi();
+    renderApp("/interactions");
     await screen.findByText("ВЗ-0001");
     expect(columnOf("ВЗ-0001")).toBe("Документы");
-    fireEvent.click(screen.getByRole("button", { name: /Аналитика данных/ }));
-    const dialog = await screen.findByRole("dialog", { name: "Аналитика данных" });
-    await within(dialog).findByRole("option", { name: "1. Этап 1" });
-    fireEvent.change(within(dialog).getByRole("combobox"), {
-      target: { value: stage },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить этап" }));
-    return dialog;
-  }
-
-  it("moves the card optimistically, closes on success and refreshes that launch", async () => {
-    const patch = deferred<unknown>();
-    const api = mockApi({ "PATCH /launches/1": () => patch.promise });
-    renderApp("/interactions");
-    const dialog = await openLaunchAndPickStage("0");
-
-    await waitFor(() => expect(api.count("PATCH", "/launches/1")).toBe(1));
-    expect(columnOf("ВЗ-0001")).toBe("Первый контакт");
-    expect(dialog.isConnected).toBe(true);
-
-    api.data.launches = api.data.launches.map((l) => (l.id === 1 ? { ...l, stage: 0 } : l));
-    patch.resolve(api.data.launches[0]);
-
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    await waitFor(() => expect(api.count("GET", "/launches")).toBe(2));
-    expect(api.calls.find((c) => c.method === "PATCH")?.body).toEqual({ stage: 0 });
-    // That launch's history is invalidated (refetched while the modal was still mounted).
-    await waitFor(() => expect(api.count("GET", "/launches/1/history")).toBe(2));
-    expect(api.count("GET", "/tasks")).toBe(1);
-    expect(api.count("GET", "/universities")).toBe(0);
-    // Dashboard is invalidated but not mounted on this page, so it is not fetched.
-    expect(api.count("GET", "/dashboard")).toBe(0);
-    expect(columnOf("ВЗ-0001")).toBe("Первый контакт");
+    fireEvent.click(screen.getByRole("link", { name: /Аналитика данных/ }));
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Аналитика данных" }),
+    ).toBeTruthy();
+    expect((await screen.findByTestId("location")).textContent).toBe("/interactions/1");
   });
 
-  it("rolls the card back and keeps the dialog open when PATCH fails", async () => {
-    const patch = deferred<unknown>();
-    const api = mockApi({
-      "PATCH /launches/1": () => patch.promise,
-      "GET /launches": () =>
-        api.count("GET", "/launches") > 1 ? never() : api.data.launches,
-    });
-    renderApp("/interactions");
-    const dialog = await openLaunchAndPickStage("0");
-    await waitFor(() => expect(api.count("PATCH", "/launches/1")).toBe(1));
-    expect(columnOf("ВЗ-0001")).toBe("Первый контакт");
-
-    patch.resolve(apiError(409, "CONFLICT", "Конфликт данных"));
-
-    expect((await within(dialog).findByRole("alert")).textContent).toBe(
-      "Конфликт данных (код CONFLICT)",
-    );
-    expect(columnOf("ВЗ-0001")).toBe("Документы");
-    expect(screen.getByRole("dialog")).toBe(dialog);
+  it("opens the interaction detail page from the overview table", async () => {
+    mockApi();
+    renderApp("/");
+    fireEvent.click(await screen.findByRole("link", { name: "Аналитика данных" }));
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "Аналитика данных" }),
+    ).toBeTruthy();
   });
 });
 

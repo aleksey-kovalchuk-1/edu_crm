@@ -15,6 +15,7 @@ import type {
   University,
   UniversityContact,
 } from "../api/types";
+import type { Workflow } from "../api/workflows";
 import { AppProviders } from "../app/AppProviders";
 import { AppRoutes } from "../app/App";
 import { createQueryClient } from "../app/queryClient";
@@ -113,6 +114,8 @@ export function fixtures() {
       // Past deadline but not overdue per the server: the client must not recompute.
       deadline: "2020-01-01",
       overdue: false,
+      workflow_template_id: 1,
+      status_id: 12,
     },
     {
       id: 2,
@@ -126,6 +129,31 @@ export function fixtures() {
       stage: 7,
       deadline: "2099-01-01",
       overdue: true,
+      workflow_template_id: 1,
+      status_id: 14,
+    },
+  ];
+  const workflows: Workflow[] = [
+    {
+      id: 1,
+      name: "Типовое взаимодействие с вузом",
+      description: "Базовый процесс",
+      is_default: true,
+      is_active: true,
+      statuses: [
+        { id: 11, name: "Первый контакт", position: 0, is_final: false, is_active: true },
+        { id: 12, name: "Согласование документов", position: 1, is_final: false, is_active: true },
+        { id: 13, name: "Архивный статус", position: 2, is_final: false, is_active: false },
+        { id: 14, name: "Сопровождение", position: 3, is_final: true, is_active: true },
+      ],
+    },
+    {
+      id: 2,
+      name: "Короткий процесс",
+      description: "",
+      is_default: false,
+      is_active: true,
+      statuses: [{ id: 21, name: "Старт", position: 0, is_final: true, is_active: true }],
     },
   ];
   const tasks: Task[] = [
@@ -150,6 +178,7 @@ export function fixtures() {
   return {
     universities,
     launches,
+    workflows,
     tasks,
     stages,
     dashboard,
@@ -223,6 +252,8 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     "GET /launches": () => data.launches,
     "GET /tasks": () => data.tasks,
     "GET /stages": () => data.stages,
+    "GET /workflows": () => data.workflows,
+    "GET /launches/1/status-changes": () => [],
     "GET /dashboard": () => data.dashboard,
     "GET /launches/1/history": () => [
       { id: 1, stage: 4, created_at: "2026-09-01T10:00:00" },

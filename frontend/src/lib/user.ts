@@ -25,6 +25,10 @@ export const canEditCatalog = (roles: string[]) =>
 export const canImportCatalogs = (roles: string[]) =>
   roles.includes(ROLES.supervisor) || roles.includes(ROLES.admin);
 
+/** Creating and editing workflows and their statuses (T-043) — supervisors and admins. */
+export const canEditWorkflows = (roles: string[]) =>
+  roles.includes(ROLES.supervisor) || roles.includes(ROLES.admin);
+
 /** Supervisors and admins see everyone's actions; a crm-user sees only their own. */
 export const seesAllActions = (roles: string[]) =>
   roles.includes(ROLES.supervisor) || roles.includes(ROLES.admin);

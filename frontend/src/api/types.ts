@@ -154,6 +154,9 @@ export interface Launch {
   stage: number;
   deadline: string;
   overdue: boolean;
+  /** Workflow template and current status (T-040); may be absent in older responses. */
+  workflow_template_id?: number | null;
+  status_id?: number | null;
 }
 export interface Task {
   id: number;

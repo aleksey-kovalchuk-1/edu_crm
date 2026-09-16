@@ -1,8 +1,8 @@
 import { useState } from "react";
-import { useLocation } from "react-router";
-import { ArrowUpRight, CalendarDays, Clock3, Users } from "lucide-react";
+import { Link, useLocation } from "react-router";
+import { ArrowUpRight, CalendarDays, Clock3, Columns3, Users } from "lucide-react";
 import { useLaunches, useStages } from "../api/queries";
-import { useOpenLaunch } from "../app/LaunchDetail";
+import { launchPath, paths } from "../app/navigation";
 import { RefreshError, queryFallback } from "../components/QueryState";
 import { SearchToolbar } from "../components/SearchToolbar";
 import {
@@ -21,7 +21,6 @@ export interface InteractionsState {
 
 export function InteractionsPage() {
   const location = useLocation();
-  const openLaunch = useOpenLaunch();
   const [search, setSearch] = useState(
     () => (location.state as InteractionsState | null)?.search ?? "",
   );
@@ -54,6 +53,10 @@ export function InteractionsPage() {
           <Clock3 size={16} />
           Требуют внимания
         </button>
+        <Link className="filter" to={paths.statusBoard}>
+          <Columns3 size={16} />
+          Доска статусов
+        </Link>
       </SearchToolbar>
       <div className="board">
         {stageGroups.map((g, i) => {
@@ -66,11 +69,7 @@ export function InteractionsPage() {
                 <span>{column.length}</span>
               </div>
               {column.map((l) => (
-                <button
-                  className="launch-card"
-                  key={l.id}
-                  onClick={() => openLaunch(l.id)}
-                >
+                <Link className="launch-card" key={l.id} to={launchPath(l.id)}>
                   <span className="card-id">
                     {launchCode(l.id)} <ArrowUpRight size={14} />
                   </span>
@@ -93,7 +92,7 @@ export function InteractionsPage() {
                     <span className="avatar tiny">{initials(l.owner)}</span>
                     {l.owner}
                   </div>
-                </button>
+                </Link>
               ))}
               {!column.length && (
                 <div className="column-empty">Нет взаимодействий</div>

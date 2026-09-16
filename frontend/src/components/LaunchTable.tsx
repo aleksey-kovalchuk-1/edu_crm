@@ -1,6 +1,7 @@
 import { ChevronRight } from "lucide-react";
+import { Link } from "react-router";
 import type { Launch } from "../api/types";
-import { useOpenLaunch } from "../app/LaunchDetail";
+import { launchPath } from "../app/navigation";
 import { formatDate, initials, stageGroup } from "../lib/format";
 
 export function LaunchTable({
@@ -10,7 +11,6 @@ export function LaunchTable({
   rows: Launch[];
   stages: string[];
 }) {
-  const openLaunch = useOpenLaunch();
   return (
     <div className="table-wrap">
       <table>
@@ -28,12 +28,9 @@ export function LaunchTable({
           {rows.map((l) => (
             <tr key={l.id}>
               <td>
-                <button
-                  className="table-link"
-                  onClick={() => openLaunch(l.id)}
-                >
+                <Link className="table-link" to={launchPath(l.id)}>
                   {l.program}
-                </button>
+                </Link>
                 <small>{l.university}</small>
               </td>
               <td>
@@ -52,13 +49,13 @@ export function LaunchTable({
                 {formatDate(l.deadline)}
               </td>
               <td>
-                <button
+                <Link
                   className="icon-button"
-                  onClick={() => openLaunch(l.id)}
+                  to={launchPath(l.id)}
                   aria-label={`Открыть ${l.program}`}
                 >
                   <ChevronRight size={18} />
-                </button>
+                </Link>
               </td>
             </tr>
           ))}

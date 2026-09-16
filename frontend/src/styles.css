@@ -2116,3 +2116,313 @@ dialog.wide {
     flex: 1 1 auto;
   }
 }
+
+/* Interaction timeline, status board and workflow editor (T-043) */
+.detail-links {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.detail-links .back-link {
+  margin-bottom: 0;
+}
+.detail-link {
+  margin: 4px 0 0;
+}
+.launch-summary .section-head {
+  align-items: flex-start;
+}
+.launch-summary .section-head p {
+  margin-top: 4px;
+  color: #9791a1;
+}
+.timeline-wrap {
+  padding: 0 23px 23px;
+}
+.timeline {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.timeline-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 0;
+  border-bottom: 1px solid #f1edf6;
+  font-size: 12px;
+}
+.timeline-item:last-child {
+  border-bottom: 0;
+}
+.timeline-item .dot {
+  margin-top: 5px;
+}
+.timeline-body {
+  flex: 1;
+  min-width: 0;
+}
+.timeline-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: baseline;
+}
+.timeline-head strong {
+  color: #3d3550;
+}
+.timeline-head time {
+  font-size: 10px;
+  color: #9791a1;
+  white-space: nowrap;
+}
+.timeline-author {
+  display: block;
+  font-size: 10px;
+  color: #8b61be;
+  margin-top: 3px;
+}
+.timeline-comment {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #4f4760;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.attachment-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.attachment-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+.attachment-list a {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #6b3fb0;
+  font-weight: 650;
+}
+.attachment-list a:hover {
+  text-decoration: underline;
+}
+.attachment-list small {
+  color: #9791a1;
+}
+
+/* Status change dialog */
+.char-counter {
+  align-self: flex-end;
+  font-size: 10px;
+  color: #9791a1;
+  font-weight: 500;
+}
+.file-picker {
+  margin-bottom: 15px;
+}
+.file-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.file-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  border: 1px solid #e9e7ef;
+  border-radius: 7px;
+  font-size: 11px;
+  color: #4f4760;
+}
+.file-list li small {
+  color: #9791a1;
+  margin-left: auto;
+}
+.field-errors {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.7;
+}
+
+/* Status board */
+.status-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 15px;
+  align-items: start;
+}
+.board-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.board-cards li {
+  margin-bottom: 11px;
+}
+.board-cards .launch-card {
+  margin-bottom: 0;
+}
+
+/* Workflow editor */
+.workflows-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 340px;
+  gap: 22px;
+  align-items: start;
+}
+.workflow-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+}
+.workflow-card.inactive {
+  opacity: 0.72;
+}
+.workflow-card .section-head {
+  flex-wrap: wrap;
+}
+.editor-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 11px;
+  color: #96849f;
+  font-weight: 650;
+  margin-bottom: 15px;
+}
+.editor-form input,
+.editor-form textarea {
+  display: block;
+  width: 100%;
+  border: 1px solid #e4dce9;
+  border-radius: 7px;
+  padding: 11px;
+  color: #5d476c;
+  background: #fff;
+  font-size: 12px;
+}
+.editor-form {
+  padding: 0 23px 23px;
+}
+.editor-form.inline-form {
+  padding: 0;
+  flex: 1;
+  min-width: 220px;
+}
+.editor-form .modal-actions {
+  justify-content: flex-start;
+  padding-top: 4px;
+}
+.status-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 23px;
+}
+.status-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #f1edf6;
+}
+.status-row.inactive {
+  color: #9791a1;
+}
+.status-position {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #f0edf5;
+  color: #5f5670;
+  font-size: 11px;
+  flex-shrink: 0;
+}
+.status-name {
+  flex: 1;
+  min-width: 160px;
+  font-size: 12px;
+  font-weight: 650;
+  color: #3d3550;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.status-name.editor-form {
+  padding: 0;
+}
+.status-actions {
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.add-status {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 15px;
+  padding: 18px 23px 23px;
+  border-top: 1px solid #f1edf6;
+  margin-top: 4px;
+}
+.add-status label {
+  margin-bottom: 0;
+  flex: 1;
+  min-width: 200px;
+}
+.add-status .toggle {
+  margin-bottom: 11px;
+}
+@media (max-width: 1200px) {
+  .workflows-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .status-board {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  }
+}
+@media (max-width: 800px) {
+  .timeline-wrap {
+    padding: 0 15px 18px;
+  }
+  .status-list,
+  .editor-form {
+    padding-left: 15px;
+    padding-right: 15px;
+  }
+  .add-status {
+    padding: 16px 15px 18px;
+  }
+  .status-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .status-actions {
+    width: 100%;
+  }
+  .status-board {
+    grid-template-columns: 1fr;
+  }
+  .detail-links {
+    gap: 10px;
+  }
+}

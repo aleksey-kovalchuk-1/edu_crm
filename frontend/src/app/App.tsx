@@ -4,11 +4,14 @@ import { CatalogsPage } from "../pages/CatalogsPage";
 import { ContractsPage } from "../pages/ContractsPage";
 import { ImportsPage } from "../pages/ImportsPage";
 import { InteractionsPage } from "../pages/InteractionsPage";
+import { LaunchPage } from "../pages/LaunchPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { OverviewPage } from "../pages/OverviewPage";
+import { StatusBoardPage } from "../pages/StatusBoardPage";
 import { TasksPage } from "../pages/TasksPage";
 import { UniversitiesPage } from "../pages/UniversitiesPage";
 import { UniversityPage } from "../pages/UniversityPage";
+import { WorkflowsPage } from "../pages/WorkflowsPage";
 import { AppProviders } from "./AppProviders";
 import { AuthGate } from "./AuthGate";
 import { Layout } from "./Layout";
@@ -25,6 +28,9 @@ export function AppRoutes() {
           <Route path="catalogs" element={<CatalogsPage />} />
           <Route path="imports" element={<ImportsPage />} />
           <Route path="interactions" element={<InteractionsPage />} />
+          <Route path="interactions/board" element={<StatusBoardPage />} />
+          <Route path="interactions/:id" element={<LaunchPage />} />
+          <Route path="workflows" element={<WorkflowsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="*" element={<NotFoundPage />} />

@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileUp,
   ListChecks,
+  Workflow,
   type LucideIcon,
 } from "lucide-react";
 import { ROLES } from "../lib/user";
@@ -20,9 +21,13 @@ export const paths = {
   analytics: "/analytics",
   catalogs: "/catalogs",
   imports: "/imports",
+  workflows: "/workflows",
+  statusBoard: "/interactions/board",
 } as const;
 
 export const universityPath = (id: number) => `${paths.universities}/${id}`;
+/** Interaction detail with the status timeline (nested under «Взаимодействия»). */
+export const launchPath = (id: number) => `${paths.interactions}/${id}`;
 
 export type CreateKind = "university" | "launch" | "contract";
 
@@ -102,6 +107,15 @@ export const pages: PageMeta[] = [
     icon: FileUp,
     heading: "Загрузка справочников",
     subtitle: "Обновление договоров, вузов и ИТ-продуктов из файлов xls и xlsx.",
+    create: null,
+    roles: [ROLES.supervisor, ROLES.admin],
+  },
+  {
+    path: paths.workflows,
+    name: "Процессы",
+    icon: Workflow,
+    heading: "Процессы",
+    subtitle: "Шаблоны взаимодействия: статусы, их порядок и финальные этапы.",
     create: null,
     roles: [ROLES.supervisor, ROLES.admin],
   },

@@ -1,0 +1,126 @@
+import { useState } from "react";
+import { Link, useParams } from "react-router";
+import { ArrowLeft, Columns3, RefreshCw } from "lucide-react";
+import { useLaunches } from "../api/queries";
+import {
+  currentStatus,
+  launchWorkflow,
+  useStatusChanges,
+  useWorkflows,
+} from "../api/workflows";
+import { paths } from "../app/navigation";
+import { ErrorAlert, RefreshError, queryFallback } from "../components/QueryState";
+import { StatusChangeDialog } from "../components/StatusChangeDialog";
+import { StatusTimeline } from "../components/StatusTimeline";
+import { formatDate, launchCode } from "../lib/format";
+
+export function LaunchPage() {
+  const { id } = useParams();
+  const launchId = Number(id);
+  const launches = useLaunches();
+  const workflows = useWorkflows();
+  const changes = useStatusChanges(launchId);
+  const [changing, setChanging] = useState(false);
+  const queries = [launches, workflows];
+  const fallback = queryFallback(queries);
+  if (fallback || !launches.data || !workflows.data) return fallback;
+
+  const launch = launches.data.find((l) => l.id === launchId);
+  if (!launch) {
+    return (
+      <section className="panel">
+        <div className="empty">
+          <h2>Взаимодействие не найдено</h2>
+          <p>Возможно, оно удалено или относится к вузу, который вам не назначен.</p>
+          <Link className="text-button" to={paths.interactions}>
+            К списку взаимодействий
+          </Link>
+        </div>
+      </section>
+    );
+  }
+  const workflow = launchWorkflow(workflows.data, launch);
+  const status = currentStatus(workflow, launch);
+
+  return (
+    <>
+      <RefreshError queries={queries} />
+      <div className="detail-links">
+        <Link className="back-link text-button" to={paths.interactions}>
+          <ArrowLeft size={16} />
+          Все взаимодействия
+        </Link>
+        <Link className="text-button" to={paths.statusBoard}>
+          <Columns3 size={16} />
+          Доска статусов
+        </Link>
+      </div>
+      <section className="panel launch-summary">
+        <div className="section-head">
+          <div>
+            <p className="card-id">{launchCode(launch.id)}</p>
+            <h2>{launch.program}</h2>
+            <p>
+              {launch.university}
+              {launch.city ? `, ${launch.city}` : ""}
+            </p>
+          </div>
+          <button className="primary" onClick={() => setChanging(true)} disabled={!workflow}>
+            <RefreshCw size={17} />
+            Сменить статус
+          </button>
+        </div>
+        <dl className="fields">
+          <div>
+            <dt>Текущий статус</dt>
+            <dd>
+              <span className="badge" data-testid="current-status">
+                {status?.name ?? "Не указан"}
+              </span>
+            </dd>
+          </div>
+          <div>
+            <dt>Процесс</dt>
+            <dd>{workflow?.name ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>ИТ-продукт</dt>
+            <dd>{launch.product}</dd>
+          </div>
+          <div>
+            <dt>Ответственный</dt>
+            <dd>{launch.owner}</dd>
+          </div>
+          <div>
+            <dt>Обучающиеся</dt>
+            <dd>{launch.students}</dd>
+          </div>
+          <div>
+            <dt>Плановый запуск</dt>
+            <dd className={launch.overdue ? "danger" : undefined}>{formatDate(launch.deadline)}</dd>
+          </div>
+        </dl>
+      </section>
+      <section className="panel">
+        <div className="section-head">
+          <h2>История взаимодействия</h2>
+        </div>
+        <div className="timeline-wrap">
+          {changes.isError && (
+            <ErrorAlert error={changes.error} onRetry={() => void changes.refetch()} />
+          )}
+          {changes.isPending && !changes.isError && <div className="loading">Загружаем историю…</div>}
+          {changes.data && <StatusTimeline changes={changes.data} />}
+        </div>
+      </section>
+      {changing && workflow && (
+        <StatusChangeDialog
+          launch={launch}
+          workflow={workflow}
+          currentStatusId={status?.id}
+          close={() => setChanging(false)}
+        />
+      )}
+    </>
+  );
+}
