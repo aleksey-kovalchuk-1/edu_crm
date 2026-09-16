@@ -4,7 +4,7 @@ Design and rationale: docs/design/authentication.md (decisions D-104, D-118, D-1
 """
 import logging
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import RedirectResponse
@@ -42,6 +42,10 @@ class CurrentUser(BaseModel):
     email: str
     full_name: str
     roles: list[str]
+    # CRM-owned phone verification (D-155): included here so the interface knows the current
+    # verification state without a separate fetch after login or after verifying a number.
+    phone: str
+    phone_verified_at: datetime | None
 
 
 class MeResponse(BaseModel):
@@ -290,7 +294,10 @@ def require_roles(*roles):
 @router.get('/me', response_model=MeResponse, summary='Текущий пользователь и CSRF-токен')
 def me(auth: AuthContext = Depends(current_auth)):
     return MeResponse(
-        user=CurrentUser(id=auth.user.id, email=auth.user.email, full_name=auth.user.full_name, roles=sorted(auth.user.roles)),
+        user=CurrentUser(
+            id=auth.user.id, email=auth.user.email, full_name=auth.user.full_name, roles=sorted(auth.user.roles),
+            phone=auth.user.phone, phone_verified_at=auth.user.phone_verified_at,
+        ),
         csrf_token=auth.session.csrf_token,
     )
 

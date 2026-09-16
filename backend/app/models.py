@@ -147,6 +147,10 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # CRM-owned phone verification (not Keycloak/OIDC, D-002 unaffected): phone lives here, not as a
+    # Keycloak user attribute, because it is a CRM profile fact, not an identity fact Keycloak needs.
+    phone: Mapped[str] = mapped_column(String(20), default='', server_default='')
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class UserSession(Base):
@@ -175,6 +179,22 @@ class LoginState(Base):
     browser_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class PhoneVerificationCode(Base):
+    """A one-time SMS code for CRM-owned phone verification; only the hash is stored (`app/phone.py`)."""
+    __tablename__ = 'phone_verification_codes'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    # The number this code was sent to; kept alongside the code so a later edit to users.phone before this
+    # code is verified can't be mistaken for what was actually sent.
+    phone: Mapped[str] = mapped_column(String(20))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(default=0, server_default='0')
+    correlation_id: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 TRANSFER_STATUSES = ('not_started', 'in_progress', 'transferred', 'cancelled')
