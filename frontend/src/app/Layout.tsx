@@ -12,7 +12,6 @@ import { CreateModal } from "../components/forms/CreateModal";
 import { ErrorAlert } from "../components/QueryState";
 import { canEditCatalog, roleLabel, userInitials } from "../lib/user";
 import { useSession, useSignOut } from "./AuthGate";
-import { LaunchDetailProvider } from "./LaunchDetail";
 import {
   NOT_FOUND_TITLE,
   findPage,
@@ -49,7 +48,7 @@ export function Layout() {
     (createKind !== "university" || canEditCatalog(user.roles));
 
   return (
-    <LaunchDetailProvider>
+    <>
       <div className="app-shell">
         <aside className={menu ? "sidebar mobile-open" : "sidebar"}>
           <Link to={paths.overview} className="brand" onClick={closeMenu}>
@@ -169,6 +168,6 @@ export function Layout() {
         </div>
       </div>
       {create && <CreateModal kind={create} close={() => setCreate(null)} />}
-    </LaunchDetailProvider>
+    </>
   );
 }

@@ -10,7 +10,6 @@ import type {
   Dashboard,
   Launch,
   LaunchInput,
-  StageEvent,
   Task,
 } from "./types";
 
@@ -20,7 +19,6 @@ export const queryKeys = {
   tasks: ["tasks"] as const,
   stages: ["stages"] as const,
   dashboard: ["dashboard"] as const,
-  launchHistory: (id: number) => ["launch-history", id] as const,
   audit: ["audit"] as const,
   auditRecent: (limit: number) => ["audit", "recent", limit] as const,
 };
@@ -60,12 +58,6 @@ export const useDashboard = () =>
     queryFn: () => apiRequest<Dashboard>("/dashboard"),
   });
 
-export const useLaunchHistory = (id: number) =>
-  useQuery({
-    queryKey: queryKeys.launchHistory(id),
-    queryFn: () => apiRequest<StageEvent[]>(`/launches/${id}/history`),
-  });
-
 /**
  * Mark queries stale and refetch the active ones in the background. Not
  * awaited, so a mutation stops being pending as soon as the server answers.
@@ -95,35 +87,6 @@ export function useToggleTask() {
     },
     onSuccess: () => invalidateAudit(client),
     onSettled: () => invalidate(client, queryKeys.tasks),
-  });
-}
-
-/** Change a launch stage; optimistic, then refreshes launches, its history and dashboard. */
-export function useChangeStage() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, stage }: { id: number; stage: number }) =>
-      apiRequest<Launch>(`/launches/${id}`, "PATCH", { stage }),
-    onMutate: async ({ id, stage }) => {
-      await client.cancelQueries({ queryKey: queryKeys.launches, exact: true });
-      const previous = client.getQueryData<Launch[]>(queryKeys.launches);
-      client.setQueryData<Launch[]>(queryKeys.launches, (launches) =>
-        launches?.map((l) => (l.id === id ? { ...l, stage } : l)),
-      );
-      return { previous };
-    },
-    onError: (_error, _vars, context) => {
-      if (context?.previous)
-        client.setQueryData(queryKeys.launches, context.previous);
-    },
-    onSuccess: () => invalidateAudit(client),
-    onSettled: (_data, _error, { id }) =>
-      invalidate(
-        client,
-        queryKeys.launches,
-        queryKeys.launchHistory(id),
-        queryKeys.dashboard,
-      ),
   });
 }
 
