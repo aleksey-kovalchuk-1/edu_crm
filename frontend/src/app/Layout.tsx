@@ -101,13 +101,19 @@ export function Layout() {
               </p>
             </div>
             <div className="profile">
-              <span className="avatar" aria-hidden="true">
-                {initials}
-              </span>
-              <div>
-                <strong>{user.full_name || user.email}</strong>
-                <small>{roleLabel(user.roles)}</small>
-              </div>
+              <Link
+                to={paths.profile}
+                className="profile-link"
+                onClick={closeMenu}
+              >
+                <span className="avatar" aria-hidden="true">
+                  {initials}
+                </span>
+                <div>
+                  <strong>{user.full_name || user.email}</strong>
+                  <small>{roleLabel(user.roles)}</small>
+                </div>
+              </Link>
               <button
                 className="icon-button logout-button"
                 onClick={() => logout.mutate()}
