@@ -14,6 +14,7 @@ import { GraduationCap, LogIn, LogOut } from "lucide-react";
 import {
   authKeys,
   loginUrl,
+  registerUrl,
   useCurrentUser,
   useLogout,
   type Session,
@@ -232,6 +233,13 @@ export function AuthGate({ children }: { children: ReactNode }) {
     browser.assign(loginUrl(nextPath));
   };
 
+  const register = () => {
+    leaving.current = true;
+    writeRedirectMark();
+    if (currentPath !== nextPath) navigate(nextPath, { replace: true });
+    browser.assign(registerUrl(nextPath));
+  };
+
   // First visit without a session: go to login automatically (with a loop guard).
   useEffect(() => {
     if (
@@ -316,6 +324,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
           <LogIn size={18} />
           Войти снова
         </button>
+        <button type="button" className="secondary" onClick={register}>
+          Зарегистрироваться
+        </button>
       </AuthScreen>
     );
   }
@@ -362,6 +373,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
         <button className="primary" onClick={login}>
           <LogIn size={18} />
           Войти через Keycloak
+        </button>
+        <button type="button" className="secondary" onClick={register}>
+          Зарегистрироваться
         </button>
       </AuthScreen>
     );

@@ -75,8 +75,7 @@ def _login_error(request, code):
     return _callback_redirect(request, f'/?auth_error={code}')
 
 
-@router.get('/login', summary='Начать вход через Keycloak', status_code=302, response_class=RedirectResponse)
-def login(request: Request, next_path: str = Query('/', alias='next'), db: Session = Depends(get_db)):
+def _start_login(request, db, next_path, *, registration):
     app_state = request.app.state
     now = utcnow()
     db.execute(delete(LoginState).where(LoginState.expires_at < now))
@@ -97,13 +96,29 @@ def login(request: Request, next_path: str = Query('/', alias='next'), db: Sessi
     ))
     db.commit()
 
-    url = app_state.oidc.authorization_url(redirect_uri=app_state.settings.callback_url, state=raw_state, nonce=nonce, code_challenge=challenge)
+    url = app_state.oidc.authorization_url(
+        redirect_uri=app_state.settings.callback_url, state=raw_state, nonce=nonce, code_challenge=challenge,
+        registration=registration,
+    )
     response = RedirectResponse(url, status_code=302)
     response.set_cookie(
         LOGIN_COOKIE, browser_value, max_age=int(LOGIN_STATE_TTL.total_seconds()), path=LOGIN_COOKIE_PATH,
         httponly=True, samesite='lax', secure=app_state.settings.cookie_secure,
     )
     return response
+
+
+@router.get('/login', summary='Начать вход через Keycloak', status_code=302, response_class=RedirectResponse)
+def login(request: Request, next_path: str = Query('/', alias='next'), db: Session = Depends(get_db)):
+    return _start_login(request, db, next_path, registration=False)
+
+
+@router.get('/register', summary='Начать регистрацию через Keycloak', status_code=302, response_class=RedirectResponse)
+def register(request: Request, next_path: str = Query('/', alias='next'), db: Session = Depends(get_db)):
+    # Same callback, session and CSRF handling as /login (D-134/D-135): this only changes which Keycloak
+    # page opens first. Keycloak itself enforces the .ru email pattern, CAPTCHA and email verification
+    # before any code is ever issued back to /callback (D-155-D-158).
+    return _start_login(request, db, next_path, registration=True)
 
 
 @router.get('/callback', summary='Завершить вход (адрес возврата из Keycloak)', status_code=302, response_class=RedirectResponse)

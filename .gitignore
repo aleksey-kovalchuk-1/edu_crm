@@ -8,4 +8,5 @@ __pycache__/
 *.tsbuildinfo
 pytest-of-root/
 .claude/settings.local.json
-deploy/local/
+deploy/local/*
+!deploy/local/*.example

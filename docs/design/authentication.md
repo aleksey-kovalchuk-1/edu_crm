@@ -1,6 +1,6 @@
 # Аутентификация и сессии (Keycloak)
 
-Статус: реализовано в T-020–T-024; доработки по итогам проверки безопасности (привязка входа к браузеру, поведение при недоступности Keycloak, выход на стороне сервера) внедряются — ход работ в `docs/night-report.md`. Решения — D-104, D-117, D-118, D-122–D-126, D-132–D-135 в `docs/decisions.md`.
+Статус: реализовано в T-020–T-024; доработки по итогам проверки безопасности (привязка входа к браузеру, поведение при недоступности Keycloak, выход на стороне сервера) внедряются — ход работ в `docs/night-report.md`. Решения — D-104, D-117, D-118, D-122–D-126, D-132–D-135 в `docs/decisions.md`. Самостоятельная регистрация, подтверждение E-mail и CAPTCHA (T-080–T-084) — решения D-155–D-160.
 
 ## Цели
 
@@ -52,6 +52,21 @@ Keycloak публикуется через nginx по пути `/auth`, поэт
 | `NO_ACCESS` | API | У учётной записи нет роли CRM или она отключена |
 | `SESSION_NOT_SAVED` | Интерфейс | Повторное автоматическое перенаправление на вход за 15 секунд: браузер не сохранил cookie сессии; показывается совет разрешить cookie |
 
+## Самостоятельная регистрация
+
+Полностью на стороне Keycloak (D-002/D-003): своей формы регистрации в CRM нет, `GET /api/v1/auth/register?next=` (`backend/app/auth.py`) отличается от `/login` только тем, что строит адрес Keycloak на `/protocol/openid-connect/registrations` вместо `/protocol/openid-connect/auth` (тот же `OIDCClient.authorization_url(..., registration=True)`); state, PKCE, cookie `edu_crm_login` и `/callback` — общие с обычным входом.
+
+- **Домен `.ru`.** Единственный источник истины — Keycloak Declarative User Profile: атрибут `email` в `realm-edu-crm.json` (`components` → `org.keycloak.userprofile.UserProfileProvider`) несёт валидатор `pattern` (`^[^@\s]+@[^@\s]+\.ru$`) с сообщением `emailRuOnly`, переведённым в `deploy/keycloak/themes/edu-crm/login/messages/messages_ru.properties`. Проверено прямым POST на форму Keycloak в обход браузера: не-`.ru` адрес отклоняется с этим сообщением, учётная запись не создаётся. Действует и при регистрации, и при редактировании профиля администратором.
+- **Подтверждение E-mail.** `verifyEmail: true`. Keycloak не выдаёт код авторизации, пока не пройдено требуемое действие `VERIFY_EMAIL` — недавно зарегистрированный пользователь не может завершить OIDC-поток и попасть в CRM. Ключевая деталь поведения Keycloak (не наша настройка): пока e-mail не подтверждён, форма регистрации вообще не показывает поля пароля — Keycloak откладывает требуемое действие `UPDATE_PASSWORD` до перехода по ссылке подтверждения, после чего показывает форму «Обновление пароля» и только потом завершает вход.
+- **CAPTCHA.** Копия потока регистрации `registration-with-recaptcha` (`authenticationFlows` в `realm-edu-crm.json`) с шагом `registration-recaptcha-action`, переведённым в `REQUIRED` (по умолчанию `DISABLED`). Сайт-ключ не секретен; ключи (сайт+секрет) выставляются отдельным одноразовым заданием `deploy/keycloak/configure-recaptcha.py` через Admin REST API после старта Keycloak (idempotent) — в realm-import не удалось надёжно выставить конфигурацию конкретного execution через `${VAR}`. Локально по умолчанию — официальные тестовые ключи Google Test Keys (всегда проходят, с пометкой «только для тестирования»); реальные — только в `deploy/local/keycloak.env`.
+  - **Обнаруженная и исправленная проблема (D-158):** политика `Content-Security-Policy` Keycloak по умолчанию (`frame-src 'self'`) блокирует iframe виджета Google — чекбокс не отображался ни в одном браузере. Realm теперь переопределяет `browserSecurityHeaders.contentSecurityPolicy`, разрешая `frame-src` для `https://www.google.com` и `https://recaptcha.net`; остальные заголовки не изменены.
+  - **Вход (осознанное ограничение).** Условная CAPTCHA «после N неудачных попыток» на форме входа не добавлена: в Keycloak 26 для этого нужен собственный SPI на Java, а в проекте нет Java-инструментария (D-010) — несоразмерно задаче. Защита от перебора при входе — встроенная `bruteForceProtected` (временная блокировка после 5 неудач), как и раньше.
+- **Роли по умолчанию.** `default-roles-edu-crm` включает `crm-user` (роль-композит; добавлено отдельным идемпотентным заданием `deploy/keycloak/configure-default-role.py`, т.к. realm-import игнорирует переопределение композитов уже существующей роли по умолчанию — см. D-157). `crm-supervisor`/`crm-admin` не выдаются автоматически — только вручную в консоли Keycloak или скриптом `scripts/keycloak-create-user.sh`. Побочный эффект: демонстрационные учётные записи (`pavel.demo`, `irina.demo`), у которых всегда была роль `default-roles-edu-crm`, теперь получают `crm-user` вместе со своей ролью — это безопасно (`sees_all()` в `backend/app/catalog_routes.py` проверяет наличие `crm-supervisor`/`crm-admin`, не отсутствие `crm-user`), подтверждено тестом.
+- **Локализация.** `supportedLocales: ["ru"]` (был `["ru", "en"]`) — переключатель языка пропадает автоматически (он показывается только при нескольких локалях). Встроенный перевод Keycloak (`base`) уже полностью покрывает страницы регистрации, подтверждения e-mail и восстановления пароля; свой `deploy/keycloak/themes/edu-crm` — минимальное переопределение (`parent=keycloak.v2`) только с одним новым ключом (`emailRuOnly`), которого в переводах Keycloak нет и не может быть.
+- **SMTP.** По умолчанию — локальный перехватчик Mailpit (`compose.yaml`, без реальных писем и секретов), веб-интерфейс на `http://localhost:8025`. Реальный SMTP — через `${VAR:default}` в `smtpServer` realm-import и `deploy/local/keycloak.env` (подстановка с значением по умолчанию проверена эмпирически: без заданной переменной применяется значение по умолчанию — Mailpit).
+
+Административный способ завести тестового пользователя без прохождения регистрации: `scripts/keycloak-create-user.sh <username> <email> <role[,role...]>` (Admin REST API, `emailVerified: true`, случайный пароль печатается один раз, идемпотентен — состав ролей при повторном запуске становится ровно запрошенным) — рядом с уже существующими демо-пользователями `anna.demo`/`pavel.demo`/`irina.demo` (пароли — `scripts/generate-dev-secrets.sh`, см. `deploy/local/keycloak.env`). При `registrationEmailAsUsername: true` Keycloak подставляет e-mail как фактический `username` даже при создании через Admin API, а не только при регистрации (обнаружено эмпирически при первом запуске скрипта); скрипт ищет существующего пользователя по e-mail, а не по переданному имени пользователя.
+
 ## Ограничение нагрузки на вход
 
 - nginx ограничивает `GET /api/v1/auth/login`: 10 запросов в минуту с одного адреса, всплеск до 20.
@@ -62,7 +77,8 @@ Keycloak публикуется через nginx по пути `/auth`, поэт
 | Метод | Назначение |
 |---|---|
 | `GET /api/v1/auth/login?next=` | Начать вход |
-| `GET /api/v1/auth/callback` | Завершить вход |
+| `GET /api/v1/auth/register?next=` | Начать регистрацию (та же схема, страница входа Keycloak заменена на страницу регистрации) |
+| `GET /api/v1/auth/callback` | Завершить вход или регистрацию |
 | `GET /api/v1/auth/me` | Текущий пользователь, роли и CSRF-токен |
 | `POST /api/v1/auth/logout` | Выйти |
 
