@@ -83,3 +83,16 @@ Priority order: owner decisions and the official specification (`docs/specificat
 | T-074 | Superset profile kept working with the new schema (read-only views only) | T-050 | Profile starts; BI role reads only analytics views | TODO |
 | T-075 | Frontend tests and lint | T-024 | `npm test` and lint run in CI | TODO |
 | T-076 | Mobile layout and accessibility audit (contrast, keyboard, labels) | T-043 | Findings fixed or recorded | TODO |
+
+## M9 — Operational CRM file ingestion (D-155–D-160, `docs/design/file-ingestion-plan.md`)
+
+| ID | Task | Depends on | Acceptance criteria | Status |
+|---|---|---|---|---|
+| T-090 | Foundation: `correlation_id` on audit events, `background_jobs` table, `worker` Compose service (PostgreSQL queue, no Redis), `clamav` Compose service | T-023 | Migration `0009`; a job enqueued by a test is picked up and completed by a worker process; `clamd` reachable and returns a verdict for the EICAR test string | TODO |
+| T-091 | Generic entity-import registry (universities, university contacts, interactions) wrapping the existing contract importer unchanged; saved/reusable column-mapping profiles; downloadable row-level error report; apply runs as a background job | T-090, T-033 | Existing contract-import tests still pass unmodified; new entities import/update with preview counts; re-apply is idempotent (`409`, no duplicate job) | TODO |
+| T-092 | Safe batch rollback (only for rows not modified since import) | T-091 | Rollback undoes untouched created/updated rows; rows changed afterward are reported as not rollable, not silently skipped | TODO |
+| T-093 | `Document`/`DocumentVersion` model, migration `0010`, quarantine directory separate from `attachments_data`, ClamAV integration (fail closed) | T-090 | Upload → Quarantined → (Validated/Rejected) → Linked; a EICAR test file is Rejected and never downloadable; a clean file becomes Linked | TODO |
+| T-094 | Document upload UI on university and interaction pages; version history; short-lived signed download links (D-160) | T-093 | Uploading a changed file creates a new version, old version still downloadable; a link past its TTL is refused even with a valid session | TODO |
+| T-095 | Administrator policy screen: allowed formats, max size, retention (minimal, single page) | T-090 | Admin can change a limit; new uploads respect it; other roles cannot reach the screen | TODO |
+| T-096 | Tests: full required-tests list from `AI_TASK_Operational_CRM_File_Ingestion.md` (valid/invalid import, duplicates, scope denial, retry/idempotency, rollback, valid/malformed/oversized/malicious upload, cross-team denial, versioning) | T-090–T-094 | All listed scenarios covered and passing | TODO |
+| T-097 | Docs: `docs/api/documents.md`, `docs/api/imports.md` updated for the generic entity registry, `docs/operations/backup.md` covers the new `documents_data` volume, user and administrator guidance | T-091, T-093 | Docs match the shipped API; backup script covers the new volume | TODO |
