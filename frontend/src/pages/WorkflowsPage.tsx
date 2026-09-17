@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp } from "lucide-react";
+import { ApiError } from "../api/client";
 import {
   sortedStatuses,
   useAddStatus,
@@ -9,6 +10,7 @@ import {
   useUpdateWorkflow,
   useWorkflows,
   type Workflow,
+  type WorkflowStatus,
 } from "../api/workflows";
 import { useSession } from "../app/AuthGate";
 import { ErrorAlert, RefreshError, queryFallback } from "../components/QueryState";
@@ -140,6 +142,8 @@ function WorkflowCard({ workflow }: { workflow: Workflow }) {
   const [statusDraft, setStatusDraft] = useState("");
   const [newStatus, setNewStatus] = useState("");
   const [newFinal, setNewFinal] = useState(false);
+  const [migratingId, setMigratingId] = useState<number | null>(null);
+  const [replacementId, setReplacementId] = useState<number | "">("");
 
   const pending = [updateWorkflow, addStatus, updateStatus, reorder].some((m) => m.isPending);
   const statuses = sortedStatuses(workflow);
@@ -168,6 +172,34 @@ function WorkflowCard({ workflow }: { workflow: Workflow }) {
   const saveStatusName = (event: FormEvent, id: number) => {
     event.preventDefault();
     updateStatus.mutate({ id, name: statusDraft.trim() }, callbacks(() => setRenamingId(null)));
+  };
+
+  const requestDeactivate = (s: WorkflowStatus) => {
+    if (!s.is_active) return updateStatus.mutate({ id: s.id, is_active: true }, callbacks());
+    updateStatus.mutate(
+      { id: s.id, is_active: false },
+      {
+        onSuccess: () => setError(null),
+        onError: (e: Error) => {
+          if (e instanceof ApiError && e.details?.some((d) => d.field === "confirm")) {
+            setMigratingId(s.id);
+            setReplacementId("");
+            setError(null);
+          } else {
+            setError(e);
+          }
+        },
+      },
+    );
+  };
+
+  const confirmMigration = (event: FormEvent, statusId: number) => {
+    event.preventDefault();
+    if (replacementId === "") return;
+    updateStatus.mutate(
+      { id: statusId, is_active: false, confirm: true, replacement_status_id: replacementId },
+      callbacks(() => setMigratingId(null)),
+    );
   };
 
   const submitNewStatus = (event: FormEvent) => {
@@ -306,15 +338,43 @@ function WorkflowCard({ workflow }: { workflow: Workflow }) {
               >
                 Переименовать<span className="visually-hidden"> статус «{s.name}»</span>
               </button>
-              <button
-                className="text-button"
-                disabled={pending}
-                onClick={() => updateStatus.mutate({ id: s.id, is_active: !s.is_active }, callbacks())}
-              >
+              <button className="text-button" disabled={pending} onClick={() => requestDeactivate(s)}>
                 {s.is_active ? "Отключить" : "Включить"}
                 <span className="visually-hidden"> статус «{s.name}»</span>
               </button>
             </div>
+            {migratingId === s.id && (
+              <form className="editor-form inline-form status-migration" onSubmit={(e) => confirmMigration(e, s.id)}>
+                <p role="alert">
+                  В статусе «{s.name}» есть взаимодействия. Выберите активный статус, куда их перенести, и
+                  подтвердите отключение — перенос попадёт в историю каждого взаимодействия.
+                </p>
+                <label>
+                  Перенести в статус
+                  <select
+                    value={replacementId}
+                    onChange={(e) => setReplacementId(e.target.value ? Number(e.target.value) : "")}
+                  >
+                    <option value="">— выберите статус —</option>
+                    {statuses
+                      .filter((other) => other.id !== s.id && other.is_active)
+                      .map((other) => (
+                        <option key={other.id} value={other.id}>
+                          {other.name}
+                        </option>
+                      ))}
+                  </select>
+                </label>
+                <div className="row-actions">
+                  <button className="primary" disabled={pending || replacementId === ""}>
+                    Подтвердить перенос и отключение
+                  </button>
+                  <button type="button" className="secondary" onClick={() => setMigratingId(null)}>
+                    Отмена
+                  </button>
+                </div>
+              </form>
+            )}
           </li>
         ))}
       </ol>
