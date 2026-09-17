@@ -178,3 +178,52 @@ def test_legacy_xls_file_can_be_imported(head, database_url):
     report = head.post(f"/api/v1/imports/{body['id']}/apply", json={'mapping': body['mapping']}).json()
     assert report['summary']['valid'] == 2
     assert count(database_url, Contract) == 2
+
+
+SAMPLE_WORKBOOK = Path(__file__).parent.parent.parent / 'docs' / 'samples' / 'catalog-import-sample.xlsx'
+
+
+def test_the_documented_sample_workbook_imports_as_recorded_in_the_night_report(head, database_url):
+    """Regression test for the real file `docs/samples/catalog-import-sample.xlsx` (T-033, verified live
+    pre-integration per docs/night-backlog.md: 6 valid rows, row 9 invalid date, re-apply 409) -- turns
+    that one-off manual verification into a permanent automated check, including Cyrillic headers/values
+    surviving the round trip and the file's leading title row being skipped."""
+    response = upload(head, SAMPLE_WORKBOOK.read_bytes(), 'catalog-import-sample.xlsx')
+    assert response.status_code == 201, response.text
+    body = response.json()
+    assert body['header_row'] == 2  # row 1 is a title, not the header row
+    assert body['row_count'] == 7
+    assert body['preview'][0]['cells'][0] == 'Северный технологический университет'  # Cyrillic survives
+
+    report = head.post(f"/api/v1/imports/{body['id']}/check", json={'mapping': body['mapping']}).json()
+    assert report['summary']['rows'] == 7
+    assert report['summary']['valid'] == 6
+    assert report['summary']['invalid'] == 1
+    invalid_row = next(r for r in report['rows'] if r['status'] == 'error')
+    assert invalid_row['row_number'] == 9
+    assert any('Подписание лицензии' in message or 'дат' in message.lower() for message in invalid_row['errors'])
+
+    applied = head.post(f"/api/v1/imports/{body['id']}/apply", json={'mapping': body['mapping']})
+    assert applied.status_code == 200, applied.text
+    assert applied.json()['summary']['valid'] == 6
+    assert count(database_url, Contract) == 6
+    with database(database_url) as db:
+        # A Cyrillic university name written through the whole pipeline, not just parsed in memory.
+        assert db.scalar(select(University).where(University.name == 'Уральская инженерная академия')) is not None
+
+    repeated = head.post(f"/api/v1/imports/{body['id']}/apply", json={'mapping': body['mapping']})
+    assert repeated.status_code == 409, repeated.text
+    assert count(database_url, Contract) == 6  # idempotent: re-apply created no duplicates
+
+
+def test_import_scope_and_permissions_cannot_be_bypassed_through_direct_api_calls(head, manager, database_url):
+    """Phase 6 acceptance: permissions and university scope hold even against direct API calls that skip
+    the wizard UI entirely."""
+    body = uploaded(head)
+    # A manager (crm-user) cannot start, inspect, or apply an import via any of these endpoints directly,
+    # even knowing a valid import id created by someone else.
+    assert manager.post('/api/v1/imports', files={'file': ('x.xlsx', workbook(ROWS), XLSX_TYPE)}).status_code == 403
+    assert manager.get(f"/api/v1/imports/{body['id']}").status_code == 403
+    assert manager.post(f"/api/v1/imports/{body['id']}/check", json={'mapping': body['mapping']}).status_code == 403
+    assert manager.post(f"/api/v1/imports/{body['id']}/apply", json={'mapping': body['mapping']}).status_code == 403
+    assert count(database_url, Contract) == 0
