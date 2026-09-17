@@ -70,7 +70,7 @@ Priority order: owner decisions and the official specification (`docs/specificat
 
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
-| T-060 | Connector framework; documented **mock** LMS and Laravel site APIs; JSON ingestion into new or existing workflows; idempotency | T-041 | Mock payloads create and update workflows; re-run creates no duplicates; documentation states the contracts are mocks | TODO |
+| T-060 | Connector framework; documented **mock** LMS and website-CMS APIs (D-184-D-187); bidirectional JSON (inbound create/update, outbound current state); idempotency | T-041 | Mock payloads create and update interactions; re-run creates no duplicates; documentation states the contracts are mocks | VERIFIED (`app/connectors.py`/`app/connector_routes.py`, migration `0013` (`integration_links`), `docs/api/integrations.md`; `tests/test_connectors.py` -- 11 tests: create, idempotent redelivery (no duplicate launch or status-change row), update with a status move recorded in history, missing-field and unknown-university/status validation errors, `lms`/`cms` isolation for the same `external_id`, outbound list/get, audit event with no key or personal data; 304 backend tests total) |
 
 ## M7 — Quality, security, documentation, delivery
 

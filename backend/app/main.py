@@ -11,6 +11,7 @@ from .audit import record_event
 from .audit_routes import router as audit_router
 from .auth import ALL_ROLES, AuthContext, require_roles, router as auth_router
 from .catalog_routes import active_university_in_scope, router as catalog_router, university_scope
+from .connector_routes import router as connector_router
 from .document_routes import router as document_router
 from .import_routes import mapping_router as import_mapping_router, router as import_router
 from .jobs_routes import router as jobs_router
@@ -94,6 +95,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None):
     app.include_router(auth_router)
     app.include_router(audit_router)
     app.include_router(catalog_router)
+    app.include_router(connector_router)
     app.include_router(document_router)
     app.include_router(import_router)
     app.include_router(import_mapping_router)

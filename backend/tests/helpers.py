@@ -29,6 +29,7 @@ def make_settings(database_url, **overrides):
         documents_dir=tempfile.mkdtemp(prefix='edu-crm-documents-'),
         download_link_key=TEST_ENCRYPTION_KEY,
         reports_dir=tempfile.mkdtemp(prefix='edu-crm-reports-'),
+        connector_api_key='test-connector-key',
     )
     values.update(overrides)
     return Settings(**values)

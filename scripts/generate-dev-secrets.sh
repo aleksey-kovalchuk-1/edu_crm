@@ -41,6 +41,7 @@ EOF
 cat > "$api_env" <<EOF
 OIDC_CLIENT_SECRET=$client_secret
 SESSION_ENCRYPTION_KEY=$session_key
+CONNECTOR_API_KEY=$(random_text 40)
 EOF
 
 echo "Created $keycloak_env and $api_env (local development only; never commit them)."

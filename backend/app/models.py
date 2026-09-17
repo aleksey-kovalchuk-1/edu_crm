@@ -428,3 +428,24 @@ class ReportFile(Base):
     size_bytes: Mapped[int] = mapped_column(BigInteger)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+CONNECTOR_SOURCES = ('lms', 'cms')
+
+
+class IntegrationLink(Base):
+    """Identifies a `Launch` as originating from (or linked to) one record in a mock external system
+    (T-060, D-184-D-187): `(source, external_id)` is the idempotency key every inbound delivery is matched
+    against. Deliberately a separate table, not columns on `Launch` -- most launches are created directly in
+    the CRM and have no external counterpart at all."""
+    __tablename__ = 'integration_links'
+    __table_args__ = (
+        UniqueConstraint('source', 'external_id'),
+        CheckConstraint(f"source in ({', '.join(repr(s) for s in CONNECTOR_SOURCES)})", name='source'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(20))
+    external_id: Mapped[str] = mapped_column(String(200))
+    launch_id: Mapped[int] = mapped_column(ForeignKey('launches.id'), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
