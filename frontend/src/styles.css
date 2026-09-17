@@ -2500,6 +2500,44 @@ dialog.wide {
   gap: var(--sp-5);
   align-items: start;
 }
+.reports-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--sp-5);
+  align-items: start;
+}
+.reports-layout > section:last-child {
+  grid-column: 1 / -1;
+}
+.editor-form fieldset {
+  border: 1px solid var(--rt-grey);
+  border-radius: var(--radius-field);
+  padding: var(--sp-3) var(--sp-4);
+  margin: 0 0 var(--sp-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+.editor-form legend {
+  padding: 0 var(--sp-2);
+  font-size: var(--legal-size);
+  color: var(--rt-text-muted);
+  font-weight: 650;
+}
+.report-jobs {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--sp-5) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+.report-job-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  flex-wrap: wrap;
+}
 .workflow-list {
   display: flex;
   flex-direction: column;
@@ -2535,6 +2573,22 @@ dialog.wide {
 }
 .editor-form input:focus,
 .editor-form textarea:focus {
+  outline: none;
+  border-color: var(--rt-purple);
+  box-shadow: var(--focus-ring);
+}
+.editor-form select[multiple] {
+  display: block;
+  width: 100%;
+  min-height: 96px;
+  border: 1px solid var(--rt-grey);
+  border-radius: var(--radius-field);
+  padding: var(--sp-2);
+  color: var(--rt-text);
+  background: var(--rt-bg);
+  font-size: var(--small-size);
+}
+.editor-form select[multiple]:focus {
   outline: none;
   border-color: var(--rt-purple);
   box-shadow: var(--focus-ring);

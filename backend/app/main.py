@@ -18,6 +18,7 @@ from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
 from .models import AnnualMetric, Launch, StageEvent, StatusChange, Task, University, WorkflowStatus
 from .profile_routes import router as profile_router
+from .report_routes import router as report_router
 from .workflow_routes import router as workflow_router
 from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
@@ -98,6 +99,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None):
     app.include_router(import_mapping_router)
     app.include_router(jobs_router)
     app.include_router(profile_router)
+    app.include_router(report_router)
     app.include_router(workflow_router)
 
     @app.get('/api/v1/health')

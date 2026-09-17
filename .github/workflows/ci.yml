@@ -26,6 +26,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      # Cyrillic-capable TTF for PDF report export (reportlab); see backend/app/reports.py and Dockerfile.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
       - run: pip install -r backend/requirements-dev.txt -c backend/constraints.txt
       - run: cd backend && python -m pytest -q
   web:

@@ -8,6 +8,7 @@ import { LaunchPage } from "../pages/LaunchPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { OverviewPage } from "../pages/OverviewPage";
 import { ProfilePage } from "../pages/ProfilePage";
+import { ReportsPage } from "../pages/ReportsPage";
 import { StatusBoardPage } from "../pages/StatusBoardPage";
 import { TasksPage } from "../pages/TasksPage";
 import { UniversitiesPage } from "../pages/UniversitiesPage";
@@ -32,6 +33,7 @@ export function AppRoutes() {
           <Route path="interactions/board" element={<StatusBoardPage />} />
           <Route path="interactions/:id" element={<LaunchPage />} />
           <Route path="workflows" element={<WorkflowsPage />} />
+          <Route path="reports" element={<ReportsPage />} />
           <Route path="tasks" element={<TasksPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="profile" element={<ProfilePage />} />

@@ -60,11 +60,11 @@ Priority order: owner decisions and the official specification (`docs/specificat
 
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
-| T-050 | Report query with filters (period, universities, IT directions, IT products, responsible, status) and selectable columns | T-040 | Tests compare report rows with fixture expectations | TODO |
-| T-051 | Asynchronous report jobs (PostgreSQL queue, worker container) | T-050 | 10 simultaneous report jobs complete; job status visible | TODO |
-| T-052 | Report files: xlsx, pdf (Cyrillic), xls | T-051 | Files open and contain the selected columns; tests inspect generated files | TODO |
-| T-053 | Charts with PNG and PDF export; statistics of applications, students, streams | T-050 | Exported chart values match API data | TODO |
-| T-054 | Reports screen | T-051, T-052 | Browser check: build and download each format | TODO |
+| T-050 | Report query with filters (period, universities, IT directions, IT products, responsible, status) and selectable columns (`app/reports.py`, D-180) | T-040 | Tests compare report rows with fixture expectations | VERIFIED (`app/reports.py::build_rows`; `tests/test_reports.py` fixtures for columns/filters/university-scope; 293 backend tests) |
+| T-051 | Asynchronous report jobs on the existing `background_jobs` queue/worker (`report_generate` kind, D-181) | T-050 | 10 simultaneous report jobs complete; job status visible | VERIFIED (`app/report_jobs.py`; `GET /api/v1/jobs/{id}` reused unchanged per D-166; `test_ten_parallel_report_jobs_complete` drains 10 queued jobs across 10 threads with `SELECT...FOR UPDATE SKIP LOCKED`, all 10 succeed with one `report_files` row each) |
+| T-052 | Report files: xlsx, pdf (Cyrillic), xls (D-182/D-183) | T-051 | Files open and contain the selected columns; tests inspect generated files | VERIFIED (xlsx via `openpyxl`, legacy xls via `xlwt` with a real OLE signature, PDF via `reportlab` with an embedded DejaVu TTF; `tests/test_reports.py` opens each format and asserts header row + cell values; PDF text extracted with `pypdf` and Cyrillic text confirmed round-tripping; `docs/api/reports.md`) |
+| T-053 | A small chart from the report dataset (not the originally-scoped PNG/PDF chart export or the annual applications/students/streams statistics -- see the integration task's own instruction to add only a small visualization once reports work) | T-050 | Exported chart values match API data | PARTIAL (`ReportStatusChart.tsx`: interaction count per status, fetched from the same JSON a downloaded report shows, so it can't drift from the report's own numbers; shown once a JSON-format report has succeeded; no PNG/PDF chart export) |
+| T-054 | Reports screen: filters, column and format pickers, async job list with status, download link | T-051, T-052 | Browser check: build and download each format | IN_PROGRESS (`ReportsPage.tsx`; 122 frontend tests incl. the submit-and-download round trip, lint/build clean; signed-in browser check needs the owner per D-130, same as every other screen in this project) |
 
 ## M6 — Integrations
 

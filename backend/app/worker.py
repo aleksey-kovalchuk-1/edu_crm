@@ -17,6 +17,7 @@ from .settings import load_settings, validate_database_url
 # Handler modules register themselves into jobs.JOB_HANDLERS on import.
 from . import import_jobs  # noqa: F401,E402
 from . import document_jobs  # noqa: F401,E402
+from . import report_jobs  # noqa: F401,E402
 
 POLL_INTERVAL_SECONDS = 2
 LOG = logging.getLogger('worker')

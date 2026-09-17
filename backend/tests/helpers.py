@@ -28,6 +28,7 @@ def make_settings(database_url, **overrides):
         attachments_dir=tempfile.mkdtemp(prefix='edu-crm-attachments-'),
         documents_dir=tempfile.mkdtemp(prefix='edu-crm-documents-'),
         download_link_key=TEST_ENCRYPTION_KEY,
+        reports_dir=tempfile.mkdtemp(prefix='edu-crm-reports-'),
     )
     values.update(overrides)
     return Settings(**values)

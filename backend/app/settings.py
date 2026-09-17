@@ -47,6 +47,11 @@ class Settings:
     # Signs short-lived download links (D-170); separate from session_encryption_key so rotating one
     # does not also invalidate every active login session.
     download_link_key: str = ''
+    reports_dir: str = '/data/reports'
+    # Overrides font autodetection for PDF export (D-181): empty means try the built-in candidate paths
+    # (fonts-dejavu-core in Docker/CI, a local dev install otherwise). Never a bundled repo file: DejaVu's
+    # own license permits redistribution, but this project doesn't ship a font binary in source control.
+    report_font_path: str = ''
 
     @property
     def callback_url(self):
@@ -143,4 +148,6 @@ def load_settings(environ=None):
         clamav_host=(environ.get('CLAMAV_HOST') or '').strip() or 'clamav',
         clamav_port=_positive_int(environ, 'CLAMAV_PORT', 3310),
         download_link_key=(environ.get('DOWNLOAD_LINK_KEY') or '').strip() or encryption_key,
+        reports_dir=(environ.get('REPORTS_DIR') or '').strip() or '/data/reports',
+        report_font_path=(environ.get('REPORT_FONT_PATH') or '').strip(),
     )

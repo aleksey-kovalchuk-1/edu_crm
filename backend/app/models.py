@@ -409,3 +409,22 @@ class DocumentVersion(Base):
     scan_result: Mapped[str] = mapped_column(String(20), default='pending', server_default='pending')
     uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+REPORT_FORMATS = ('xlsx', 'xls', 'pdf', 'json')
+
+
+class ReportFile(Base):
+    """The generated file for one `report_generate` BackgroundJob (T-050-T-052, D-180+): one row per job,
+    written by the worker once, downloaded through the API (never a raw filesystem path)."""
+    __tablename__ = 'report_files'
+    __table_args__ = (CheckConstraint(f"format in ({', '.join(repr(f) for f in REPORT_FORMATS)})", name='format'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey('background_jobs.id'), unique=True)
+    format: Mapped[str] = mapped_column(String(10))
+    storage_key: Mapped[str] = mapped_column(String(64), unique=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

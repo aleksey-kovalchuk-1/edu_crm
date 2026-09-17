@@ -155,6 +155,7 @@ services:
       FORWARDED_ALLOW_IPS: '*'
       ATTACHMENTS_DIR: /data/attachments
       DOCUMENTS_DIR: /data/documents
+      REPORTS_DIR: /data/reports
       CLAMAV_HOST: clamav
       CLAMAV_PORT: '3310'
     volumes:
@@ -162,6 +163,8 @@ services:
       - attachments_data:/data/attachments
       # Uploaded documents (quarantine + validated library, T-093); back up alongside the database.
       - documents_data:/data/documents
+      # Generated report files (T-050-T-052); written by worker, downloaded through api.
+      - reports_data:/data/reports
     depends_on:
       db:
         condition: service_healthy
@@ -192,6 +195,7 @@ services:
       COOKIE_SECURE: 'false'
       ATTACHMENTS_DIR: /data/attachments
       DOCUMENTS_DIR: /data/documents
+      REPORTS_DIR: /data/reports
       CLAMAV_HOST: clamav
       CLAMAV_PORT: '3310'
       # api already migrated by the time it's healthy; avoids a concurrent, unlocked migration race.
@@ -199,6 +203,7 @@ services:
     volumes:
       - attachments_data:/data/attachments
       - documents_data:/data/documents
+      - reports_data:/data/reports
     depends_on:
       api:
         condition: service_healthy
@@ -244,5 +249,6 @@ volumes:
   postgres_data:
   attachments_data:
   documents_data:
+  reports_data:
   clamav_data:
   superset_data:

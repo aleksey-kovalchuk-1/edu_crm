@@ -3,6 +3,7 @@ import {
   Building2,
   ChartNoAxesCombined,
   Columns3,
+  FileSpreadsheet,
   FileText,
   LayoutDashboard,
   FileUp,
@@ -23,6 +24,7 @@ export const paths = {
   catalogs: "/catalogs",
   imports: "/imports",
   workflows: "/workflows",
+  reports: "/reports",
   statusBoard: "/interactions/board",
   profile: "/profile",
 } as const;
@@ -122,6 +124,14 @@ export const pages: PageMeta[] = [
     subtitle: "Шаблоны взаимодействия: статусы, их порядок и финальные этапы.",
     create: null,
     roles: [ROLES.supervisor, ROLES.admin],
+  },
+  {
+    path: paths.reports,
+    name: "Отчёты",
+    icon: FileSpreadsheet,
+    heading: "Отчёты",
+    subtitle: "Фильтры, колонки и формат — файл формируется в фоне.",
+    create: null,
   },
   {
     path: paths.profile,
