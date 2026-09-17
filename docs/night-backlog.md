@@ -6,6 +6,48 @@ Status values: `TODO`, `IN_PROGRESS`, `VERIFIED`, `BLOCKED`. A task is `VERIFIED
 
 Priority order: owner decisions and the official specification (`docs/specification.md`) first, then improvements (`docs/improvement-ideas.md`).
 
+## SESSION HANDOFF — 2026-09-17, `ai/integration-candidate` (read before doing anything else)
+
+**Start here with a read-only audit.** Do not trust this note, screenshots, or any prior report without independently checking: `git log`/`git status` on the actual branch, the real diff, whether tests actually pass right now, and how the current auth flow actually behaves. State may have changed since this was written.
+
+**Repository / worktree / branch:** `/Users/alex/dev/edu-crm` (main checkout, currently on `ai/phone-verification` @ `5cb3868` — untouched by this session). The integration work lives in a separate worktree: `/Users/alex/dev/edu-crm/.worktrees/ai-integration-candidate`, branch `ai/integration-candidate`, **HEAD `5262a9c`**, pushed and matching `origin/ai/integration-candidate` exactly (`git status` there: clean, "up to date with origin"). Draft PR: https://github.com/aleksey-kovalchuk-1/edu_crm/pull/3 → base `ai/crm-foundation`, **not merged**.
+
+**What this session implemented (all committed and pushed, nothing uncommitted left behind):**
+1. Merged `ai/auth-registration@9e7ff25`, `ai/phone-verification@5cb3868` (PR #2, untouched), `ai/file-ingestion@8a71320`, `ai/rostelecom-rebrand@47b7d6e` onto `ai/crm-foundation@390dcb0`, resolving a decision-ID collision (D-155-D-163 claimed by all four branches independently — renumbered per-branch, D-155-D-178) and additive code conflicts in `main.py`/`settings.py`/`compose.yaml`.
+2. Alembic collision: both phone-verification and file-ingestion added migration `0009` from parent `0008`. Renamed file-ingestion's two migrations `0009→0010`, `0010→0011`; phone-verification's `0009` untouched. One head. See `docs/operations/migrations.md`.
+3. Workflow status deactivation now requires confirmation + a replacement status when interactions are affected (D-179); migrates them transactionally with history + one audit event.
+4. Report builder: `app/reports.py`/`app/report_jobs.py`/`app/report_routes.py`, migration `0012` (`report_files`), xlsx/xls/pdf/json export, `ReportsPage.tsx`. Docs: `docs/api/reports.md`.
+5. Mock LMS/CMS connectors: `app/connectors.py`/`app/connector_routes.py`, migration `0013` (`integration_links`), `X-Connector-Key` auth. Docs: `docs/api/integrations.md`.
+6. Excel import re-verified after integration (no rebuild; added regression tests against the real `docs/samples/catalog-import-sample.xlsx`).
+7. `docs/operations/security.md` (safeguards implemented vs. remaining production controls, no 152-FZ/FSTEC claim); fixed `scripts/generate-dev-secrets.sh` (it never wrote the reCAPTCHA test keys its own `.example` file documents — found via an isolated Docker Compose health check).
+
+**Migrations added, in order:** `0010_ingestion_foundation.py`, `0011_documents.py` (renamed from file-ingestion's `0009`/`0010`), `0012_reports.py`, `0013_integration_links.py`. `alembic heads` → one head (`0013`) as of `5262a9c`.
+
+**Tests/builds actually run and their results (in the worktree, last run this session):**
+- Backend: `cd backend && TEST_DATABASE_URL=postgresql+psycopg://crm:local-demo-only@127.0.0.1:5433/postgres python -m pytest -q` → **306 passed**. (Port 5433 was a throwaway, disposable Postgres container this session started and removed at the end — start your own, or point `TEST_DATABASE_URL` at your own Postgres; do NOT point it at the user's main dev stack's database on port 5432.)
+- Frontend: `cd frontend && npm run lint && npm test -- --run && npm run build` → **122 passed**, lint clean, build clean.
+- `pip-audit -r backend/requirements.txt`, `npm audit --omit=dev` → no known vulnerabilities (run ad hoc, not wired into CI).
+- Isolated Docker Compose (`COMPOSE_PROJECT_NAME=edu-crm-integration`, remapped host ports via a local-only override file, disposable volumes, generated dev secrets) → db/api/keycloak/clamav/mailpit/web all reported healthy, migrations reached head, worker registered all 4 job kinds, a live curl through nginx exercised the new connector. **Torn down (`docker compose ... down -v`) at the end of this session** — nothing from it was left running.
+
+**Known failures, deferred items, risks:**
+- The 50-concurrent-user load test (T-071) was not attempted; only its 10-parallel-report half is verified.
+- Signed-in browser checks of new screens (Reports, the workflow-deactivation confirmation UI) still need the owner per D-130 — same as every earlier feature in this project.
+- `launches.product`/`launches.owner` are free text with no FK to the IT-product/user catalogs (D-180); report and connector matching against them is name-based, documented as a limitation, not silently pretended otherwise.
+- **New, not-yet-implemented product decision from the owner (2026-09-17) — see D-188-D-192 in `docs/decisions.md` and the new M11 section below.** This was captured as decisions/backlog only; no code for it was written this session.
+
+**Do not touch the user's existing Docker/Compose stack.** A separate, already-running stack (default project name `edu-crm`, containers `edu-crm-db-1`/`edu-crm-api-1`/`edu-crm-web-1`/`edu-crm-keycloak-1`/`edu-crm-worker-1`/`edu-crm-clamav-1`/`edu-crm-mailpit-1`, ports `5432`/`8000`/`8080`/`8025`) belongs to the main checkout on `ai/phone-verification` and was intentionally left running and untouched throughout this entire session. Any further Docker verification must use a different `COMPOSE_PROJECT_NAME` and remapped host ports (see `docs/operations/migrations.md`'s sibling verification approach, or just pick fresh unused ports) — never reuse 5432/8000/8080/8025 against this stack, never run `down -v` against the default-named project.
+
+**Exact next step for the next agent:** read-only audit first (branch/SHA/diff/tests/auth flow), then implement D-188-D-192 (phone-confirmed-but-pending-approval status, admin-panel approval screen, notification email to `alexey.kovalchuknew@gmail.com`, no auto-role-assignment) as its own worktree/branch/checkpoint, following this project's existing patterns (Keycloak stays the identity source per D-002; the "pending approval" gate is a CRM-side check, similar in spirit to D-161's "CRM-owned, not a Keycloak change" precedent for phone verification). Do not configure real SMS/SMTP/Keycloak-production/deployment (D-192) without separate, explicit owner approval.
+
+## M11 — Registration approval gate (D-188-D-192, TODO, not started)
+
+| ID | Task | Depends on | Acceptance criteria | Status |
+|---|---|---|---|---|
+| T-110 | `users` gains an approval state (e.g. `approval_status`: `pending`/`approved`/`rejected`) set to `pending` once phone verification (T-101/T-102) completes; migration + model change | T-101 | New self-registered, phone-verified users start `pending`; existing users are backfilled `approved` so nobody currently active is locked out | TODO |
+| T-111 | Every authenticated request path (`current_auth`/`require_roles` or equivalent) rejects a `pending`/`rejected` user from all CRM data and protected APIs -- not just hides UI | T-110 | A `pending` user's session gets 401/403 (which code -- decide and document) from every protected endpoint, confirmed by a test that tries several, not just one | TODO |
+| T-112 | Admin approval screen inside the existing protected admin panel (`crm-admin` role): list pending applications, approve or reject each; approving does **not** auto-assign an elevated role (D-191) | T-111 | Only `crm-admin` can reach it (role policy test); approve/reject audited; approved user's default role needs its own owner-confirmed decision before this ships, not assumed as `crm-user` | TODO |
+| T-113 | Email notification to `alexey.kovalchuknew@gmail.com` when a user reaches `pending` | T-110 | One notification per application via the existing dev-safe SMTP path (Mailpit locally, D-159); no real SMTP configured (D-192); test asserts the email is sent/captured, not that it was delivered to a real mailbox | TODO |
+
 ## M0 — Setup and safety
 
 | ID | Task | Depends on | Acceptance criteria | Status |
