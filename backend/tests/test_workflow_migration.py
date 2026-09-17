@@ -31,6 +31,10 @@ def test_existing_launches_get_default_workflow_and_history(empty_database_url):
             history = connection.execute(text('select from_status_id, to_status_id from status_changes order by created_at')).all()
             assert history == [(None, statuses[0]), (statuses[0], statuses[2]), (statuses[2], statuses[3])]
             assert connection.execute(text('select count(*) from stage_events')).scalar_one() == 3
+
+        # This test deliberately stops at 0008 above to check that one migration's data transform in
+        # isolation; continue to head so `check` below reflects the whole chain, not just this step.
+        command.upgrade(config, 'head')
     finally:
         engine.dispose()
     command.check(config)

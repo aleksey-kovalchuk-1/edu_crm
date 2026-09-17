@@ -13,6 +13,9 @@ export interface CurrentUser {
   email: string;
   full_name: string;
   roles: string[];
+  /** CRM-owned phone verification (D-161): "" until a number is verified. */
+  phone: string;
+  phone_verified_at: string | null;
 }
 
 /** Response of GET /auth/me. */
@@ -32,6 +35,10 @@ export const safeNextPath = (path: string) =>
 /** Backend login start; a full-page navigation, never fetch. */
 export const loginUrl = (next: string) =>
   `${API_BASE}/auth/login?next=${encodeURIComponent(safeNextPath(next))}`;
+
+/** Backend registration start (Keycloak's hosted registration page); a full-page navigation, never fetch. */
+export const registerUrl = (next: string) =>
+  `${API_BASE}/auth/register?next=${encodeURIComponent(safeNextPath(next))}`;
 
 export const useCurrentUser = () =>
   useQuery({

@@ -81,6 +81,41 @@ describe("workflows: reorder", () => {
   });
 });
 
+describe("workflows: status deactivation", () => {
+  it("asks for a replacement status when the status is in use, then migrates and disables it", async () => {
+    const api = mockApi({
+      "PATCH /workflow-statuses/12": (call) => {
+        const body = call.body as { is_active?: boolean; confirm?: boolean; replacement_status_id?: number };
+        if (!body.confirm) {
+          return apiError(409, "CONFLICT", "Статус нельзя отключить без подтверждения: в нём 1 взаимодействий", [
+            { field: "confirm", message: "Статус нельзя отключить без подтверждения: в нём 1 взаимодействий" },
+          ]);
+        }
+        return [200, { id: 12, name: "Согласование документов", position: 1, is_final: false, is_active: false }];
+      },
+    });
+    renderApp("/workflows");
+    await screen.findByText("Согласование документов");
+
+    fireEvent.click(screen.getByRole("button", { name: "Отключитьстатус «Согласование документов»" }));
+    expect(await screen.findByText(/Выберите активный статус, куда их перенести/)).toBeTruthy();
+    await waitFor(() => expect(api.count("PATCH", "/workflow-statuses/12")).toBe(1));
+
+    fireEvent.change(screen.getByLabelText("Перенести в статус"), { target: { value: "14" } });
+    fireEvent.click(screen.getByRole("button", { name: "Подтвердить перенос и отключение" }));
+
+    await waitFor(() => expect(api.count("PATCH", "/workflow-statuses/12")).toBe(2));
+    expect(api.calls.filter((c) => c.method === "PATCH" && c.path === "/workflow-statuses/12")[1].body).toEqual({
+      is_active: false,
+      confirm: true,
+      replacement_status_id: 14,
+    });
+    await waitFor(() =>
+      expect(screen.queryByText(/Выберите активный статус, куда их перенести/)).toBeNull(),
+    );
+  });
+});
+
 describe("workflows: conflicts", () => {
   it("shows the server 409 message when deactivating a workflow fails", async () => {
     mockApi({

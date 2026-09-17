@@ -144,7 +144,7 @@ def test_supervisor_edits_workflow_templates(client, keycloak):
 
     assert client.patch(f"/api/v1/workflows/{workflow['id']}", json={'is_active': False}).status_code == 409
     in_use = client.patch(f"/api/v1/workflow-statuses/{statuses[0]['id']}", json={'is_active': False})
-    assert in_use.status_code == 409 and in_use.json()['details'][0]['field'] == 'is_active'
+    assert in_use.status_code == 409 and in_use.json()['details'][0]['field'] == 'confirm'
     assert client.patch(f"/api/v1/workflow-statuses/{statuses[5]['id']}", json={'is_active': False}).json()['is_active'] is False
 
     added = client.post(f"/api/v1/workflows/{workflow['id']}/statuses", json={'name': 'Продление договора'})
@@ -159,3 +159,43 @@ def test_supervisor_edits_workflow_templates(client, keycloak):
 
     assert client.patch('/api/v1/workflow-statuses/999', json={'name': 'Нет'}).status_code == 404
     assert client.get('/api/v1/workflows/999').status_code in {404, 405}
+
+
+def test_deactivating_a_status_in_use_requires_confirmation_and_migrates_launches(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    _, launch = create_launch(client)
+    workflow = default_workflow(client)
+    first, second, third = workflow['statuses'][0], workflow['statuses'][1], workflow['statuses'][2]
+
+    no_confirm = client.patch(f"/api/v1/workflow-statuses/{first['id']}", json={'is_active': False})
+    assert no_confirm.status_code == 409 and no_confirm.json()['details'][0]['field'] == 'confirm'
+
+    no_replacement = client.patch(f"/api/v1/workflow-statuses/{first['id']}", json={'is_active': False, 'confirm': True})
+    assert no_replacement.status_code == 422 and no_replacement.json()['details'][0]['field'] == 'replacement_status_id'
+
+    same_status = client.patch(
+        f"/api/v1/workflow-statuses/{first['id']}", json={'is_active': False, 'confirm': True, 'replacement_status_id': first['id']})
+    assert same_status.status_code == 422
+
+    # `second` isn't in use, so it deactivates without confirmation; it's then unusable as a replacement target.
+    assert client.patch(f"/api/v1/workflow-statuses/{second['id']}", json={'is_active': False}).json()['is_active'] is False
+    inactive_target = client.patch(
+        f"/api/v1/workflow-statuses/{first['id']}", json={'is_active': False, 'confirm': True, 'replacement_status_id': second['id']})
+    assert inactive_target.status_code == 422 and inactive_target.json()['details'][0]['field'] == 'replacement_status_id'
+
+    migrated = client.patch(
+        f"/api/v1/workflow-statuses/{first['id']}", json={'is_active': False, 'confirm': True, 'replacement_status_id': third['id']})
+    assert migrated.status_code == 200 and migrated.json()['is_active'] is False
+
+    assert client.get('/api/v1/launches').json()[0]['stage'] == third['position']
+    history = client.get(f"/api/v1/launches/{launch['id']}/status-changes").json()
+    assert history[0]['to_status']['name'] == third['name']
+    assert history[0]['from_status']['name'] == first['name']
+    assert 'отключён администратором' in history[0]['comment']
+
+    with database(database_url) as db:
+        events = db.scalars(select(AuditEvent).where(AuditEvent.action == 'workflow_status.deactivate_migrate')).all()
+        assert len(events) == 1
+        assert events[0].payload == {
+            'status_id': first['id'], 'replacement_status_id': third['id'], 'launch_ids': [launch['id']], 'count': 1,
+        }

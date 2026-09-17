@@ -107,6 +107,10 @@ class StatusPatch(BaseModel):
     name: StatusName | None = None
     is_final: bool | None = None
     is_active: bool | None = None
+    # Only used when deactivating a status that still has interactions pointing at it (D-179): the caller
+    # must explicitly confirm and name an active status of the same process to migrate them into.
+    confirm: bool = False
+    replacement_status_id: int | None = None
 
 
 class StatusOrderIn(BaseModel):
@@ -169,9 +173,10 @@ def workflow_out(db, template):
     )
 
 
-def changed_fields(record, data):
+def changed_fields(record, data, *, exclude=()):
     return {name: {'from': getattr(record, name), 'to': value}
-            for name, value in data.model_dump(exclude_none=True).items() if getattr(record, name) != value}
+            for name, value in data.model_dump(exclude_none=True).items()
+            if name not in exclude and getattr(record, name) != value}
 
 
 def clean_filename(raw):
@@ -290,15 +295,46 @@ def update_status(status_id: int, data: StatusPatch, request: Request, auth: Aut
     if status is None:
         raise AppError(ErrorCode.RECORD_NOT_FOUND)
     template = load_template(db, status.template_id, lock=True)
-    changes = changed_fields(status, data)
+    changes = changed_fields(status, data, exclude={'confirm', 'replacement_status_id'})
     if changes.get('is_active', {}).get('to') is False:
-        in_use = db.scalar(select(func.count()).select_from(Launch).where(Launch.status_id == status.id))
-        if in_use:
-            raise field_error(ErrorCode.CONFLICT, 'is_active', f'Статус нельзя отключить: в нём {in_use} взаимодействий')
         others = db.scalar(select(func.count()).select_from(WorkflowStatus).where(
             WorkflowStatus.template_id == template.id, WorkflowStatus.id != status.id, WorkflowStatus.is_active.is_(True)))
         if not others:
             raise field_error(ErrorCode.CONFLICT, 'is_active', 'В процессе должен остаться хотя бы один активный статус')
+        # An administrator must not leave active interactions pointing at a status that can no longer be
+        # chosen (D-179): deactivating a status still in use requires explicit confirmation and an active
+        # replacement status of the same process; affected interactions are migrated in this transaction
+        # and each gets its own status-change history entry, so the timeline is never silently rewritten.
+        affected = db.scalars(select(Launch).where(Launch.status_id == status.id).with_for_update()).all()
+        if affected:
+            if not data.confirm:
+                raise field_error(ErrorCode.CONFLICT, 'confirm',
+                                   f'Статус нельзя отключить без подтверждения: в нём {len(affected)} взаимодействий')
+            if data.replacement_status_id is None:
+                raise field_error(ErrorCode.VALIDATION_ERROR, 'replacement_status_id',
+                                   'Выберите активный статус того же процесса для переноса взаимодействий')
+            replacement = db.scalar(select(WorkflowStatus).where(
+                WorkflowStatus.id == data.replacement_status_id, WorkflowStatus.template_id == template.id,
+                WorkflowStatus.is_active.is_(True), WorkflowStatus.id != status.id,
+            ))
+            if replacement is None:
+                raise field_error(ErrorCode.VALIDATION_ERROR, 'replacement_status_id',
+                                   'Статус переноса должен быть другим активным статусом того же процесса')
+            launch_ids = [launch.id for launch in affected]
+            for launch in affected:
+                db.add(StatusChange(
+                    launch_id=launch.id, from_status_id=status.id, to_status_id=replacement.id, user_id=auth.user.id,
+                    comment=f'Статус «{status.name}» отключён администратором; перенесено в «{replacement.name}»',
+                ))
+                db.add(StageEvent(launch_id=launch.id, stage=replacement.position))
+                launch.status_id = replacement.id
+                launch.stage = replacement.position
+            db.flush()
+            record_event(db, request, auth.user, 'workflow_status.deactivate_migrate', entity_type='workflow', entity_id=template.id,
+                         summary=f'Процесс «{template.name}»: статус «{status.name}» отключён, {len(launch_ids)} '
+                                 f'взаимодействий перенесено в «{replacement.name}»',
+                         payload={'status_id': status.id, 'replacement_status_id': replacement.id,
+                                   'launch_ids': launch_ids, 'count': len(launch_ids)})
     if changes:
         old_name = status.name
         for name, change in changes.items():

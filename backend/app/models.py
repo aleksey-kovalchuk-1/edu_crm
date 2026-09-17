@@ -147,6 +147,10 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # CRM-owned phone verification (not Keycloak/OIDC, D-002 unaffected): phone lives here, not as a
+    # Keycloak user attribute, because it is a CRM profile fact, not an identity fact Keycloak needs.
+    phone: Mapped[str] = mapped_column(String(20), default='', server_default='')
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class UserSession(Base):
@@ -175,6 +179,22 @@ class LoginState(Base):
     browser_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class PhoneVerificationCode(Base):
+    """A one-time SMS code for CRM-owned phone verification; only the hash is stored (`app/phone.py`)."""
+    __tablename__ = 'phone_verification_codes'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    # The number this code was sent to; kept alongside the code so a later edit to users.phone before this
+    # code is verified can't be mistaken for what was actually sent.
+    phone: Mapped[str] = mapped_column(String(20))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(default=0, server_default='0')
+    correlation_id: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 TRANSFER_STATUSES = ('not_started', 'in_progress', 'transferred', 'cancelled')
@@ -276,6 +296,9 @@ class AuditEvent(Base):
     summary: Mapped[str] = mapped_column(russian_text(300))
     payload: Mapped[dict] = mapped_column(JSONB, default=dict)
     ip: Mapped[str | None] = mapped_column(String(45))
+    # Ties one request's chain of events (upload -> validate -> apply -> download, ...) together for
+    # incident investigation (D-166); nullable because rows written before this column existed have none.
+    correlation_id: Mapped[str | None] = mapped_column(String(36), index=True)
 
 
 IMPORT_STATUSES = ('uploaded', 'applied')
@@ -300,3 +323,129 @@ class CatalogImport(Base):
     report: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+JOB_STATUSES = ('queued', 'running', 'succeeded', 'failed')
+
+
+class BackgroundJob(Base):
+    """A unit of work for the `worker` process (D-166): PostgreSQL-backed queue, no Redis.
+
+    `worker.py` claims a row with `SELECT ... FOR UPDATE SKIP LOCKED` so multiple worker processes can run
+    safely; `kind` looks up a handler in `app.jobs.JOB_HANDLERS`. Used first for import apply/rollback
+    (T-091/T-092), reused later for report generation (D-109) without a schema change.
+    """
+    __tablename__ = 'background_jobs'
+    __table_args__ = (
+        CheckConstraint(f"status in ({', '.join(repr(s) for s in JOB_STATUSES)})", name='status'),
+        Index('ix_background_jobs_status_id', 'status', 'id'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(64))
+    status: Mapped[str] = mapped_column(String(20), default='queued', server_default='queued')
+    payload: Mapped[dict] = mapped_column(JSONB, default=dict)
+    result: Mapped[dict | None] = mapped_column(JSONB)
+    error: Mapped[str | None] = mapped_column(Text)
+    correlation_id: Mapped[str | None] = mapped_column(String(36), index=True)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ImportMapping(Base):
+    """A saved, reusable column-to-field mapping for one entity's import wizard (brief: "save a named
+    mapping and show required fields")."""
+    __tablename__ = 'import_mappings'
+    __table_args__ = (UniqueConstraint('entity', 'name'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity: Mapped[str] = mapped_column(String(32), index=True)
+    name: Mapped[str] = mapped_column(russian_text(120))
+    mapping: Mapped[dict] = mapped_column(JSONB)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+DOCUMENT_ENTITY_TYPES = ('university', 'launch', 'contract')
+DOCUMENT_VERSION_STATES = ('uploaded', 'quarantined', 'validated', 'rejected', 'linked')
+SCAN_RESULTS = ('pending', 'clean', 'infected', 'error', 'not_scanned')
+
+
+class Document(Base):
+    """A versioned document linked to one CRM object (D-169; deliberately not the `attachments` table,
+    which is workflow status-change history, not a document library)."""
+    __tablename__ = 'documents'
+    __table_args__ = (Index('ix_documents_entity', 'entity_type', 'entity_id'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(20))
+    entity_id: Mapped[int]
+    title: Mapped[str] = mapped_column(russian_text(300))
+    doc_type: Mapped[str] = mapped_column(String(50), default='', server_default='')
+    academic_year: Mapped[str] = mapped_column(String(20), default='', server_default='')
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    source: Mapped[str] = mapped_column(russian_text(200), default='', server_default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    versions: Mapped[list['DocumentVersion']] = relationship(order_by='DocumentVersion.version_number', viewonly=True)
+
+
+class DocumentVersion(Base):
+    """One uploaded file for a `Document`; never deleted or overwritten in place (brief: "never overwrite
+    historical evidence"). `state`/`scan_result` track the quarantine pipeline (D-165)."""
+    __tablename__ = 'document_versions'
+    __table_args__ = (
+        UniqueConstraint('document_id', 'version_number'),
+        CheckConstraint(f"state in ({', '.join(repr(s) for s in DOCUMENT_VERSION_STATES)})", name='state'),
+        CheckConstraint(f"scan_result in ({', '.join(repr(s) for s in SCAN_RESULTS)})", name='scan_result'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(ForeignKey('documents.id'), index=True)
+    version_number: Mapped[int]
+    storage_key: Mapped[str] = mapped_column(String(64), unique=True)
+    sha256: Mapped[str] = mapped_column(String(64))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    content_type: Mapped[str] = mapped_column(String(100))
+    filename: Mapped[str] = mapped_column(String(255))
+    state: Mapped[str] = mapped_column(String(20), default='uploaded', server_default='uploaded')
+    scan_result: Mapped[str] = mapped_column(String(20), default='pending', server_default='pending')
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+REPORT_FORMATS = ('xlsx', 'xls', 'pdf', 'json')
+
+
+class ReportFile(Base):
+    """The generated file for one `report_generate` BackgroundJob (T-050-T-052, D-180+): one row per job,
+    written by the worker once, downloaded through the API (never a raw filesystem path)."""
+    __tablename__ = 'report_files'
+    __table_args__ = (CheckConstraint(f"format in ({', '.join(repr(f) for f in REPORT_FORMATS)})", name='format'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    job_id: Mapped[int] = mapped_column(ForeignKey('background_jobs.id'), unique=True)
+    format: Mapped[str] = mapped_column(String(10))
+    storage_key: Mapped[str] = mapped_column(String(64), unique=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+CONNECTOR_SOURCES = ('lms', 'cms')
+
+
+class IntegrationLink(Base):
+    """Identifies a `Launch` as originating from (or linked to) one record in a mock external system
+    (T-060, D-184-D-187): `(source, external_id)` is the idempotency key every inbound delivery is matched
+    against. Deliberately a separate table, not columns on `Launch` -- most launches are created directly in
+    the CRM and have no external counterpart at all."""
+    __tablename__ = 'integration_links'
+    __table_args__ = (
+        UniqueConstraint('source', 'external_id'),
+        CheckConstraint(f"source in ({', '.join(repr(s) for s in CONNECTOR_SOURCES)})", name='source'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    source: Mapped[str] = mapped_column(String(20))
+    external_id: Mapped[str] = mapped_column(String(200))
+    launch_id: Mapped[int] = mapped_column(ForeignKey('launches.id'), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)

@@ -36,11 +36,16 @@ EDU_CRM_CLIENT_SECRET=$client_secret
 EDU_CRM_DEMO_USER_PASSWORD=$(random_text 20)
 EDU_CRM_DEMO_SUPERVISOR_PASSWORD=$(random_text 20)
 EDU_CRM_DEMO_ADMIN_PASSWORD=$(random_text 20)
+# Google's own published "always pass" test key pair (D-158); see deploy/local/keycloak.env.example
+# for how to swap in real reCAPTCHA keys before any non-local deployment.
+RECAPTCHA_SITE_KEY=6LeIxAcTAAAAAJcZVRqyHh71UMIEGNQ_MXjiZKhI
+RECAPTCHA_SECRET_KEY=6LeIxAcTAAAAAGG-vFI1TnRWxMZNFuojJ4WifJWe
 EOF
 
 cat > "$api_env" <<EOF
 OIDC_CLIENT_SECRET=$client_secret
 SESSION_ENCRYPTION_KEY=$session_key
+CONNECTOR_API_KEY=$(random_text 40)
 EOF
 
 echo "Created $keycloak_env and $api_env (local development only; never commit them)."

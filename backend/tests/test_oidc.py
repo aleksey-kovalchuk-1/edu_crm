@@ -31,6 +31,16 @@ def test_authorization_url_uses_public_issuer_and_pkce(keycloak):
     }
 
 
+def test_authorization_url_registration_uses_the_registrations_endpoint(keycloak):
+    url = make_client(keycloak).authorization_url(
+        redirect_uri='http://localhost:8080/api/v1/auth/callback', state='s', nonce='n', code_challenge='c', registration=True,
+    )
+    parts = urlsplit(url)
+    assert f'{parts.scheme}://{parts.netloc}{parts.path}' == f'{ISSUER}/protocol/openid-connect/registrations'
+    query = {key: values[0] for key, values in parse_qs(parts.query).items()}
+    assert query['response_type'] == 'code' and query['client_id'] == CLIENT_ID and query['code_challenge_method'] == 'S256'
+
+
 def test_valid_token_yields_identity_with_crm_roles_only(keycloak):
     token = keycloak.id_token({'sub': 'kc-1', 'email': 'a@demo.local', 'name': 'Анна Демо', 'nonce': 'n',
                                'roles': ['default-roles-edu-crm', 'offline_access', 'crm-supervisor', 'crm-user']})

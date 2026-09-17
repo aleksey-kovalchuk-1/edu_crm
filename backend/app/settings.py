@@ -34,6 +34,27 @@ class Settings:
     cookie_secure: bool = True
     allowed_origins: tuple[str, ...] = ()
     attachments_dir: str = '/data/attachments'
+    # SMS provider for CRM-owned phone verification (D-not-yet-numbered; see docs/design/phone-verification.md).
+    # Unset in local dev/CI on purpose: app/sms.py falls back to a logging-only sender so the code is
+    # visible (API container log) without any real gateway account. Real credentials are supplied only
+    # through deploy/local/api.env, never committed.
+    sms_provider_url: str = ''
+    sms_provider_api_key: str = ''
+    sms_sender: str = 'CRM'
+    documents_dir: str = '/data/documents'
+    clamav_host: str = 'clamav'
+    clamav_port: int = 3310
+    # Signs short-lived download links (D-170); separate from session_encryption_key so rotating one
+    # does not also invalidate every active login session.
+    download_link_key: str = ''
+    reports_dir: str = '/data/reports'
+    # Overrides font autodetection for PDF export (D-181): empty means try the built-in candidate paths
+    # (fonts-dejavu-core in Docker/CI, a local dev install otherwise). Never a bundled repo file: DejaVu's
+    # own license permits redistribution, but this project doesn't ship a font binary in source control.
+    report_font_path: str = ''
+    # Shared secret the mock LMS/CMS connectors present in X-Connector-Key (D-186). Empty (the default)
+    # means every inbound connector call is rejected -- there is no "open by default" fallback.
+    connector_api_key: str = ''
 
     @property
     def callback_url(self):
@@ -123,4 +144,14 @@ def load_settings(environ=None):
         cookie_secure=_boolean(environ, 'COOKIE_SECURE', True),
         allowed_origins=allowed_origins,
         attachments_dir=(environ.get('ATTACHMENTS_DIR') or '').strip() or '/data/attachments',
+        sms_provider_url=(environ.get('SMS_PROVIDER_URL') or '').strip(),
+        sms_provider_api_key=(environ.get('SMS_PROVIDER_API_KEY') or '').strip(),
+        sms_sender=(environ.get('SMS_SENDER') or '').strip() or 'CRM',
+        documents_dir=(environ.get('DOCUMENTS_DIR') or '').strip() or '/data/documents',
+        clamav_host=(environ.get('CLAMAV_HOST') or '').strip() or 'clamav',
+        clamav_port=_positive_int(environ, 'CLAMAV_PORT', 3310),
+        download_link_key=(environ.get('DOWNLOAD_LINK_KEY') or '').strip() or encryption_key,
+        reports_dir=(environ.get('REPORTS_DIR') or '').strip() or '/data/reports',
+        report_font_path=(environ.get('REPORT_FONT_PATH') or '').strip(),
+        connector_api_key=(environ.get('CONNECTOR_API_KEY') or '').strip(),
     )

@@ -217,8 +217,17 @@ export function useAddStatus() {
 export function useUpdateStatus() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, ...data }: { id: number; name?: string; is_final?: boolean; is_active?: boolean }) =>
-      apiRequest<WorkflowStatus>(`/workflow-statuses/${id}`, "PATCH", data),
+    mutationFn: ({
+      id,
+      ...data
+    }: {
+      id: number;
+      name?: string;
+      is_final?: boolean;
+      is_active?: boolean;
+      confirm?: boolean;
+      replacement_status_id?: number;
+    }) => apiRequest<WorkflowStatus>(`/workflow-statuses/${id}`, "PATCH", data),
     onSettled: () => afterWorkflowEdit(client),
   });
 }
