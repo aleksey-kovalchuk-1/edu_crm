@@ -1,0 +1,25 @@
+/*
+ * Additive on top of keycloak.v2's own css/styles.css (still loaded, see theme.properties:
+ * `styles` lists both files, and this theme has no resources/css/styles.css of its own so that
+ * entry falls through to the parent theme unchanged - see docs/decisions.md D-156/D-158).
+ *
+ * Two asks: a bigger registration card (default PatternFly login card is a fairly narrow
+ * 31.25rem/34rem), and a reCAPTCHA widget that doesn't look like an afterthought next to the
+ * heading above it - register.ftl now requests Google's "normal" widget instead of "compact"
+ * (164x144 -> 304x78, this file just centers and spaces it).
+ */
+
+.pf-v5-c-login {
+  --pf-v5-c-login__container--MaxWidth: 37.5rem;
+  --pf-v5-c-login__container--xl--MaxWidth: none;
+  --pf-v5-c-login__container--xl--GridTemplateColumns: 40rem minmax(auto, 40rem);
+}
+
+#kc-register-form .g-recaptcha {
+  text-align: center;
+}
+
+.form-group:has(> .pf-v5-c-form__group-control > .g-recaptcha),
+.form-group:has(.g-recaptcha) {
+  margin-block: var(--pf-v5-global--spacer--md, 1rem);
+}
