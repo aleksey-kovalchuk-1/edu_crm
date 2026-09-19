@@ -56,8 +56,8 @@ export function Layout() {
               <GraduationCap size={27} />
             </span>
             <span>
-              образование
-              <span className="brand-sub">CRM · ЦИФРОВЫЕ НАВЫКИ</span>
+              UniCrm
+              <span className="brand-sub">ЦИФРОВЫЕ НАВЫКИ</span>
             </span>
           </Link>
           <div className="workspace">
@@ -162,7 +162,7 @@ export function Layout() {
             */}
             <Outlet key={`${location.pathname}#${navResets}`} />
             <footer>
-              Образование CRM <span>Рабочий шаблон · Данные вымышлены</span>
+              UniCrm <span>Рабочий шаблон · Данные вымышлены</span>
             </footer>
           </main>
         </div>

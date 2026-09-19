@@ -1,7 +1,7 @@
 {
   "realm": "edu-crm",
-  "displayName": "Образование CRM",
-  "displayNameHtml": "Образование CRM",
+  "displayName": "UniCrm",
+  "displayNameHtml": "UniCrm",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": true,
@@ -38,7 +38,7 @@
     "host": "${SMTP_HOST:mailpit}",
     "port": "${SMTP_PORT:1025}",
     "from": "${SMTP_FROM:noreply@educrm-demo.ru}",
-    "fromDisplayName": "Образование CRM",
+    "fromDisplayName": "UniCrm",
     "ssl": "${SMTP_SSL:false}",
     "starttls": "${SMTP_STARTTLS:false}",
     "auth": "${SMTP_AUTH:false}",
@@ -74,7 +74,7 @@
   "clients": [
     {
       "clientId": "edu-crm-api",
-      "name": "Образование CRM",
+      "name": "UniCrm",
       "description": "Серверный OIDC-клиент CRM (backend-for-frontend)",
       "enabled": true,
       "protocol": "openid-connect",

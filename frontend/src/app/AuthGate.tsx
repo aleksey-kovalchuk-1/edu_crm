@@ -113,8 +113,8 @@ function AuthScreen({
             <GraduationCap size={25} />
           </span>
           <span>
-            <strong>образование</strong>
-            <small>CRM · ЦИФРОВЫЕ НАВЫКИ</small>
+            <strong>UniCrm</strong>
+            <small>ЦИФРОВЫЕ НАВЫКИ</small>
           </span>
         </div>
         <p className="eyebrow">ОБРАЗОВАТЕЛЬНЫЕ ПАРТНЁРСТВА</p>

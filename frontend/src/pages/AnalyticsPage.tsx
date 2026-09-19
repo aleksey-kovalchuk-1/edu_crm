@@ -15,7 +15,7 @@ function exportCsv(annual: AnnualMetric[]) {
   );
   const a = document.createElement("a");
   a.href = url;
-  a.download = "edu-crm-analytics.csv";
+  a.download = "unicrm-analytics.csv";
   a.click();
   URL.revokeObjectURL(url);
 }
