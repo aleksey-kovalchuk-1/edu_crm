@@ -13,12 +13,14 @@ from .catalog_routes import active_university_in_scope, router as catalog_router
 from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
-from .models import AnnualMetric, Launch, StageEvent, StatusChange, Task, University, WorkflowStatus
+from .models import AnnualMetric, Launch, StageEvent, StatusChange, University, WorkflowStatus
+from .plan_routes import router as plan_router
 from .profile_routes import router as profile_router
+from .task_routes import router as task_router
 from .workflow_routes import router as workflow_router
 from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
-from .schemas import LaunchInput, StageInput, TaskInput
+from .schemas import LaunchInput, StageInput
 from .security import TokenCipher
 from .settings import load_settings, validate_database_url
 from .sms import send_sms
@@ -80,7 +82,9 @@ def create_app(settings=None, *, http_client=None, sms_sender=None):
     app.include_router(audit_router)
     app.include_router(catalog_router)
     app.include_router(import_router)
+    app.include_router(plan_router)
     app.include_router(profile_router)
+    app.include_router(task_router)
     app.include_router(workflow_router)
 
     @app.get('/api/v1/health')
@@ -141,31 +145,6 @@ def create_app(settings=None, *, http_client=None, sms_sender=None):
     def history(id: int, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
         launch_in_scope(db, auth.user, id)
         return [serialize(x) for x in db.scalars(select(StageEvent).where(StageEvent.launch_id == id).order_by(StageEvent.id.desc()))]
-
-    @app.get('/api/v1/tasks')
-    def tasks(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-        query = (
-            select(Task).join(Launch, Launch.id == Task.launch_id)
-            .where(university_scope(Launch.university_id, auth.user)).order_by(Task.deadline, Task.id)
-        )
-        return [serialize(x) for x in db.scalars(query)]
-
-    @app.patch('/api/v1/tasks/{id}')
-    def update_task(id: int, data: TaskInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-        record = db.scalar(
-            select(Task).join(Launch, Launch.id == Task.launch_id)
-            .where(Task.id == id, university_scope(Launch.university_id, auth.user))
-        )
-        if record is None:
-            raise AppError(ErrorCode.RECORD_NOT_FOUND)
-        if record.done != data.done:
-            previous = record.done
-            record.done = data.done
-            record_event(db, request, auth.user, 'task.update', entity_type='task', entity_id=id,
-                         summary=f'Задача «{record.title}» {"выполнена" if data.done else "возвращена в работу"}',
-                         payload={'done': {'from': previous, 'to': data.done}})
-            db.commit()
-        return serialize(record)
 
     @app.get('/api/v1/dashboard')
     def dashboard(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):

@@ -728,12 +728,6 @@ td small {
 .task:last-child {
   border: 0;
 }
-.task input {
-  accent-color: #824bd3;
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-}
 .task strong {
   font-weight: 600;
   font-size: 11px;
@@ -748,16 +742,10 @@ td small {
   color: #ac91b5;
   white-space: nowrap;
 }
-.task.done strong {
-  text-decoration: line-through;
-  color: #aaa;
-}
-.task.done {
-  opacity: 0.7;
-}
 .toolbar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
   margin-bottom: 22px;
 }
@@ -2440,4 +2428,441 @@ dialog.wide {
   .detail-links {
     gap: 10px;
   }
+}
+
+/* Tasks: status actions, checklist, subtasks, comments, activity (T-1xx) */
+.task-status-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+.task-status-actions button.danger {
+  border-color: #f0d9cf;
+  color: #a4461d;
+}
+.task-checklist,
+.task-subtasks,
+.task-comments,
+.task-activity {
+  width: 100%;
+}
+.checklist-items,
+.subtask-list,
+.comment-list,
+.activity-list {
+  list-style: none;
+  margin: 12px 0;
+  padding: 0;
+}
+.checklist-items li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid #f1edf6;
+}
+.checklist-items li:last-child {
+  border-bottom: 0;
+}
+.checklist-items label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  font-size: 12px;
+}
+.checklist-items input[type="checkbox"] {
+  accent-color: #7844d0;
+  width: 16px;
+  height: 16px;
+}
+.checklist-items li.done label span {
+  text-decoration: line-through;
+  color: #aaa;
+}
+.checklist-item-actions {
+  display: flex;
+  gap: 2px;
+}
+.checklist-add {
+  display: flex;
+  gap: 8px;
+}
+.checklist-add input {
+  flex: 1;
+}
+.subtask-list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1edf6;
+}
+.subtask-list li:last-child {
+  border-bottom: 0;
+}
+.comment {
+  padding: 12px 0;
+  border-bottom: 1px solid #f1edf6;
+  font-size: 12px;
+}
+.comment-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: #6c647a;
+  margin-bottom: 4px;
+}
+.comment-head time {
+  font-size: 10px;
+  color: #ac91b5;
+}
+.activity-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1edf6;
+  font-size: 12px;
+}
+.activity-item:last-child {
+  border-bottom: 0;
+}
+.activity-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  font-size: 10px;
+  color: #ac91b5;
+  white-space: nowrap;
+}
+
+/* Tasks: counters, filters, bulk actions, column picker, Deadline view (T-1xx slice 4) */
+.task-counters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.counter-tile {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 18px;
+  border: 1px solid #e4e1ec;
+  border-radius: 10px;
+  background: #fff;
+  min-width: 96px;
+  text-align: left;
+}
+.counter-tile:hover {
+  border-color: #c9bdda;
+}
+.counter-tile strong {
+  font-size: 20px;
+  color: #2c2438;
+}
+.counter-tile span {
+  font-size: 10px;
+  color: #6c647a;
+}
+.task-filter-bar {
+  border: 1px solid #eee6f4;
+  border-radius: 10px;
+  padding: 14px 16px;
+  margin-bottom: 18px;
+}
+.filter-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: flex-start;
+}
+.task-filter-bar fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.task-filter-bar legend {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6c647a;
+  padding: 0;
+  margin-bottom: 2px;
+}
+.filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f1edf6;
+}
+.filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid #e4d9f5;
+  background: #f6f0fc;
+  color: #5c2f9e;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 10px;
+}
+.bulk-actions-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  background: #f6f0fc;
+  border: 1px solid #e4d9f5;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+}
+.column-picker {
+  position: relative;
+}
+.column-picker summary {
+  cursor: pointer;
+  list-style: none;
+  border: 1px solid #e4e1ec;
+  border-radius: 8px;
+  padding: 9px 14px;
+  font-size: 11px;
+  font-weight: 650;
+  color: #4b435c;
+}
+.column-picker summary::-webkit-details-marker {
+  display: none;
+}
+.column-picker-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: #fff;
+  border: 1px solid #e4e1ec;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  z-index: 5;
+  box-shadow: 0 8px 24px rgba(40, 20, 60, 0.12);
+  min-width: 180px;
+}
+.deadline-group {
+  margin-bottom: 26px;
+}
+.deadline-group h3 {
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.template-card {
+  margin-bottom: 16px;
+}
+.template-steps {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 14px 0;
+  padding: 0;
+}
+.template-step {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #e4e1ec;
+  border-radius: 8px;
+  padding: 10px 14px;
+}
+.template-step.optional {
+  border-style: dashed;
+}
+.template-step-head {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.template-step-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+.plan-runs {
+  list-style: none;
+  margin: 0;
+  padding: 0 23px 10px;
+}
+.plan-run {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid #f1edf6;
+}
+.plan-run:last-child {
+  border-bottom: 0;
+}
+.plan-run > div:first-child {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 160px;
+}
+.plan-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1;
+  min-width: 200px;
+}
+.plan-progress-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: #f1edf6;
+  overflow: hidden;
+}
+.plan-progress-fill {
+  height: 100%;
+  background: #7c3ce0;
+  border-radius: 999px;
+}
+.plan-preview-steps {
+  list-style: none;
+  margin: 14px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.plan-preview-step {
+  border: 1px solid #e4e1ec;
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.plan-step-override {
+  font-size: 11px;
+  color: #a4283f;
+}
+.planner-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 14px;
+}
+.planner-column-settings {
+  min-width: 220px;
+}
+.planner-column-setting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.planner-column-setting-order {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.planner-board {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+.planner-column {
+  background: #f9f7fc;
+  border: 1px solid #e4e1ec;
+  border-radius: 10px;
+  padding: 10px;
+  min-width: 240px;
+  max-width: 280px;
+  flex: 1 0 240px;
+}
+.planner-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 2px 4px 10px;
+}
+.planner-column-head h3 {
+  font-size: 12px;
+  margin: 0;
+}
+.planner-column-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 40px;
+}
+.planner-column-empty {
+  text-align: center;
+  padding: 10px 0;
+}
+.planner-card {
+  background: #fff;
+  border: 1px solid #e4e1ec;
+  border-radius: 8px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.planner-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.planner-card-handle {
+  cursor: grab;
+  flex-shrink: 0;
+}
+.planner-card-meta {
+  font-size: 11px;
+}
+.planner-card-assignees {
+  font-size: 11px;
+}
+.planner-card-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 2px;
+}
+.planner-card-order {
+  display: flex;
+  gap: 2px;
+  flex-shrink: 0;
+}
+.planner-card-move {
+  font-size: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
 }

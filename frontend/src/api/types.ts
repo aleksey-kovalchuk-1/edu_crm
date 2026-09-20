@@ -158,14 +158,6 @@ export interface Launch {
   workflow_template_id?: number | null;
   status_id?: number | null;
 }
-export interface Task {
-  id: number;
-  launch_id: number;
-  title: string;
-  owner: string;
-  deadline: string;
-  done: boolean;
-}
 export interface StageEvent {
   id: number;
   stage: number;

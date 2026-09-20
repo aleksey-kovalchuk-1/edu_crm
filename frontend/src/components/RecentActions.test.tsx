@@ -62,14 +62,27 @@ describe("recent actions", () => {
     expect(await within(await panel()).findByText("Действий пока нет.")).toBeTruthy();
   });
 
-  it("is refreshed after a successful task toggle", async () => {
+  it("is refreshed after a successful launch creation", async () => {
     const api = mockApi({
-      "PATCH /tasks/1": () => ({ ...api.data.tasks[0], done: true }),
+      "POST /launches": (call) => [201, { id: 9, ...(call.body as object) }],
     });
     renderApp("/");
     await within(await panel()).findByText("Действий пока нет.");
     expect(api.count("GET", AUDIT_PATH)).toBe(1);
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Согласовать договор" }));
+
+    fireEvent.click(await screen.findByRole("button", { name: /Новое взаимодействие/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Новое взаимодействие" });
+    await within(dialog).findByRole("option", { name: "Технический университет" });
+    const form = dialog.querySelector("form")!;
+    const field = (name: string) => form.querySelector(`[name="${name}"]`) as HTMLInputElement;
+    fireEvent.change(field("university_id"), { target: { value: "2" } });
+    fireEvent.change(field("program"), { target: { value: "Разработка на Python" } });
+    fireEvent.change(field("product"), { target: { value: "Python" } });
+    fireEvent.change(field("owner"), { target: { value: "Анна Петрова" } });
+    fireEvent.change(field("students"), { target: { value: "12" } });
+    fireEvent.change(field("deadline"), { target: { value: "2026-12-01" } });
+    fireEvent.submit(form);
+
     await waitFor(() => expect(api.count("GET", AUDIT_PATH)).toBe(2));
   });
 });

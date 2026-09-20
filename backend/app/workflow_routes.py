@@ -2,9 +2,6 @@
 
 Comments may contain personal data, so audit events record only that a comment exists, never its text.
 """
-import hashlib
-import secrets
-import unicodedata
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -22,36 +19,15 @@ from .catalog_routes import PersonOut, university_scope
 from .db import get_db
 from .errors import AppError, ErrorCode
 from .models import Attachment, Launch, StageEvent, StatusChange, User, WorkflowStatus, WorkflowTemplate
+from .uploads import ALLOWED_TYPES_TEXT, MAX_ATTACHMENTS, field_error, store_upload
 from .workflows import all_statuses, launch_in_scope
 
 router = APIRouter(prefix='/api/v1', tags=['Процессы и статусы'])
 any_role = require_roles(*ALL_ROLES)
 workflow_editor = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
 
-MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024
-MAX_ATTACHMENTS = 5
 MAX_COMMENT_LENGTH = 2000
 MAX_STATUSES = 50
-CHUNK_BYTES = 1024 * 1024
-
-ZIP = (b'PK\x03\x04', b'PK\x05\x06')
-OLE = (b'\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1',)
-# extension -> (accepted leading bytes, content type sent on download); the extension and the content must agree.
-FILE_TYPES = {
-    'png': ((b'\x89PNG\r\n\x1a\n',), 'image/png'),
-    'jpg': ((b'\xff\xd8\xff',), 'image/jpeg'),
-    'jpeg': ((b'\xff\xd8\xff',), 'image/jpeg'),
-    'pdf': ((b'%PDF-',), 'application/pdf'),
-    'zip': (ZIP, 'application/zip'),
-    'gz': ((b'\x1f\x8b',), 'application/gzip'),
-    'gzip': ((b'\x1f\x8b',), 'application/gzip'),
-    'rar': ((b'Rar!\x1a\x07',), 'application/vnd.rar'),
-    'doc': (OLE, 'application/msword'),
-    'xls': (OLE, 'application/vnd.ms-excel'),
-    'docx': (ZIP, 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'),
-    'xlsx': (ZIP, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'),
-}
-ALLOWED_TYPES_TEXT = 'png, jpeg, pdf, zip, gzip, rar, doc, docx, xls, xlsx'
 
 StatusName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
 TemplateName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
@@ -140,10 +116,6 @@ class StatusChangeOut(BaseModel):
 
 # ---------- helpers ----------
 
-def field_error(code, field, message):
-    return AppError(code, message, [{'field': field, 'message': message, 'type': 'value_error'}])
-
-
 def flush_or_conflict(db, field, message):
     try:
         db.flush()
@@ -174,42 +146,6 @@ def changed_fields(record, data):
             for name, value in data.model_dump(exclude_none=True).items() if getattr(record, name) != value}
 
 
-def clean_filename(raw):
-    name = (raw or 'file').replace('\\', '/').rsplit('/', 1)[-1]
-    name = ''.join(ch for ch in name if not unicodedata.category(ch).startswith('C')).strip() or 'file'
-    if len(name) > 255:
-        stem, dot, extension = name.rpartition('.')
-        name = (stem[:255 - len(extension) - 1] + dot + extension) if dot and len(extension) < 20 else name[:255]
-    return name
-
-
-def store_upload(upload, directory):
-    """Checks one uploaded file and streams it to disk under a random key; returns (Attachment, path)."""
-    filename = clean_filename(upload.filename)
-    extension = filename.rpartition('.')[2].lower() if '.' in filename else ''
-    if extension not in FILE_TYPES:
-        raise field_error(ErrorCode.UNSUPPORTED_MEDIA_TYPE, 'files', f'Файл «{filename}»: допустимые форматы — {ALLOWED_TYPES_TEXT}')
-    signatures, content_type = FILE_TYPES[extension]
-    head = upload.file.read(8)
-    if not head.startswith(signatures):
-        raise field_error(ErrorCode.UNSUPPORTED_MEDIA_TYPE, 'files', f'Файл «{filename}»: содержимое не соответствует расширению .{extension}')
-    key = secrets.token_hex(16)
-    path = directory / key
-    digest = hashlib.sha256(head)
-    size = len(head)
-    try:
-        with open(path, 'xb') as target:
-            target.write(head)
-            while chunk := upload.file.read(CHUNK_BYTES):
-                size += len(chunk)
-                if size > MAX_ATTACHMENT_BYTES:
-                    raise field_error(ErrorCode.PAYLOAD_TOO_LARGE, 'files', f'Файл «{filename}» больше 20 МБ')
-                digest.update(chunk)
-                target.write(chunk)
-    except BaseException:
-        path.unlink(missing_ok=True)
-        raise
-    return Attachment(filename=filename, content_type=content_type, size_bytes=size, sha256=digest.hexdigest(), storage_key=key), path
 
 
 def status_change_outs(db, changes):
@@ -376,12 +312,12 @@ def change_status(
         db.add(change)
         db.flush()
         for upload in uploads:
-            attachment, path = store_upload(upload, directory)
+            filename, content_type, size, sha256, key, path = store_upload(upload, directory)
             stored.append(path)
-            attachment.status_change_id = change.id
-            attachment.launch_id = launch.id
-            attachment.uploaded_by_user_id = auth.user.id
-            db.add(attachment)
+            db.add(Attachment(
+                filename=filename, content_type=content_type, size_bytes=size, sha256=sha256, storage_key=key,
+                status_change_id=change.id, launch_id=launch.id, uploaded_by_user_id=auth.user.id,
+            ))
         if not same_status:
             launch.status_id = status.id
             launch.stage = status.position

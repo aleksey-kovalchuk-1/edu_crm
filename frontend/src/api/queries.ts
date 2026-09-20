@@ -10,13 +10,11 @@ import type {
   Dashboard,
   Launch,
   LaunchInput,
-  Task,
 } from "./types";
 
-/** Stable query keys; one per endpoint. */
+/** Stable query keys; one per endpoint. Tasks keys live in api/tasks.ts (they carry list params). */
 export const queryKeys = {
   launches: ["launches"] as const,
-  tasks: ["tasks"] as const,
   stages: ["stages"] as const,
   dashboard: ["dashboard"] as const,
   audit: ["audit"] as const,
@@ -37,12 +35,6 @@ export const useLaunches = () =>
   useQuery({
     queryKey: queryKeys.launches,
     queryFn: () => apiRequest<Launch[]>("/launches"),
-  });
-
-export const useTasks = () =>
-  useQuery({
-    queryKey: queryKeys.tasks,
-    queryFn: () => apiRequest<Task[]>("/tasks"),
   });
 
 export const useStages = () =>
@@ -66,29 +58,6 @@ export const invalidate = (client: QueryClient, ...keys: (readonly unknown[])[])
   for (const queryKey of keys)
     void client.invalidateQueries({ queryKey, exact: true });
 };
-
-/** Toggle a task; optimistic, then refreshes tasks only (the dashboard does not count tasks). */
-export function useToggleTask() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: ({ id, done }: { id: number; done: boolean }) =>
-      apiRequest<Task>(`/tasks/${id}`, "PATCH", { done }),
-    onMutate: async ({ id, done }) => {
-      await client.cancelQueries({ queryKey: queryKeys.tasks, exact: true });
-      const previous = client.getQueryData<Task[]>(queryKeys.tasks);
-      client.setQueryData<Task[]>(queryKeys.tasks, (tasks) =>
-        tasks?.map((t) => (t.id === id ? { ...t, done } : t)),
-      );
-      return { previous };
-    },
-    onError: (_error, _vars, context) => {
-      if (context?.previous)
-        client.setQueryData(queryKeys.tasks, context.previous);
-    },
-    onSuccess: () => invalidateAudit(client),
-    onSettled: () => invalidate(client, queryKeys.tasks),
-  });
-}
 
 export function useCreateLaunch() {
   const client = useQueryClient();

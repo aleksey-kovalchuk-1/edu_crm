@@ -361,12 +361,14 @@ def test_out_of_scope_task_cannot_be_changed(head, manager, database_url):
     foreign = create_university(head, 'Чужой вуз')
     launch = head.post('/api/v1/launches', json={**LAUNCH, 'university_id': foreign['id']}).json()
     with database(database_url) as db:
-        task = Task(launch_id=launch['id'], title='Подготовить договор', owner='Павел Демо', deadline=date(2026, 10, 1), done=False)
+        task = Task(launch_id=launch['id'], university_id=foreign['id'], title='Подготовить договор', deadline=date(2026, 10, 1))
         db.add(task)
         db.commit()
         task_id = task.id
-    assert manager.patch(f'/api/v1/tasks/{task_id}', json={'done': True}).status_code == 404
-    assert manager.get('/api/v1/tasks').json() == []
+    assert manager.get(f'/api/v1/tasks/{task_id}').status_code == 404
+    assert manager.patch(f'/api/v1/tasks/{task_id}', json={'title': 'x', 'version': 1}).status_code == 404
+    assert manager.get('/api/v1/tasks', params={'scope': 'all'}).status_code == 403
+    assert manager.get('/api/v1/tasks').json()['items'] == []
 
 
 def test_interactions_and_tasks_follow_manager_scope(head, manager):

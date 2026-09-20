@@ -33,12 +33,13 @@ def test_requests_that_change_nothing_or_fail_record_nothing(client, keycloak, d
     seed_database(database_url)
     login(client, keycloak, roles=('crm-supervisor',))
     launch = client.get('/api/v1/launches').json()[0]
-    task = client.get('/api/v1/tasks').json()[0]
+    task = client.get('/api/v1/tasks', params={'scope': 'all'}).json()['items'][0]
+    detail = client.get(f"/api/v1/tasks/{task['id']}").json()
 
     assert client.patch(f"/api/v1/launches/{launch['id']}", json={'stage': launch['stage']}).status_code == 200
-    assert client.patch(f"/api/v1/tasks/{task['id']}", json={'done': task['done']}).status_code == 200
+    assert client.patch(f"/api/v1/tasks/{task['id']}", json={'title': detail['title'], 'version': detail['version']}).status_code == 200
     assert client.post('/api/v1/universities', json={'name': ' ', 'city': 'Москва'}).status_code == 422
-    assert client.patch('/api/v1/tasks/999', json={'done': True}).status_code == 404
+    assert client.patch('/api/v1/tasks/999', json={'title': 'x', 'version': 1}).status_code == 404
     assert client.post('/api/v1/launches', json={**LAUNCH, 'university_id': 999}).status_code == 404
 
     assert recorded_events(database_url) == []
@@ -53,11 +54,13 @@ def test_forbidden_request_records_nothing(client, keycloak, database_url):
 def test_task_update_records_before_and_after(client, keycloak, database_url):
     seed_database(database_url)
     login(client, keycloak, roles=('crm-supervisor',))
-    task = client.get('/api/v1/tasks').json()[0]
-    assert client.patch(f"/api/v1/tasks/{task['id']}", json={'done': not task['done']}).status_code == 200
+    task = client.get('/api/v1/tasks', params={'scope': 'all'}).json()['items'][0]
+    detail = client.get(f"/api/v1/tasks/{task['id']}").json()
+    new_title = detail['title'] + ' (обновлено)'
+    assert client.patch(f"/api/v1/tasks/{task['id']}", json={'title': new_title, 'version': detail['version']}).status_code == 200
     [event] = recorded_events(database_url)
     assert event.action == 'task.update'
-    assert event.payload == {'done': {'from': task['done'], 'to': not task['done']}}
+    assert event.payload == {'title': {'from': detail['title'], 'to': new_title}}
 
 
 def test_managers_see_only_their_own_recent_actions(app, keycloak):

@@ -20,6 +20,10 @@ def russian_text(length):
     return String(length, collation=RUSSIAN_COLLATION)
 
 
+def utcnow():
+    return datetime.now(timezone.utc)
+
+
 class Base(DeclarativeBase):
     metadata = MetaData(naming_convention=NAMING_CONVENTION)
 
@@ -57,14 +61,210 @@ class Launch(Base):
     workflow_template_id: Mapped[int] = mapped_column(ForeignKey('workflow_templates.id'))
     status_id: Mapped[int] = mapped_column(ForeignKey('workflow_statuses.id'))
 
+TASK_STATUSES = ('new', 'in_progress', 'awaiting_review', 'completed', 'deferred', 'cancelled')
+TASK_PRIORITIES = ('low', 'normal', 'high', 'urgent')
+TASK_MEMBER_ROLES = ('assignee', 'participant', 'observer')
+TASK_PLAN_ASSIGNEE_RULES = ('specific_user', 'interaction_owner', 'university_manager', 'plan_creator', 'manual')
+TASK_PLAN_OFFSET_UNITS = ('calendar', 'business')
+
+
 class Task(Base):
+    """Tasks workspace (docs/design/tasks.md, decisions D-158-D-161).
+
+    `owner`/`done` are the placeholder module's original columns (migration 0010 keeps them, unused
+    by new code, for the legacy `GET/PATCH /api/v1/tasks` endpoints only).
+    """
     __tablename__ = 'tasks'
+    __table_args__ = (
+        CheckConstraint(f"status in ({', '.join(repr(s) for s in TASK_STATUSES)})", name='status'),
+        CheckConstraint(f"priority in ({', '.join(repr(s) for s in TASK_PRIORITIES)})", name='priority'),
+        CheckConstraint('parent_task_id != id', name='no_self_parent'),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
-    launch_id: Mapped[int] = mapped_column(ForeignKey('launches.id'))
     title: Mapped[str] = mapped_column(russian_text(200))
-    owner: Mapped[str] = mapped_column(russian_text(100))
-    deadline: Mapped[date] = mapped_column(Date)
-    done: Mapped[bool] = mapped_column(Boolean, default=False)
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    status: Mapped[str] = mapped_column(String(20), default='new', server_default='new', index=True)
+    priority: Mapped[str] = mapped_column(String(10), default='normal', server_default='normal')
+    deadline: Mapped[date | None] = mapped_column(Date, index=True)
+    planned_start: Mapped[date | None] = mapped_column(Date)
+    creator_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), index=True)
+    university_id: Mapped[int | None] = mapped_column(ForeignKey('universities.id'), index=True)
+    launch_id: Mapped[int | None] = mapped_column(ForeignKey('launches.id'), index=True)
+    contract_id: Mapped[int | None] = mapped_column(ForeignKey('contracts.id'), index=True)
+    parent_task_id: Mapped[int | None] = mapped_column(ForeignKey('tasks.id'), index=True)
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    require_checklist_complete: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    archived_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    origin_plan_run_id: Mapped[int | None] = mapped_column(ForeignKey('task_plan_runs.id'))
+    # Which template step generated this task, kept even after the run's template_snapshot is only history.
+    origin_template_step_key: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    version: Mapped[int] = mapped_column(default=1, server_default='1')
+    # Placeholder-module columns, kept for the legacy endpoints only (see class docstring).
+    owner: Mapped[str] = mapped_column(russian_text(100), default='', server_default='')
+    done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    __mapper_args__ = {'version_id_col': version}
+
+    members: Mapped[list['TaskMember']] = relationship(order_by='TaskMember.role', viewonly=True)
+    checklist_items: Mapped[list['TaskChecklistItem']] = relationship(order_by='TaskChecklistItem.position', viewonly=True)
+    comments: Mapped[list['TaskComment']] = relationship(order_by='TaskComment.created_at', viewonly=True)
+    events: Mapped[list['TaskEvent']] = relationship(order_by='TaskEvent.created_at', viewonly=True)
+
+
+class TaskMember(Base):
+    """One assignee, participant (co-executor) or observer of a task; several rows give a task several assignees."""
+    __tablename__ = 'task_members'
+    __table_args__ = (CheckConstraint(f"role in ({', '.join(repr(r) for r in TASK_MEMBER_ROLES)})", name='role'),)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True, index=True)
+    role: Mapped[str] = mapped_column(String(20), primary_key=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskChecklistItem(Base):
+    """A mini-task inside a task's checklist; distinct from a subtask (a full Task with parent_task_id)."""
+    __tablename__ = 'task_checklist_items'
+    __table_args__ = (UniqueConstraint('task_id', 'position'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), index=True)
+    title: Mapped[str] = mapped_column(russian_text(200))
+    position: Mapped[int]
+    is_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    assignee_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    deadline: Mapped[date | None] = mapped_column(Date)
+    completed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskTag(Base):
+    __tablename__ = 'task_tags'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(russian_text(60), unique=True)
+    color: Mapped[str] = mapped_column(String(20), default='', server_default='')
+
+
+class TaskTagLink(Base):
+    __tablename__ = 'task_tag_links'
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), primary_key=True)
+    tag_id: Mapped[int] = mapped_column(ForeignKey('task_tags.id', ondelete='CASCADE'), primary_key=True, index=True)
+
+
+class TaskComment(Base):
+    """A comment on a task; may carry personal data, so audit events record only that one was added (D-153 pattern)."""
+    __tablename__ = 'task_comments'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), index=True)
+    author_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskAttachment(Base):
+    """Same shape as the existing `Attachment` (launch status changes), scoped to a task instead (D-153)."""
+    __tablename__ = 'task_attachments'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), index=True)
+    comment_id: Mapped[int | None] = mapped_column(ForeignKey('task_comments.id', ondelete='CASCADE'), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str] = mapped_column(String(64))
+    storage_key: Mapped[str] = mapped_column(String(64), unique=True)
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskEvent(Base):
+    """One task's activity timeline (status/deadline changes, reassignment, checklist, review, archive, ...).
+
+    Alongside the global `AuditEvent` (entity_type='task'), the same dual-write pattern as
+    `StatusChange` + `AuditEvent` for launches.
+    """
+    __tablename__ = 'task_events'
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), index=True)
+    event_type: Mapped[str] = mapped_column(String(30))
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    from_value: Mapped[str | None] = mapped_column(String(100))
+    to_value: Mapped[str | None] = mapped_column(String(100))
+    comment: Mapped[str] = mapped_column(Text, default='', server_default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class TaskPlanTemplate(Base):
+    """A reusable task plan template (the central use case, docs/design/tasks.md) - separate from WorkflowTemplate."""
+    __tablename__ = 'task_plan_templates'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(russian_text(200), unique=True)
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    steps: Mapped[list['TaskPlanTemplateStep']] = relationship(order_by='TaskPlanTemplateStep.position', viewonly=True)
+
+
+class TaskPlanTemplateStep(Base):
+    __tablename__ = 'task_plan_template_steps'
+    __table_args__ = (
+        UniqueConstraint('template_id', 'position'),
+        CheckConstraint(f"assignee_rule in ({', '.join(repr(r) for r in TASK_PLAN_ASSIGNEE_RULES)})", name='assignee_rule'),
+        CheckConstraint(f"offset_unit in ({', '.join(repr(u) for u in TASK_PLAN_OFFSET_UNITS)})", name='offset_unit'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey('task_plan_templates.id'), index=True)
+    position: Mapped[int]
+    title: Mapped[str] = mapped_column(russian_text(200))
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    assignee_rule: Mapped[str] = mapped_column(String(30))
+    assignee_rule_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    start_offset_days: Mapped[int] = mapped_column(default=0, server_default='0')
+    deadline_offset_days: Mapped[int | None]
+    offset_unit: Mapped[str] = mapped_column(String(10), default='calendar', server_default='calendar')
+    priority: Mapped[str] = mapped_column(String(10), default='normal', server_default='normal')
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    is_optional: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    depends_on_step_id: Mapped[int | None] = mapped_column(ForeignKey('task_plan_template_steps.id'))
+    checklist_items: Mapped[list['TaskPlanTemplateStepChecklistItem']] = relationship(
+        order_by='TaskPlanTemplateStepChecklistItem.position', viewonly=True,
+    )
+
+
+class TaskPlanTemplateStepChecklistItem(Base):
+    __tablename__ = 'task_plan_template_step_checklist_items'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    step_id: Mapped[int] = mapped_column(ForeignKey('task_plan_template_steps.id'), index=True)
+    title: Mapped[str] = mapped_column(russian_text(200))
+    position: Mapped[int]
+
+
+class TaskPlanRun(Base):
+    """One transactional generation of a template's tasks (docs/design/tasks.md); later template edits never rewrite it."""
+    __tablename__ = 'task_plan_runs'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey('task_plan_templates.id'), index=True)
+    template_snapshot: Mapped[dict] = mapped_column(JSONB)
+    university_id: Mapped[int] = mapped_column(ForeignKey('universities.id'), index=True)
+    launch_id: Mapped[int | None] = mapped_column(ForeignKey('launches.id'))
+    started_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    start_date: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskUserPreferences(Base):
+    """Per-user Tasks workspace preferences the spec asks to persist on the server (not in the URL): visible
+    List columns and the personal «My plan» column/card layout. Filters, sort, pagination and the active
+    view stay in URL query parameters and are never stored here."""
+    __tablename__ = 'task_user_preferences'
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    list_columns: Mapped[list | None] = mapped_column(JSONB)
+    planner_columns: Mapped[list | None] = mapped_column(JSONB)
+    planner_positions: Mapped[dict | None] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class StageEvent(Base):
     __tablename__ = 'stage_events'
@@ -130,10 +330,6 @@ class AnnualMetric(Base):
     applications: Mapped[int]
     students: Mapped[int]
     streams: Mapped[int]
-
-
-def utcnow():
-    return datetime.now(timezone.utc)
 
 
 class User(Base):

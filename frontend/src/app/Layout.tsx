@@ -7,7 +7,7 @@ import {
   PanelLeftClose,
   Plus,
 } from "lucide-react";
-import { useTasks } from "../api/queries";
+import { useTaskList } from "../api/tasks";
 import { CreateModal } from "../components/forms/CreateModal";
 import { ErrorAlert } from "../components/QueryState";
 import { canEditCatalog, roleLabel, userInitials } from "../lib/user";
@@ -35,9 +35,10 @@ export function Layout() {
   const [create, setCreate] = useState<CreateKind | null>(null);
   // Bumped by a sidebar click so re-opening the current page resets its local state.
   const [navResets, setNavResets] = useState(0);
-  const tasks = useTasks();
+  // Total tasks in "Мои задачи" scope; not filtered to open-only yet (counters land with T-104's filters).
+  const tasks = useTaskList({ scope: "mine", limit: 1 });
   const page = findPage(location.pathname);
-  const openTasks = tasks.data?.filter((t) => !t.done).length;
+  const openTasks = tasks.data?.total;
   const closeMenu = () => setMenu(false);
   const initials = userInitials(user);
   // The server enforces roles; the interface only hides actions that would be refused.

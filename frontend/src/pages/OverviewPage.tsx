@@ -9,12 +9,8 @@ import {
   Clock3,
   Users,
 } from "lucide-react";
-import {
-  useDashboard,
-  useLaunches,
-  useStages,
-  useTasks,
-} from "../api/queries";
+import { useDashboard, useLaunches, useStages } from "../api/queries";
+import { useTaskList } from "../api/tasks";
 import { paths } from "../app/navigation";
 import { AnnualChart } from "../components/AnnualChart";
 import { LaunchTable } from "../components/LaunchTable";
@@ -27,7 +23,7 @@ export function OverviewPage() {
   const navigate = useNavigate();
   const dashboard = useDashboard();
   const launches = useLaunches();
-  const tasks = useTasks();
+  const tasks = useTaskList({ scope: "mine", sort: "deadline", limit: 10 });
   const stages = useStages();
   const queries = [dashboard, launches, tasks, stages];
   const fallback = queryFallback(queries);
@@ -167,10 +163,7 @@ export function OverviewPage() {
             Все задачи <ArrowRight size={16} />
           </button>
         </div>
-        <TaskList
-          rows={taskList.filter((t) => !t.done).slice(0, 3)}
-          launches={launchList}
-        />
+        <TaskList items={taskList.items.filter((t) => t.status !== "completed").slice(0, 3)} />
       </section>
       <RecentActions />
     </>
