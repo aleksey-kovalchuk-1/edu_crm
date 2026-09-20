@@ -2953,6 +2953,15 @@ dialog.wide {
   justify-content: flex-end;
   gap: 8px;
 }
+.deadline-column-add {
+  width: 100%;
+  justify-content: center;
+  font-size: 10px;
+  padding: 6px 0;
+  margin-bottom: 6px;
+  border: 1px dashed #d8cdea;
+  border-radius: 7px;
+}
 .planner-column-list {
   list-style: none;
   margin: 0;

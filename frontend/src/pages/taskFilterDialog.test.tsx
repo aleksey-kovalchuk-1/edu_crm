@@ -55,7 +55,7 @@ describe("tasks: filter dialog visibility", () => {
   });
 
   it("is visible in both the List and Deadlines views", async () => {
-    mockApi({ "GET /tasks/deadline-groups": () => [] });
+    mockApi();
     renderApp("/tasks");
     await screen.findByRole("button", { name: /Фильтры/ });
     fireEvent.click(await screen.findByRole("tab", { name: "Сроки" }));
@@ -157,7 +157,6 @@ describe("tasks: saved filters restore per view/scope, without leaking", () => {
           "list:all": { priority: ["high"] },
         },
       }),
-      "GET /tasks/deadline-groups": () => [],
     });
     renderApp("/tasks");
     await screen.findByRole("link", { name: "Согласовать договор" });

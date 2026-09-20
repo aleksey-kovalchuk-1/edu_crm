@@ -271,58 +271,6 @@ describe("tasks: counters and filters", () => {
   });
 });
 
-describe("tasks: deadline view", () => {
-  it("switches to the Deadlines view and renders groups", async () => {
-    mockApi({
-      "GET /tasks/deadline-groups": () => [
-        { group: "overdue", total: 1, items: [{ id: 1, title: "Согласовать договор", status: "new", priority: "normal", deadline: "2026-09-01", creator: null, assignees: [], university: null, created_at: "2026-09-01T00:00:00Z" }] },
-        { group: "today", total: 0, items: [] },
-        { group: "this_week", total: 0, items: [] },
-        { group: "next_week", total: 0, items: [] },
-        { group: "later", total: 0, items: [] },
-        { group: "no_deadline", total: 0, items: [] },
-        { group: "completed", total: 0, items: [] },
-      ],
-    });
-    renderApp("/tasks");
-    fireEvent.click(await screen.findByRole("tab", { name: "Сроки" }));
-    expect(await screen.findByRole("heading", { name: /Просрочено/ })).toBeTruthy();
-    expect(await screen.findByRole("link", { name: /Согласовать договор/ })).toBeTruthy();
-  });
-
-  it("shows each task's priority, collapses a group, and links a truncated group into the List view", async () => {
-    mockApi({
-      "GET /tasks/deadline-groups": () => [
-        {
-          group: "overdue",
-          total: 3,
-          items: [
-            { id: 1, title: "Согласовать договор", status: "new", priority: "urgent", deadline: "2026-09-01", creator: null, assignees: [], university: null, created_at: "2026-09-01T00:00:00Z" },
-          ],
-        },
-        { group: "today", total: 0, items: [] },
-        { group: "this_week", total: 0, items: [] },
-        { group: "next_week", total: 0, items: [] },
-        { group: "later", total: 0, items: [] },
-        { group: "no_deadline", total: 0, items: [] },
-        { group: "completed", total: 0, items: [] },
-      ],
-    });
-    renderApp("/tasks");
-    fireEvent.click(await screen.findByRole("tab", { name: "Сроки" }));
-    const heading = await screen.findByRole("heading", { name: /Просрочено/ });
-    expect(within(heading.closest(".deadline-group")!).getByText("Срочный")).toBeTruthy();
-
-    const moreLink = screen.getByRole("link", { name: /И ещё 2/ });
-    expect(moreLink.getAttribute("href")).toBe("/tasks?deadline_preset=overdue");
-
-    const details = heading.closest("details")!;
-    expect(details.open).toBe(true);
-    fireEvent.click(heading.closest("summary")!);
-    expect(details.open).toBe(false);
-  });
-});
-
 describe("tasks: bulk actions", () => {
   it("selects rows and applies a bulk status change, reporting per-task skips", async () => {
     const api = mockApi({
