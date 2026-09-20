@@ -50,6 +50,11 @@ export const TASK_SCOPE_LABELS: Record<TaskScope, string> = {
   all: "Все задачи",
 };
 
+/** Scope tabs shown in the UI, in display order. `created`/`observing` stay fully supported by the
+ * API/backend (D-192) — just not offered as a tab; an old link using either still works (TasksPage
+ * falls back to `mine` for any scope outside this list rather than crashing). */
+export const VISIBLE_TASK_SCOPES: TaskScope[] = ["mine", "assigned", "participating", "team", "all"];
+
 export interface TaskLaunchRef {
   id: number;
   program: string;
@@ -283,10 +288,23 @@ export const useDeadlineGroups = (params: DeadlineGroupsParams = {}, enabled = t
   });
 };
 
+/** The subset of TaskFilterParams the filter dialog exposes and saves — matches the backend's
+ * `SavedFilterIn` field-for-field (task_routes.py). */
+export type SavedFilterSet = Pick<
+  TaskFilterParams,
+  "status" | "priority" | "university_id" | "deadline_preset" | "active" | "has_checklist"
+>;
+
+export type FilterView = "list" | "deadlines";
+
+/** The key a saved filter set is stored under — one per {view, scope} combination. */
+export const filterKey = (view: FilterView, scope: TaskScope): string => `${view}:${scope}`;
+
 export interface TaskPreferences {
   list_columns: string[] | null;
   planner_columns: TaskStatus[] | null;
   planner_positions: Record<string, number[]> | null;
+  filters: Record<string, SavedFilterSet> | null;
 }
 
 export const useTaskPreferences = () =>
@@ -296,12 +314,14 @@ export const useTaskPreferences = () =>
   });
 
 /** Each field is saved independently server-side — the List view's column picker, the planner's column
- * picker and its drag positions each call this with only the field they own, so unsent fields keep their
- * last saved value instead of being reset. */
+ * picker and its drag positions, and the filter dialog each call this with only the field they own, so
+ * unsent fields keep their last saved value instead of being reset. `filters` is additionally merged
+ * key-by-key server-side: saving one {view,scope} entry never drops another one. */
 export interface TaskPreferencesPatch {
   list_columns?: string[];
   planner_columns?: TaskStatus[];
   planner_positions?: Record<string, number[]>;
+  filters?: Record<string, SavedFilterSet>;
 }
 
 export function useSaveTaskPreferences() {

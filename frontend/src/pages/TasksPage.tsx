@@ -1,16 +1,16 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ListTree, Plus } from "lucide-react";
 import {
   TASK_SCOPE_LABELS,
+  VISIBLE_TASK_SCOPES,
+  filterKey,
   useDeadlineGroups,
   useSaveTaskPreferences,
   useTaskList,
   useTaskPreferences,
-  type DeadlinePreset,
-  type TaskPriority,
+  type SavedFilterSet,
   type TaskScope,
-  type TaskStatus,
 } from "../api/tasks";
 import { useSession } from "../app/AuthGate";
 import { paths, taskPath } from "../app/navigation";
@@ -24,15 +24,22 @@ import { TaskBulkActionsBar } from "../components/tasks/TaskBulkActionsBar";
 import { TaskColumnPicker, DEFAULT_COLUMNS } from "../components/tasks/TaskColumnPicker";
 import { TaskCounters } from "../components/tasks/TaskCounters";
 import { TaskDeadlineView } from "../components/tasks/TaskDeadlineView";
-import { TaskFilterBar, type FilterPatch } from "../components/tasks/TaskFilterBar";
+import { TaskFilterButton } from "../components/tasks/TaskFilterButton";
+import { TaskFilterDialog } from "../components/tasks/TaskFilterDialog";
+import { TaskFilterSummary } from "../components/tasks/TaskFilterSummary";
 import { TaskListView } from "../components/tasks/TaskListView";
 import { TaskPlannerView } from "../components/tasks/TaskPlannerView";
+import { activeFilterCount, filtersFromParams, hasExplicitFilters, savedFilterToPatch, type FilterPatch } from "../components/tasks/taskFilterState";
 
 const PAGE_SIZE = 25;
 
-const SCOPE_TABS: TabItem[] = (
-  ["mine", "assigned", "created", "participating", "observing", "team", "all"] as TaskScope[]
-).map((id) => ({ id, label: TASK_SCOPE_LABELS[id] }));
+const SCOPE_TABS: TabItem[] = VISIBLE_TASK_SCOPES.map((id) => ({ id, label: TASK_SCOPE_LABELS[id] }));
+
+/** Switching view or scope moves to a different {view, scope} filter set entirely — the six filter
+ * dimensions are cleared from the URL as part of that same navigation so the restore effect below sees
+ * a clean slate for the new key, rather than treating the previous key's filters as an explicit choice
+ * for this one and refusing to restore anything saved for it. */
+const CLEAR_FILTERS: FilterPatch = { status: [], priority: [], university_id: null, deadline_preset: null, active: null, has_checklist: null };
 
 const SORTS: { value: string; label: string }[] = [
   { value: "-created_at", label: "Сначала новые" },
@@ -52,6 +59,8 @@ export function TasksPage() {
   const { user } = useSession();
   const [params, setParams] = useSearchParams();
   const [creating, setCreating] = useState(false);
+  const [filterDialogOpen, setFilterDialogOpen] = useState(false);
+  const filterButtonRef = useRef<HTMLButtonElement>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   // Reset selection whenever the URL (view/scope/filters/page) changes, so a stale selection never
   // survives to a different visible set. Adjusted during render (React's recommended pattern for
@@ -64,18 +73,15 @@ export function TasksPage() {
 
   const viewParam = params.get("view");
   const view = viewParam === "deadlines" || viewParam === "planner" ? viewParam : "list";
-  const scope = (params.get("scope") as TaskScope) || "mine";
+  // Any scope value the backend still accepts (e.g. an old `created`/`observing` link) but that no
+  // longer has a visible tab falls back to `mine` here, rather than crashing or rendering no tab as
+  // selected.
+  const rawScope = params.get("scope") as TaskScope | null;
+  const scope = rawScope && (VISIBLE_TASK_SCOPES as string[]).includes(rawScope) ? rawScope : "mine";
   const search = params.get("q") || "";
   const sort = params.get("sort") || "-created_at";
   const offset = Number(params.get("offset") || 0);
-  const filters = {
-    status: params.getAll("status") as TaskStatus[],
-    priority: params.getAll("priority") as TaskPriority[],
-    university_id: params.get("university_id") ? Number(params.get("university_id")) : undefined,
-    deadline_preset: (params.get("deadline_preset") as DeadlinePreset) || undefined,
-    active: params.has("active") ? params.get("active") === "true" : undefined,
-    has_checklist: params.has("has_checklist") ? params.get("has_checklist") === "true" : undefined,
-  };
+  const filters = filtersFromParams(params);
 
   const preferences = useTaskPreferences();
   const savePreferences = useSaveTaskPreferences();
@@ -103,6 +109,22 @@ export function TasksPage() {
     setParams(next, { replace: true });
   }
 
+  // Restore a saved filter set for this {view, scope} the first time it's visited without any explicit
+  // filter already in the URL (a shared/bookmarked filtered link always wins — docs/design/tasks.md).
+  // Guarded by restoredKey so this runs at most once per {view, scope}, not on every background refetch
+  // of preferences or every filter the user then applies by hand.
+  const restoredKey = useRef<string | null>(null);
+  useEffect(() => {
+    if (view === "planner") return;
+    const key = filterKey(view, scope);
+    if (restoredKey.current === key || preferences.data === undefined) return;
+    restoredKey.current = key;
+    if (hasExplicitFilters(params)) return;
+    const saved = preferences.data.filters?.[key];
+    if (saved) update(savedFilterToPatch(saved));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, scope, preferences.data]);
+
   function toggleSelect(id: number) {
     setSelected((prev) => {
       const next = new Set(prev);
@@ -110,6 +132,19 @@ export function TasksPage() {
       else next.add(id);
       return next;
     });
+  }
+
+  function closeFilterDialog() {
+    setFilterDialogOpen(false);
+    filterButtonRef.current?.focus();
+  }
+
+  function saveFilters(draft: SavedFilterSet) {
+    update(savedFilterToPatch(draft));
+    if (view !== "planner") {
+      savePreferences.mutate({ filters: { [filterKey(view, scope)]: draft } });
+    }
+    closeFilterDialog();
   }
 
   if (fallback) return fallback;
@@ -126,17 +161,28 @@ export function TasksPage() {
         </div>
       )}
       <TaskCounters scope={scope} onSelect={(patch) => update(patch)} />
-      <Tabs label="Представление" tabs={VIEWS} selected={view} onSelect={(id) => update({ view: id === "list" ? null : id })}>
+      <Tabs
+        label="Представление"
+        tabs={VIEWS}
+        selected={view}
+        onSelect={(id) => update({ view: id === "list" ? null : id, ...CLEAR_FILTERS })}
+      >
         {view === "planner" ? (
           <TaskPlannerView />
         ) : (
-          <Tabs label="Область видимости" tabs={SCOPE_TABS} selected={scope} onSelect={(id) => update({ scope: id === "mine" ? null : id })}>
+          <Tabs
+            label="Область видимости"
+            tabs={SCOPE_TABS}
+            selected={scope}
+            onSelect={(id) => update({ scope: id === "mine" ? null : id, ...CLEAR_FILTERS })}
+          >
             <SearchToolbar
               search={search}
               onSearch={(value) => update({ q: value || null })}
               placeholder="Поиск по названию или описанию"
               count={view === "list" ? list.data?.total : undefined}
             >
+              <TaskFilterButton ref={filterButtonRef} count={activeFilterCount(params)} onClick={() => setFilterDialogOpen(true)} />
               {view === "list" && (
                 <label className="inline-select">
                   Сортировка
@@ -157,7 +203,7 @@ export function TasksPage() {
                 Создать задачу
               </button>
             </SearchToolbar>
-            <TaskFilterBar params={params} onUpdate={update} />
+            <TaskFilterSummary params={params} onUpdate={update} />
             {selected.size > 0 && (
               <TaskBulkActionsBar selectedIds={[...selected]} onDone={() => setSelected(new Set())} />
             )}
@@ -189,6 +235,14 @@ export function TasksPage() {
           </Tabs>
         )}
       </Tabs>
+      {filterDialogOpen && view !== "planner" && (
+        <TaskFilterDialog
+          initial={filters}
+          scopeLabel={TASK_SCOPE_LABELS[scope]}
+          onCancel={closeFilterDialog}
+          onSave={saveFilters}
+        />
+      )}
       {creating && (
         <Modal title="Новая задача" close={() => setCreating(false)}>
           <TaskCreateForm

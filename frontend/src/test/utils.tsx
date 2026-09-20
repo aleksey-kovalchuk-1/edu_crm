@@ -336,6 +336,14 @@ export function mockApi(extra: Record<string, Handler> = {}) {
   const calls: Call[] = [];
   const count = (method: string, path: string) =>
     calls.filter((c) => c.method === method && c.path === path).length;
+  // Mirrors the backend's per-field-independent, filters-merged-by-key PUT /tasks/preferences (D-181,
+  // D-192): each save only touches the fields the request actually sent.
+  const storedPreferences: {
+    list_columns: string[] | null;
+    planner_columns: string[] | null;
+    planner_positions: Record<string, number[]> | null;
+    filters: Record<string, unknown> | null;
+  } = { list_columns: null, planner_columns: null, planner_positions: null, filters: null };
   const handlers: Record<string, Handler> = {
     "GET /auth/me": () => sessionFixture(),
     [`GET ${AUDIT_PATH}`]: () => [],
@@ -361,7 +369,17 @@ export function mockApi(extra: Record<string, Handler> = {}) {
       { group: "no_deadline", total: data.tasks.length, items: data.tasks },
       { group: "completed", total: 0, items: [] },
     ],
-    "GET /tasks/preferences": () => ({ list_columns: null, planner_columns: null, planner_positions: null }),
+    "GET /tasks/preferences": () => storedPreferences,
+    "PUT /tasks/preferences": (call) => {
+      const body = call.body as Partial<typeof storedPreferences>;
+      if (body.list_columns !== undefined) storedPreferences.list_columns = body.list_columns;
+      if (body.planner_columns !== undefined) storedPreferences.planner_columns = body.planner_columns;
+      if (body.planner_positions !== undefined) storedPreferences.planner_positions = body.planner_positions;
+      if (body.filters !== undefined) {
+        storedPreferences.filters = { ...(storedPreferences.filters ?? {}), ...body.filters };
+      }
+      return storedPreferences;
+    },
     "GET /tasks/assignable-users": () => data.users,
     "GET /task-plan-templates": () => data.planTemplates,
     "GET /task-plan-runs": () => data.planRuns,

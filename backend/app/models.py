@@ -256,14 +256,18 @@ class TaskPlanRun(Base):
 
 
 class TaskUserPreferences(Base):
-    """Per-user Tasks workspace preferences the spec asks to persist on the server (not in the URL): visible
-    List columns and the personal «My plan» column/card layout. Filters, sort, pagination and the active
-    view stay in URL query parameters and are never stored here."""
+    """Per-user Tasks workspace preferences the spec asks to persist on the server (not in the URL):
+    visible List columns, the personal «My plan» column/card layout, and saved filter sets per
+    `{view}:{scope}` combination (`filters`, e.g. `{'list:mine': {...}}` — see task_routes.py's
+    `SavedFilterIn`/`KNOWN_FILTER_KEYS`). Sort, pagination and the active view/scope stay in URL query
+    parameters and are never stored here; a saved filter set is applied into the URL when there is no
+    explicit filter already there, not read directly by the frontend as page state."""
     __tablename__ = 'task_user_preferences'
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
     list_columns: Mapped[list | None] = mapped_column(JSONB)
     planner_columns: Mapped[list | None] = mapped_column(JSONB)
     planner_positions: Mapped[dict | None] = mapped_column(JSONB)
+    filters: Mapped[dict | None] = mapped_column(JSONB)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class StageEvent(Base):

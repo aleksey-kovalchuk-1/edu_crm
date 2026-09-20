@@ -23,7 +23,9 @@ def test_preferences_partial_updates_do_not_clobber_other_fields(client, keycloa
 
     saved_list = client.put('/api/v1/tasks/preferences', json={'list_columns': ['title', 'deadline']})
     assert saved_list.status_code == 200, saved_list.text
-    assert saved_list.json() == {'list_columns': ['title', 'deadline'], 'planner_columns': None, 'planner_positions': None}
+    assert saved_list.json() == {
+        'list_columns': ['title', 'deadline'], 'planner_columns': None, 'planner_positions': None, 'filters': None,
+    }
 
     saved_planner = client.put(
         '/api/v1/tasks/preferences',

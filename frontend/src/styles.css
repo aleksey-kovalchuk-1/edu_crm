@@ -1121,6 +1121,7 @@ dialog {
   padding: 0;
   width: min(550px, calc(100% - 30px));
   max-height: 90vh;
+  overflow-y: auto;
   color: #493659;
 }
 dialog::backdrop {
@@ -2569,47 +2570,29 @@ dialog.wide {
   font-size: 10px;
   color: #6c647a;
 }
-.task-filter-bar {
-  border: 1px solid #eee6f4;
-  border-radius: 10px;
-  padding: 14px 16px;
-  margin-bottom: 18px;
+.filter-toggle {
+  position: relative;
 }
-.filter-presets {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.filter-controls {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-  align-items: flex-start;
-}
-.task-filter-bar fieldset {
-  border: 0;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-.task-filter-bar legend {
-  font-size: 10px;
+.filter-count-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #7c3ce0;
+  color: #fff;
+  font-size: 9px;
   font-weight: 700;
-  color: #6c647a;
-  padding: 0;
-  margin-bottom: 2px;
+  line-height: 1;
 }
-.filter-chips {
+.filter-summary {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid #f1edf6;
+  margin-bottom: 18px;
 }
 .filter-chip {
   display: inline-flex;
@@ -2621,6 +2604,55 @@ dialog.wide {
   border-radius: 999px;
   padding: 4px 10px;
   font-size: 10px;
+}
+.modal-subtitle {
+  margin: -10px 0 18px;
+  font-size: 11px;
+}
+.filter-dialog-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 18px;
+}
+.filter-dialog-presets button.selected {
+  background: #f6f0fc;
+  color: #5c2f9e;
+  border-color: #dcc8f4;
+}
+.filter-dialog-fields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: flex-start;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-bottom: 4px;
+}
+.filter-dialog-fields fieldset {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.filter-dialog-fields legend {
+  font-size: 10px;
+  font-weight: 700;
+  color: #6c647a;
+  padding: 0;
+  margin-bottom: 2px;
+}
+.filter-dialog-actions {
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+.filter-dialog-actions-right {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-left: auto;
 }
 .bulk-actions-bar {
   display: flex;

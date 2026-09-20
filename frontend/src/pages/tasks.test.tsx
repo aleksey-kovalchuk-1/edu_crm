@@ -236,15 +236,20 @@ describe("tasks: counters and filters", () => {
     );
   });
 
-  it("adding a status filter shows a removable chip and requests it; removing it clears the request", async () => {
+  it("adding a status filter through the dialog shows a removable chip and requests it; removing it clears the request", async () => {
     const api = mockApi();
     renderApp("/tasks");
     await screen.findByRole("link", { name: "Согласовать договор" });
 
-    fireEvent.click(screen.getByRole("checkbox", { name: "Завершена" }));
+    fireEvent.click(screen.getByRole("button", { name: /Фильтры/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Фильтры задач" });
+    fireEvent.click(within(dialog).getByRole("checkbox", { name: "Завершена" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
     await waitFor(() =>
       expect(api.calls.some((c) => c.method === "GET" && c.path.includes("status=completed"))).toBe(true),
     );
+    expect(screen.queryByRole("dialog", { name: "Фильтры задач" })).toBeNull();
     const chip = await screen.findByRole("button", { name: /Статус: Завершена/ });
 
     fireEvent.click(chip);
