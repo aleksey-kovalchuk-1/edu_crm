@@ -231,7 +231,7 @@ export function TasksPage() {
                 onPage={(next) => update({ offset: String(next) }, false)}
               />
             )}
-            {view === "deadlines" && deadlineGroups.data && <TaskDeadlineView groups={deadlineGroups.data} />}
+            {view === "deadlines" && deadlineGroups.data && <TaskDeadlineView groups={deadlineGroups.data} params={params} />}
           </Tabs>
         )}
       </Tabs>

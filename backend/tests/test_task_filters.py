@@ -70,6 +70,19 @@ def test_filter_by_deadline_preset_overdue(client, keycloak, database_url):
     assert [t['id'] for t in response['items']] == [overdue['id']]
 
 
+def test_filter_by_deadline_preset_later(client, keycloak, database_url):
+    """The 'later' preset (Deadline board's own 6th+7th bucket boundary) lets the board's "show all"
+    link for that group reuse the List view's existing filter machinery instead of a dead end."""
+    login(client, keycloak, roles=('crm-supervisor',))
+    today = date.today()
+    _, week_end = week_bounds(today)
+    later = create_task(client, deadline=iso(week_end + timedelta(days=8)))
+    create_task(client, deadline=iso(week_end + timedelta(days=1)))  # next_week, not later
+
+    response = client.get('/api/v1/tasks', params={'scope': 'all', 'deadline_preset': 'later'}).json()
+    assert [t['id'] for t in response['items']] == [later['id']]
+
+
 def test_filter_by_creator_assignee_and_active(client, keycloak, database_url):
     me = login(client, keycloak, roles=('crm-supervisor',))
     mine = create_task(client)

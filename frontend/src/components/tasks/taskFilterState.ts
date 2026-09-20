@@ -1,4 +1,5 @@
-import type { DeadlinePreset, SavedFilterSet, TaskPriority, TaskStatus } from "../../api/tasks";
+import { paths } from "../../app/navigation";
+import type { DeadlineGroupKey, DeadlinePreset, SavedFilterSet, TaskPriority, TaskStatus } from "../../api/tasks";
 
 export type FilterPatch = Record<string, string | string[] | null>;
 
@@ -49,4 +50,37 @@ export function savedFilterToPatch(filters: SavedFilterSet): FilterPatch {
     active: filters.active != null ? String(filters.active) : null,
     has_checklist: filters.has_checklist != null ? String(filters.has_checklist) : null,
   };
+}
+
+/** Every Deadline-board group except `completed` maps 1:1 onto a `deadline_preset` value the List
+ * view already understands (D-196 extended the preset enum with `later` for exactly this). */
+const GROUP_TO_PRESET: Partial<Record<DeadlineGroupKey, DeadlinePreset>> = {
+  overdue: "overdue",
+  today: "today",
+  this_week: "this_week",
+  next_week: "next_week",
+  later: "later",
+  no_deadline: "no_deadline",
+};
+
+/**
+ * The List-view link behind a Deadline-board group's "и ещё N…" note, so a group truncated at the
+ * server's per-group cap is actually reachable instead of a dead end. Keeps every other applied filter
+ * (search, priority, university, scope, ...) and only replaces the date/status dimension with the one
+ * that exactly matches the clicked group, switching back to the List view.
+ */
+export function deadlineGroupListLink(params: URLSearchParams, group: DeadlineGroupKey): string {
+  const next = new URLSearchParams(params);
+  next.delete("view");
+  next.delete("offset");
+  next.delete("status");
+  next.delete("deadline_preset");
+  if (group === "completed") {
+    next.set("status", "completed");
+  } else {
+    const preset = GROUP_TO_PRESET[group];
+    if (preset) next.set("deadline_preset", preset);
+  }
+  const qs = next.toString();
+  return qs ? `${paths.tasks}?${qs}` : paths.tasks;
 }
