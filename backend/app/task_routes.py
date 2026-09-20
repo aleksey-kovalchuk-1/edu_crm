@@ -968,10 +968,27 @@ class SavedFilterIn(BaseModel):
     has_checklist: bool | None = None
 
 
+ColumnTitle = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=60)]
+
+
+class CustomColumnIn(BaseModel):
+    """One user-created personal column on the planner or Deadlines board (D-202) — a non-empty
+    Unicode title is the only thing stored; the column's id is chosen by the client and lives as a key
+    in the `*_custom_columns` dict, not in this model."""
+    model_config = ConfigDict(extra='forbid')
+    title: ColumnTitle
+
+
 class PreferencesOut(BaseModel):
     list_columns: list[str] | None
     planner_columns: list[str] | None
     planner_positions: dict | None
+    planner_custom_columns: dict[str, dict] | None
+    planner_custom_members: dict[str, str] | None
+    deadline_columns: list[str] | None
+    deadline_positions: dict | None
+    deadline_custom_columns: dict[str, dict] | None
+    deadline_custom_members: dict[str, str] | None
     filters: dict[str, dict] | None
 
 
@@ -979,6 +996,12 @@ class PreferencesIn(BaseModel):
     list_columns: list[str] | None = None
     planner_columns: list[str] | None = None
     planner_positions: dict | None = None
+    planner_custom_columns: dict[str, CustomColumnIn] | None = Field(default=None, max_length=50)
+    planner_custom_members: dict[str, str] | None = Field(default=None, max_length=1000)
+    deadline_columns: list[str] | None = None
+    deadline_positions: dict | None = None
+    deadline_custom_columns: dict[str, CustomColumnIn] | None = Field(default=None, max_length=50)
+    deadline_custom_members: dict[str, str] | None = Field(default=None, max_length=1000)
     filters: dict[str, SavedFilterIn] | None = None
 
     @field_validator('filters')
@@ -995,24 +1018,43 @@ def sanitized_filters(filters):
     return {k: v for k, v in filters.items() if k in KNOWN_FILTER_KEYS} or None if filters else None
 
 
-@router.get('/tasks/preferences', response_model=PreferencesOut, summary='Настройки рабочего пространства задач')
-def get_preferences(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-    prefs = db.get(TaskUserPreferences, auth.user.id)
+def preferences_out(prefs):
     if prefs is None:
-        return PreferencesOut(list_columns=None, planner_columns=None, planner_positions=None, filters=None)
+        return PreferencesOut(
+            list_columns=None, planner_columns=None, planner_positions=None,
+            planner_custom_columns=None, planner_custom_members=None,
+            deadline_columns=None, deadline_positions=None,
+            deadline_custom_columns=None, deadline_custom_members=None, filters=None,
+        )
     return PreferencesOut(
         list_columns=prefs.list_columns, planner_columns=prefs.planner_columns,
-        planner_positions=prefs.planner_positions, filters=sanitized_filters(prefs.filters),
+        planner_positions=prefs.planner_positions,
+        planner_custom_columns=prefs.planner_custom_columns, planner_custom_members=prefs.planner_custom_members,
+        deadline_columns=prefs.deadline_columns, deadline_positions=prefs.deadline_positions,
+        deadline_custom_columns=prefs.deadline_custom_columns, deadline_custom_members=prefs.deadline_custom_members,
+        filters=sanitized_filters(prefs.filters),
     )
+
+
+@router.get('/tasks/preferences', response_model=PreferencesOut, summary='Настройки рабочего пространства задач')
+def get_preferences(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    return preferences_out(db.get(TaskUserPreferences, auth.user.id))
+
+
+# Fields whose Pydantic value is a dict of sub-models (CustomColumnIn) needing .model_dump() before
+# it's JSON-storable — everything else in PreferencesIn is already a plain str/list/dict.
+CUSTOM_COLUMN_FIELDS = frozenset({'planner_custom_columns', 'deadline_custom_columns'})
 
 
 @router.put('/tasks/preferences', response_model=PreferencesOut, summary='Сохранить настройки рабочего пространства задач')
 def set_preferences(data: PreferencesIn, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-    """Each field is saved independently — the List view's column picker, the planner's column picker
-    and its drag positions, and the filter dialog each call this without the others, so only fields the
-    client actually sent are touched (unsent fields keep their stored value, not reset to null).
-    `filters` is additionally merged key-by-key (not replaced wholesale): saving `list:mine` must not
-    drop an already-saved `deadlines:mine` or `list:all` entry."""
+    """Each field is saved independently — the List view's column picker, the planner's and Deadlines
+    board's column/position state, and the filter dialog each call this without the others, so only
+    fields the client actually sent are touched (unsent fields keep their stored value, not reset to
+    null). `filters` is merged key-by-key (not replaced wholesale): saving `list:mine` must not drop an
+    already-saved `deadlines:mine` or `list:all` entry. Every other field — including the four
+    board-layout dicts — is a plain replace: the client already holds the full current value from the
+    same query that renders the board (D-202)."""
     prefs = db.get(TaskUserPreferences, auth.user.id)
     if prefs is None:
         prefs = TaskUserPreferences(user_id=auth.user.id)
@@ -1023,14 +1065,14 @@ def set_preferences(data: PreferencesIn, auth: AuthContext = Depends(any_role), 
             if data.filters is not None:
                 merged.update({k: v.model_dump() for k, v in data.filters.items()})
             prefs.filters = merged or None
+        elif field in CUSTOM_COLUMN_FIELDS:
+            value = getattr(data, field)
+            setattr(prefs, field, {k: v.model_dump() for k, v in value.items()} if value is not None else None)
         else:
             setattr(prefs, field, getattr(data, field))
     prefs.updated_at = utcnow()
     db.commit()
-    return PreferencesOut(
-        list_columns=prefs.list_columns, planner_columns=prefs.planner_columns,
-        planner_positions=prefs.planner_positions, filters=sanitized_filters(prefs.filters),
-    )
+    return preferences_out(prefs)
 
 
 @router.get('/tasks/{id}', response_model=TaskOut, summary='Задача')

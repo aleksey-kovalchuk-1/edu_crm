@@ -4,7 +4,7 @@ import { vi } from "vitest";
 import type { Session } from "../api/auth";
 import { API_BASE } from "../api/client";
 import type { PlanRun, PlanTemplate } from "../api/planTemplates";
-import type { Task, TaskListItem } from "../api/tasks";
+import type { Task, TaskListItem, TaskPreferences } from "../api/tasks";
 import type {
   Contract,
   CrmUser,
@@ -337,13 +337,15 @@ export function mockApi(extra: Record<string, Handler> = {}) {
   const count = (method: string, path: string) =>
     calls.filter((c) => c.method === method && c.path === path).length;
   // Mirrors the backend's per-field-independent, filters-merged-by-key PUT /tasks/preferences (D-181,
-  // D-192): each save only touches the fields the request actually sent.
-  const storedPreferences: {
-    list_columns: string[] | null;
-    planner_columns: string[] | null;
-    planner_positions: Record<string, number[]> | null;
-    filters: Record<string, unknown> | null;
-  } = { list_columns: null, planner_columns: null, planner_positions: null, filters: null };
+  // D-192, D-202): each save only touches the fields the request actually sent; `filters` merges by
+  // key, every other field (including the four board-layout dicts) is a plain replace.
+  const storedPreferences: TaskPreferences = {
+    list_columns: null, planner_columns: null, planner_positions: null,
+    planner_custom_columns: null, planner_custom_members: null,
+    deadline_columns: null, deadline_positions: null,
+    deadline_custom_columns: null, deadline_custom_members: null,
+    filters: null,
+  };
   const handlers: Record<string, Handler> = {
     "GET /auth/me": () => sessionFixture(),
     [`GET ${AUDIT_PATH}`]: () => [],
@@ -371,12 +373,16 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     ],
     "GET /tasks/preferences": () => storedPreferences,
     "PUT /tasks/preferences": (call) => {
-      const body = call.body as Partial<typeof storedPreferences>;
-      if (body.list_columns !== undefined) storedPreferences.list_columns = body.list_columns;
-      if (body.planner_columns !== undefined) storedPreferences.planner_columns = body.planner_columns;
-      if (body.planner_positions !== undefined) storedPreferences.planner_positions = body.planner_positions;
-      if (body.filters !== undefined) {
-        storedPreferences.filters = { ...(storedPreferences.filters ?? {}), ...body.filters };
+      const body = call.body as Partial<TaskPreferences>;
+      for (const key of Object.keys(body) as (keyof TaskPreferences)[]) {
+        if (key === "filters") {
+          storedPreferences.filters = { ...(storedPreferences.filters ?? {}), ...(body.filters ?? {}) };
+        } else {
+          // Every other field (list_columns, the two boards' column/position/custom dicts) is a plain
+          // replace, matching the real endpoint — each field here has its own type, so a generic
+          // assignment needs a cast rather than per-field branches.
+          (storedPreferences as unknown as Record<string, unknown>)[key] = body[key];
+        }
       }
       return storedPreferences;
     },
