@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
 from sqlalchemy import delete, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.orm.exc import StaleDataError
@@ -947,40 +947,88 @@ def deadline_groups(
     return results
 
 
+View = Literal['list', 'deadlines']
+# The dialog only ever saves filters for a fixed {view}:{scope} key — every combination is valid even
+# though only 5 of the 7 scopes have a visible tab (D-192): a shared/bookmarked URL for a hidden scope
+# still works, and its filters are still worth remembering.
+KNOWN_FILTER_KEYS = frozenset(f'{v}:{s}' for v in ('list', 'deadlines') for s in Scope.__args__)
+
+
+class SavedFilterIn(BaseModel):
+    """One saved filter set — the same 6 dimensions the filter dialog exposes. `extra='forbid'` plus
+    every field's own Literal/type keeps this endpoint from ever persisting an arbitrary payload."""
+    model_config = ConfigDict(extra='forbid')
+    status: list[TaskStatus] = Field(default_factory=list, max_length=10)
+    priority: list[Priority] = Field(default_factory=list, max_length=10)
+    university_id: int | None = None
+    deadline_preset: DeadlinePreset | None = None
+    active: bool | None = None
+    has_checklist: bool | None = None
+
+
 class PreferencesOut(BaseModel):
     list_columns: list[str] | None
     planner_columns: list[str] | None
     planner_positions: dict | None
+    filters: dict[str, dict] | None
 
 
 class PreferencesIn(BaseModel):
     list_columns: list[str] | None = None
     planner_columns: list[str] | None = None
     planner_positions: dict | None = None
+    filters: dict[str, SavedFilterIn] | None = None
+
+    @field_validator('filters')
+    @classmethod
+    def known_keys_only(cls, value):
+        if value is not None and (unknown := set(value) - KNOWN_FILTER_KEYS):
+            raise ValueError(f'unknown filter key(s): {sorted(unknown)}')
+        return value
+
+
+def sanitized_filters(filters):
+    """Drops any stored key that isn't `{view}:{scope}` for a currently-known scope — defends reads
+    against a future scope/view being retired while old rows still reference it (never crashes)."""
+    return {k: v for k, v in filters.items() if k in KNOWN_FILTER_KEYS} or None if filters else None
 
 
 @router.get('/tasks/preferences', response_model=PreferencesOut, summary='Настройки рабочего пространства задач')
 def get_preferences(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
     prefs = db.get(TaskUserPreferences, auth.user.id)
     if prefs is None:
-        return PreferencesOut(list_columns=None, planner_columns=None, planner_positions=None)
-    return PreferencesOut(list_columns=prefs.list_columns, planner_columns=prefs.planner_columns, planner_positions=prefs.planner_positions)
+        return PreferencesOut(list_columns=None, planner_columns=None, planner_positions=None, filters=None)
+    return PreferencesOut(
+        list_columns=prefs.list_columns, planner_columns=prefs.planner_columns,
+        planner_positions=prefs.planner_positions, filters=sanitized_filters(prefs.filters),
+    )
 
 
 @router.put('/tasks/preferences', response_model=PreferencesOut, summary='Сохранить настройки рабочего пространства задач')
 def set_preferences(data: PreferencesIn, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-    """Each of the three fields is saved independently — the List view's column picker, the planner's
-    column picker and its drag positions each call this without the other two, so only fields the
-    client actually sent are touched (unsent fields keep their stored value, not reset to null)."""
+    """Each field is saved independently — the List view's column picker, the planner's column picker
+    and its drag positions, and the filter dialog each call this without the others, so only fields the
+    client actually sent are touched (unsent fields keep their stored value, not reset to null).
+    `filters` is additionally merged key-by-key (not replaced wholesale): saving `list:mine` must not
+    drop an already-saved `deadlines:mine` or `list:all` entry."""
     prefs = db.get(TaskUserPreferences, auth.user.id)
     if prefs is None:
         prefs = TaskUserPreferences(user_id=auth.user.id)
         db.add(prefs)
     for field in data.model_fields_set:
-        setattr(prefs, field, getattr(data, field))
+        if field == 'filters':
+            merged = dict(sanitized_filters(prefs.filters) or {})
+            if data.filters is not None:
+                merged.update({k: v.model_dump() for k, v in data.filters.items()})
+            prefs.filters = merged or None
+        else:
+            setattr(prefs, field, getattr(data, field))
     prefs.updated_at = utcnow()
     db.commit()
-    return PreferencesOut(list_columns=prefs.list_columns, planner_columns=prefs.planner_columns, planner_positions=prefs.planner_positions)
+    return PreferencesOut(
+        list_columns=prefs.list_columns, planner_columns=prefs.planner_columns,
+        planner_positions=prefs.planner_positions, filters=sanitized_filters(prefs.filters),
+    )
 
 
 @router.get('/tasks/{id}', response_model=TaskOut, summary='Задача')
