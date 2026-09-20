@@ -362,15 +362,6 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     "GET /tasks/1/comments": () => [],
     "GET /tasks/1/activity": () => [],
     "GET /tasks/counters": () => ({ open: 0, overdue: 0, due_today: 0, awaiting_review: 0, no_deadline: 0 }),
-    "GET /tasks/deadline-groups": () => [
-      { group: "overdue", total: 0, items: [] },
-      { group: "today", total: 0, items: [] },
-      { group: "this_week", total: 0, items: [] },
-      { group: "next_week", total: 0, items: [] },
-      { group: "later", total: 0, items: [] },
-      { group: "no_deadline", total: data.tasks.length, items: data.tasks },
-      { group: "completed", total: 0, items: [] },
-    ],
     "GET /tasks/preferences": () => storedPreferences,
     "PUT /tasks/preferences": (call) => {
       const body = call.body as Partial<TaskPreferences>;

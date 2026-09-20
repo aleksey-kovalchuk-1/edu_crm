@@ -5,7 +5,6 @@ import {
   TASK_SCOPE_LABELS,
   VISIBLE_TASK_SCOPES,
   filterKey,
-  useDeadlineGroups,
   useSaveTaskPreferences,
   useTaskList,
   useTaskPreferences,
@@ -23,7 +22,7 @@ import { Tabs, type TabItem } from "../components/Tabs";
 import { TaskBulkActionsBar } from "../components/tasks/TaskBulkActionsBar";
 import { TaskColumnPicker, DEFAULT_COLUMNS } from "../components/tasks/TaskColumnPicker";
 import { TaskCounters } from "../components/tasks/TaskCounters";
-import { TaskDeadlineView } from "../components/tasks/TaskDeadlineView";
+import { TaskDeadlineBoard } from "../components/tasks/TaskDeadlineBoard";
 import { TaskFilterButton } from "../components/tasks/TaskFilterButton";
 import { TaskFilterDialog } from "../components/tasks/TaskFilterDialog";
 import { TaskFilterSummary } from "../components/tasks/TaskFilterSummary";
@@ -88,10 +87,10 @@ export function TasksPage() {
   const columns = preferences.data?.list_columns ?? DEFAULT_COLUMNS;
 
   const list = useTaskList({ scope, search, sort, limit: PAGE_SIZE, offset, ...filters }, view === "list");
-  const deadlineGroups = useDeadlineGroups({ scope, search, ...filters }, view === "deadlines");
-  // The planner view manages its own queries/loading state (TaskPlannerView) — it isn't scoped by
-  // this page's search/sort/filter bar, so it has no "active query" here.
-  const activeQuery = view === "list" ? list : view === "deadlines" ? deadlineGroups : null;
+  // The Deadlines board and planner both manage their own queries/loading state internally
+  // (TaskDeadlineBoard, TaskPlannerView) — they have their own useTaskList call, so neither has an
+  // "active query" here.
+  const activeQuery = view === "list" ? list : null;
   const fallback = activeQuery ? queryFallback([activeQuery]) : null;
 
   function update(patch: FilterPatch, resetOffset = true) {
@@ -231,7 +230,7 @@ export function TasksPage() {
                 onPage={(next) => update({ offset: String(next) }, false)}
               />
             )}
-            {view === "deadlines" && deadlineGroups.data && <TaskDeadlineView groups={deadlineGroups.data} params={params} />}
+            {view === "deadlines" && <TaskDeadlineBoard scope={scope} search={search} filters={filters} />}
           </Tabs>
         )}
       </Tabs>

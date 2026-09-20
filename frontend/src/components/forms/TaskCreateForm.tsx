@@ -13,9 +13,13 @@ import { FieldError, FormFooter, formText } from "./FormParts";
 export function TaskCreateForm({
   onCreated,
   onCancel,
+  initialDeadline,
 }: {
   onCreated: (task: Task) => void;
   onCancel: () => void;
+  /** Prefills the deadline field (e.g. from the Deadlines board's per-column "+" — D-205's mapping);
+   * the user can still change or clear it before creating. */
+  initialDeadline?: string | null;
 }) {
   const [universityId, setUniversityId] = useState("");
   const users = useAssignableUsers();
@@ -67,7 +71,7 @@ export function TaskCreateForm({
       <div className="form-row">
         <label>
           Срок
-          <input name="deadline" type="date" />
+          <input name="deadline" type="date" defaultValue={initialDeadline ?? ""} />
           <FieldError error={create.error} field="deadline" />
         </label>
         <label>

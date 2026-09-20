@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   activeFilterCount,
-  deadlineGroupListLink,
   filtersFromParams,
   hasExplicitFilters,
   savedFilterToPatch,
@@ -90,24 +89,5 @@ describe("savedFilterToPatch", () => {
       active: null,
       has_checklist: null,
     });
-  });
-});
-
-describe("deadlineGroupListLink", () => {
-  it("links a date-based group to the List view with the matching deadline preset", () => {
-    expect(deadlineGroupListLink(params("scope=mine"), "overdue")).toBe("/tasks?scope=mine&deadline_preset=overdue");
-    expect(deadlineGroupListLink(params(""), "later")).toBe("/tasks?deadline_preset=later");
-  });
-
-  it("links the completed group to status=completed instead of a deadline preset", () => {
-    expect(deadlineGroupListLink(params("scope=all"), "completed")).toBe("/tasks?scope=all&status=completed");
-  });
-
-  it("drops view, offset and any prior status/deadline_preset, but keeps other applied filters", () => {
-    const link = deadlineGroupListLink(
-      params("view=deadlines&offset=25&status=new&deadline_preset=today&priority=high&q=test"),
-      "overdue",
-    );
-    expect(link).toBe("/tasks?priority=high&q=test&deadline_preset=overdue");
   });
 });

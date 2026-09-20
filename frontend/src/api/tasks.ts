@@ -252,42 +252,6 @@ export const useTaskCounters = (scope: TaskScope = "mine") =>
     queryFn: () => apiRequest<TaskCounters>(`/tasks/counters?scope=${scope}`),
   });
 
-export type DeadlineGroupKey = "overdue" | "today" | "this_week" | "next_week" | "later" | "no_deadline" | "completed";
-
-export const DEADLINE_GROUP_LABELS: Record<DeadlineGroupKey, string> = {
-  overdue: "Просрочено",
-  today: "Сегодня",
-  this_week: "На этой неделе",
-  next_week: "На следующей неделе",
-  later: "Позже",
-  no_deadline: "Без срока",
-  completed: "Завершено",
-};
-
-export interface DeadlineGroup {
-  group: DeadlineGroupKey;
-  total: number;
-  items: TaskListItem[];
-}
-
-export interface DeadlineGroupsParams extends TaskFilterParams {
-  scope?: TaskScope;
-  search?: string;
-}
-
-export const useDeadlineGroups = (params: DeadlineGroupsParams = {}, enabled = true) => {
-  const query = new URLSearchParams();
-  if (params.scope) query.set("scope", params.scope);
-  if (params.search) query.set("search", params.search);
-  appendFilterParams(query, params);
-  const qs = query.toString();
-  return useQuery({
-    queryKey: ["tasks", "deadline-groups", params] as const,
-    queryFn: () => apiRequest<DeadlineGroup[]>(qs ? `/tasks/deadline-groups?${qs}` : "/tasks/deadline-groups"),
-    enabled,
-  });
-};
-
 /** The subset of TaskFilterParams the filter dialog exposes and saves — matches the backend's
  * `SavedFilterIn` field-for-field (task_routes.py). */
 export type SavedFilterSet = Pick<
@@ -463,6 +427,19 @@ export function useMoveTask() {
   return useMutation({
     mutationFn: ({ id, ...data }: { id: number; to_status: TaskStatus; comment?: string; version: number }) =>
       apiRequest<Task>(`/tasks/${id}/status`, "POST", data),
+    onSuccess: (_data, vars) => afterTaskChange(client, vars.id),
+  });
+}
+
+/** Same PATCH /tasks/{id} the task detail page's edit form uses, but with the id in the mutate call
+ * instead of the hook's closure — for the Deadlines board, where a single drag-and-drop handler
+ * changes whichever card was just dropped (D-205). Reuses the existing endpoint's permission check
+ * (TaskAction.CHANGE_DEADLINE), optimistic-concurrency version check, and activity/audit event. */
+export function useMoveTaskDeadline() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...data }: { id: number; deadline: string | null; version: number }) =>
+      apiRequest<Task>(`/tasks/${id}`, "PATCH", data),
     onSuccess: (_data, vars) => afterTaskChange(client, vars.id),
   });
 }
