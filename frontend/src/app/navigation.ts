@@ -7,6 +7,7 @@ import {
   LayoutDashboard,
   FileUp,
   ListChecks,
+  ListTree,
   UserRound,
   Workflow,
   type LucideIcon,
@@ -19,6 +20,7 @@ export const paths = {
   contracts: "/contracts",
   interactions: "/interactions",
   tasks: "/tasks",
+  taskTemplates: "/tasks/templates",
   analytics: "/analytics",
   catalogs: "/catalogs",
   imports: "/imports",
@@ -30,6 +32,7 @@ export const paths = {
 export const universityPath = (id: number) => `${paths.universities}/${id}`;
 /** Interaction detail with the status timeline (nested under «Взаимодействия»). */
 export const launchPath = (id: number) => `${paths.interactions}/${id}`;
+export const taskPath = (id: number) => `${paths.tasks}/${id}`;
 
 export type CreateKind = "university" | "launch" | "contract";
 
@@ -87,7 +90,8 @@ export const pages: PageMeta[] = [
     icon: ListChecks,
     heading: "Задачи",
     subtitle: "Ближайшие действия, сроки и ответственные.",
-    create: "launch",
+    // The workspace has its own «Создать задачу» action (TasksPage), not the shared header button.
+    create: null,
   },
   {
     path: paths.analytics,
@@ -122,6 +126,15 @@ export const pages: PageMeta[] = [
     subtitle: "Шаблоны взаимодействия: статусы, их порядок и финальные этапы.",
     create: null,
     roles: [ROLES.supervisor, ROLES.admin],
+  },
+  {
+    path: paths.taskTemplates,
+    name: "Шаблоны планов задач",
+    icon: ListTree,
+    heading: "Шаблоны планов задач",
+    subtitle: "Повторно используемые последовательности задач для запуска сотрудничества с вузом.",
+    create: null,
+    hidden: true,
   },
   {
     path: paths.profile,

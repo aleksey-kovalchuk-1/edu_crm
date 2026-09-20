@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
-from app import workflow_routes
+from app import uploads
 from app.main import create_app
 from app.models import Attachment, AuditEvent
 from helpers import database, login, make_settings
@@ -88,7 +88,7 @@ def test_rejects_invalid_files_and_statuses_without_storing_anything(app, client
     assert mixed.status_code == 415
     assert post(files=[('files', (f'{i}.pdf', PDF, 'application/pdf')) for i in range(6)]).status_code == 422
     assert post(comment='я' * 2001).json()['details'][0]['field'] == 'comment'
-    monkeypatch.setattr(workflow_routes, 'MAX_ATTACHMENT_BYTES', len(PDF) - 1)
+    monkeypatch.setattr(uploads, 'MAX_ATTACHMENT_BYTES', len(PDF) - 1)
     assert post(files=[('files', ('big.pdf', PDF, 'application/pdf'))]).status_code == 413
     monkeypatch.undo()
 

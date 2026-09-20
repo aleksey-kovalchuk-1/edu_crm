@@ -1,13 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  CSRF_TOKEN,
-  apiError,
-  deferred,
-  mockApi,
-  never,
-  renderApp,
-} from "../test/utils";
+import { CSRF_TOKEN, apiError, mockApi, renderApp } from "../test/utils";
 
 /** Board column title that currently holds the card with this code. */
 const columnOf = (code: string) =>
@@ -91,65 +84,54 @@ describe("interactions page", () => {
   });
 });
 
-describe("task toggle", () => {
-  it("sends PATCH and refetches only tasks", async () => {
+describe("task creation", () => {
+  it("creates a task and opens its detail page", async () => {
     const api = mockApi({
-      "PATCH /tasks/1": (call) => {
-        const done = (call.body as { done: boolean }).done;
-        api.data.tasks = api.data.tasks.map((t) => (t.id === 1 ? { ...t, done } : t));
-        return api.data.tasks[0];
+      "POST /tasks": (call) => {
+        const body = call.body as { title: string };
+        return [201, { ...api.data.task, id: 2, title: body.title }];
       },
+      "GET /tasks/2": () => ({ ...api.data.task, id: 2, title: "Новая задача" }),
     });
     renderApp("/tasks");
-    const checkbox = (await screen.findByRole("checkbox", {
-      name: "Согласовать договор",
-    })) as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
+    fireEvent.click(await screen.findByRole("button", { name: /Создать задачу/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Новая задача" });
+    fireEvent.change(
+      within(dialog).getByPlaceholderText("Например, собрать документы"),
+      { target: { value: "Новая задача" } },
+    );
+    fireEvent.submit(dialog.querySelector("form")!);
 
-    fireEvent.click(checkbox);
-
-    await waitFor(() => expect(checkbox.checked).toBe(true));
-    await waitFor(() => expect(api.count("GET", "/tasks")).toBe(2));
-    expect(api.calls.find((c) => c.method === "PATCH")).toMatchObject({
-      method: "PATCH",
-      path: "/tasks/1",
-      body: { done: true },
+    await waitFor(() => expect(api.count("POST", "/tasks")).toBe(1));
+    expect(api.calls.find((c) => c.method === "POST")).toMatchObject({
+      method: "POST",
+      path: "/tasks",
       headers: { "x-csrf-token": CSRF_TOKEN },
     });
     expect(
-      api.calls.filter((c) => c.method === "GET").some((c) => "x-csrf-token" in c.headers),
-    ).toBe(false);
-    expect(api.count("GET", "/launches")).toBe(1);
-    expect(api.count("GET", "/universities")).toBe(0);
-    expect(api.count("GET", "/stages")).toBe(0);
-    expect(api.count("GET", "/dashboard")).toBe(0);
-    await waitFor(() => expect(checkbox.disabled).toBe(false));
-    expect(checkbox.checked).toBe(true);
+      await screen.findByRole("heading", { level: 2, name: "Новая задача" }),
+    ).toBeTruthy();
   });
 
-  it("rolls back the optimistic value when PATCH fails", async () => {
-    const patch = deferred<unknown>();
-    const api = mockApi({
-      "PATCH /tasks/1": () => patch.promise,
-      // Any refetch after the error hangs, so only the rollback can restore the value.
-      "GET /tasks": () =>
-        api.count("GET", "/tasks") > 1 ? never() : api.data.tasks,
+  it("shows the server's field error and keeps the form open", async () => {
+    mockApi({
+      "POST /tasks": () =>
+        apiError(422, "VALIDATION_ERROR", "Проверьте заполненные поля", [
+          { field: "title", message: "Название обязательно", type: "missing" },
+        ]),
     });
     renderApp("/tasks");
-    const checkbox = (await screen.findByRole("checkbox", {
-      name: "Согласовать договор",
-    })) as HTMLInputElement;
-
-    fireEvent.click(checkbox);
-    await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(1));
-    expect(checkbox.checked).toBe(true);
-
-    patch.resolve(apiError(404, "RECORD_NOT_FOUND", "Запись не найдена"));
-
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "Запись не найдена (код RECORD_NOT_FOUND)",
+    fireEvent.click(await screen.findByRole("button", { name: /Создать задачу/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Новая задача" });
+    fireEvent.change(
+      within(dialog).getByPlaceholderText("Например, собрать документы"),
+      { target: { value: "x" } },
     );
-    expect(checkbox.checked).toBe(false);
+    fireEvent.submit(dialog.querySelector("form")!);
+    expect(await within(dialog).findByText("Название обязательно")).toBeTruthy();
+    expect(within(dialog).getByRole("alert").textContent).toBe(
+      "Проверьте заполненные поля (код VALIDATION_ERROR)",
+    );
   });
 });
 
@@ -206,7 +188,7 @@ describe("create forms", () => {
           { field: "university_id", message: "Учебное заведение не найдено", type: "missing" },
         ]),
     });
-    renderApp("/tasks");
+    renderApp("/interactions");
     fireEvent.click(await screen.findByRole("button", { name: /Новое взаимодействие/ }));
     const dialog = await screen.findByRole("dialog", { name: "Новое взаимодействие" });
     await within(dialog).findByRole("option", { name: "Технический университет" });
