@@ -1091,6 +1091,37 @@ def set_members(id: int, data: MembersIn, request: Request, auth: AuthContext = 
     return task_out(db, task.id)
 
 
+class AssigneesIn(BaseModel):
+    assignee_ids: list[int] = Field(default_factory=list, max_length=50)
+
+
+@router.patch('/tasks/{id}/assignees', response_model=TaskOut, summary='Изменить исполнителей задачи')
+def set_assignees(id: int, data: AssigneesIn, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    """Narrower than PUT /members: replaces only the `assignee` rows, leaving participants/observers
+    untouched. Used for inline reassignment (e.g. a subtask row) where the caller only ever has the
+    assignee to change in hand, not the task's full current member lists — sending those as empty
+    arrays through the full endpoint would silently clear them."""
+    task = db.get(Task, id)
+    if task is None or not can(auth.user, TaskAction.VIEW, task):
+        raise not_found()
+    if not can(auth.user, TaskAction.REASSIGN, task):
+        raise AppError(ErrorCode.FORBIDDEN)
+    ids = sorted(set(data.assignee_ids))
+    users = db.scalars(select(User).where(User.id.in_(ids), User.is_active.is_(True))).all() if ids else []
+    if len(users) != len(ids):
+        raise field_error(ErrorCode.VALIDATION_ERROR, 'assignee_ids', 'Один или несколько пользователей не найдены или неактивны')
+
+    db.execute(delete(TaskMember).where(TaskMember.task_id == task.id, TaskMember.role == 'assignee'))
+    for user in users:
+        db.add(TaskMember(task_id=task.id, user_id=user.id, role='assignee'))
+    db.add(TaskEvent(task_id=task.id, event_type='reassignment', actor_user_id=auth.user.id))
+    record_event(db, request, auth.user, 'task.members_update', entity_type='task', entity_id=task.id,
+                 summary=f'Изменён состав участников задачи «{task.title}»',
+                 payload={'assignee': [u.id for u in users]})
+    db.commit()
+    return task_out(db, task.id)
+
+
 # ---------- bulk actions ----------
 #
 # The server evaluates permission for every selected task individually (spec requirement) — a

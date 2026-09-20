@@ -78,23 +78,27 @@ export function TaskFilterDialog({
           ))}
         </div>
         <div className="filter-dialog-fields">
-          <fieldset>
+          <fieldset className="filter-fieldset">
             <legend>Статус</legend>
-            {ALL_STATUSES.map((s) => (
-              <label key={s} className="toggle">
-                <input type="checkbox" checked={status.includes(s)} onChange={() => toggle("status", s, status)} />
-                {TASK_STATUS_LABELS[s]}
-              </label>
-            ))}
+            <div className="filter-checkbox-grid">
+              {ALL_STATUSES.map((s) => (
+                <label key={s} className="toggle">
+                  <input type="checkbox" checked={status.includes(s)} onChange={() => toggle("status", s, status)} />
+                  {TASK_STATUS_LABELS[s]}
+                </label>
+              ))}
+            </div>
           </fieldset>
-          <fieldset>
+          <fieldset className="filter-fieldset">
             <legend>Приоритет</legend>
-            {ALL_PRIORITIES.map((p) => (
-              <label key={p} className="toggle">
-                <input type="checkbox" checked={priority.includes(p)} onChange={() => toggle("priority", p, priority)} />
-                {TASK_PRIORITY_LABELS[p]}
-              </label>
-            ))}
+            <div className="filter-checkbox-grid">
+              {ALL_PRIORITIES.map((p) => (
+                <label key={p} className="toggle">
+                  <input type="checkbox" checked={priority.includes(p)} onChange={() => toggle("priority", p, priority)} />
+                  {TASK_PRIORITY_LABELS[p]}
+                </label>
+              ))}
+            </div>
           </fieldset>
           <label className="inline-select">
             Вуз

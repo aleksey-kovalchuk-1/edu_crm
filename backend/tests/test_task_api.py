@@ -214,6 +214,66 @@ def test_set_members_replaces_assignees(client, keycloak, database_url):
     assert [m['id'] for m in response.json()['assignees']] == [b]
 
 
+def test_patch_assignees_replaces_only_assignees(client, keycloak, database_url):
+    """The narrow PATCH /tasks/{id}/assignees endpoint (used to reassign a subtask inline) must never
+    touch participants/observers, unlike the full PUT /members which always replaces all three."""
+    login(client, keycloak, roles=('crm-user',))
+    a = make_extra_user(database_url, full_name='Первый')
+    b = make_extra_user(database_url, full_name='Второй')
+    participant = make_extra_user(database_url, full_name='Соисполнитель')
+    observer = make_extra_user(database_url, full_name='Наблюдатель')
+    task = client.post('/api/v1/tasks', json={
+        'title': 'x', 'assignee_ids': [a], 'participant_ids': [participant], 'observer_ids': [observer],
+    }).json()
+
+    response = client.patch(f"/api/v1/tasks/{task['id']}/assignees", json={'assignee_ids': [b]})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert [m['id'] for m in body['assignees']] == [b]
+    assert [m['id'] for m in body['participants']] == [participant]
+    assert [m['id'] for m in body['observers']] == [observer]
+
+    with database(database_url) as db:
+        events = db.scalars(select(TaskEvent).where(TaskEvent.task_id == task['id'], TaskEvent.event_type == 'reassignment')).all()
+        assert len(events) == 1
+        audit = db.scalars(select(AuditEvent).where(AuditEvent.action == 'task.members_update')).all()
+        assert len(audit) == 1
+
+
+def test_patch_assignees_accepts_an_empty_list(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-user',))
+    a = make_extra_user(database_url, full_name='Первый')
+    task = client.post('/api/v1/tasks', json={'title': 'x', 'assignee_ids': [a]}).json()
+
+    response = client.patch(f"/api/v1/tasks/{task['id']}/assignees", json={'assignee_ids': []})
+    assert response.status_code == 200, response.text
+    assert response.json()['assignees'] == []
+
+
+def test_patch_assignees_rejects_unknown_or_inactive_user(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-user',))
+    task = client.post('/api/v1/tasks', json={'title': 'x'}).json()
+
+    response = client.patch(f"/api/v1/tasks/{task['id']}/assignees", json={'assignee_ids': [999999]})
+    assert response.status_code == 422
+    assert response.json()['details'][0]['field'] == 'assignee_ids'
+
+
+def test_patch_assignees_requires_reassign_permission(client, keycloak, database_url):
+    assignee = login(client, keycloak, subject='kc-assignee', roles=('crm-user',), name='Исполнитель', email='assignee@demo.local')
+    assignee_id = assignee['user']['id']
+    client.cookies.clear()
+
+    login(client, keycloak, roles=('crm-user',))
+    other = make_extra_user(database_url, full_name='Другой')
+    task = client.post('/api/v1/tasks', json={'title': 'x', 'assignee_ids': [assignee_id]}).json()
+    client.cookies.clear()
+
+    login(client, keycloak, subject='kc-assignee', roles=('crm-user',), name='Исполнитель', email='assignee@demo.local')
+    response = client.patch(f"/api/v1/tasks/{task['id']}/assignees", json={'assignee_ids': [other]})
+    assert response.status_code == 403
+
+
 def test_deep_link_returns_same_task(client, keycloak):
     login(client, keycloak, roles=('crm-user',))
     created = client.post('/api/v1/tasks', json={'title': 'Глубокая ссылка'}).json()
