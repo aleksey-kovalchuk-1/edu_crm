@@ -167,7 +167,7 @@ export const PLANNER_STATUSES: TaskStatus[] = ["new", "in_progress", "awaiting_r
 
 /* Queries */
 
-export type DeadlinePreset = "overdue" | "today" | "this_week" | "next_week" | "no_deadline";
+export type DeadlinePreset = "overdue" | "today" | "this_week" | "next_week" | "later" | "no_deadline";
 
 /** Shared by the List view, counters and Deadline view — the three must agree on what a filter means. */
 export interface TaskFilterParams {

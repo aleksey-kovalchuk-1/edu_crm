@@ -729,7 +729,7 @@ def assignable_users(db: Session = Depends(get_db)):
     return db.scalars(select(User).where(User.is_active.is_(True)).order_by(User.full_name)).all()
 
 
-DeadlinePreset = Literal['overdue', 'today', 'this_week', 'next_week', 'no_deadline']
+DeadlinePreset = Literal['overdue', 'today', 'this_week', 'next_week', 'later', 'no_deadline']
 
 
 class TaskFilters:
@@ -826,6 +826,8 @@ def apply_filters(query, filters, *, today=None):
             query = query.where(Task.deadline >= today, Task.deadline <= week_end)
         elif filters.deadline_preset == 'next_week':
             query = query.where(Task.deadline > week_end, Task.deadline <= week_end + timedelta(days=7))
+        elif filters.deadline_preset == 'later':
+            query = query.where(Task.deadline > week_end + timedelta(days=7))
         elif filters.deadline_preset == 'no_deadline':
             query = query.where(Task.deadline.is_(None))
     if filters.created_from:

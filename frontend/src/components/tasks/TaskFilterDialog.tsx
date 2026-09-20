@@ -15,6 +15,7 @@ const DEADLINE_PRESETS: { value: DeadlinePreset; label: string }[] = [
   { value: "today", label: "Срок сегодня" },
   { value: "this_week", label: "На этой неделе" },
   { value: "next_week", label: "На следующей неделе" },
+  { value: "later", label: "Позже" },
   { value: "no_deadline", label: "Без срока" },
 ];
 

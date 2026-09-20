@@ -8,6 +8,7 @@ const DEADLINE_PRESET_LABELS: Record<DeadlinePreset, string> = {
   today: "Сегодня",
   this_week: "На этой неделе",
   next_week: "На следующей неделе",
+  later: "Позже",
   no_deadline: "Без срока",
 };
 

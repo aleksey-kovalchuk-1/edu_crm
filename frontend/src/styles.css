@@ -2699,9 +2699,39 @@ dialog.wide {
 .deadline-group {
   margin-bottom: 26px;
 }
-.deadline-group h3 {
+.deadline-group summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+.deadline-group summary::-webkit-details-marker {
+  display: none;
+}
+.deadline-group summary h3 {
+  margin: 0;
   font-size: 12px;
-  margin-bottom: 4px;
+  font-weight: 650;
+  color: #2c2438;
+}
+.deadline-group-chevron {
+  color: #a19aa9;
+  transition: transform 0.15s;
+  flex-shrink: 0;
+}
+.deadline-group[open] > summary .deadline-group-chevron {
+  transform: rotate(90deg);
+}
+.deadline-priority {
+  flex-shrink: 0;
+  white-space: nowrap;
+  margin-top: 0;
+}
+.deadline-more {
+  display: inline-block;
+  margin-top: 6px;
 }
 .template-card {
   margin-bottom: 16px;
