@@ -85,9 +85,37 @@ describe("tasks: create", () => {
       priority: "normal",
       university_id: null,
       launch_id: null,
-      contract_id: null,
       assignee_ids: [],
     });
+  });
+
+  it("does not show a Contract field, and does not request contracts, when opening the create dialog", async () => {
+    const api = mockApi();
+    renderApp("/tasks");
+    fireEvent.click(await screen.findByRole("button", { name: /Создать задачу/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Новая задача" });
+
+    expect(within(dialog).queryByText("Договор")).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: /Договор/ })).toBeNull();
+    expect(api.calls.some((c) => c.method === "GET" && c.path.startsWith("/contracts"))).toBe(false);
+  });
+
+  it("does not submit contract_id when creating a task", async () => {
+    const api = mockApi({
+      "POST /tasks": (call) => [201, { ...api.data.task, id: 5, ...(call.body as object) }],
+      "GET /tasks/5": () => ({ ...api.data.task, id: 5, title: "Без вуза" }),
+    });
+    renderApp("/tasks");
+    fireEvent.click(await screen.findByRole("button", { name: /Создать задачу/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Новая задача" });
+    fireEvent.change(within(dialog).getByPlaceholderText("Например, собрать документы"), {
+      target: { value: "Без вуза" },
+    });
+    fireEvent.submit(dialog.querySelector("form")!);
+
+    await waitFor(() => expect(api.count("POST", "/tasks")).toBe(1));
+    const body = api.calls.find((c) => c.method === "POST")?.body as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(body, "contract_id")).toBe(false);
   });
 });
 
@@ -128,6 +156,37 @@ describe("tasks: detail", () => {
       title: "Согласовать договор (v2)",
     });
     expect(await screen.findByRole("heading", { level: 2, name: "Согласовать договор (v2)" })).toBeTruthy();
+  });
+
+  it("does not show a Contract field in the edit form, and keeps a pre-existing contract association on unrelated edits", async () => {
+    const api = mockApi({
+      "GET /tasks/1": () => ({
+        ...api.data.task,
+        contract: { id: 9, contract_number: "Д-2026-777" },
+      }),
+      "PATCH /tasks/1": (call) => {
+        api.data.task = { ...api.data.task, ...(call.body as object) };
+        return api.data.task;
+      },
+    });
+    renderApp("/tasks/1");
+    await screen.findByRole("heading", { level: 2, name: "Согласовать договор" });
+    expect(screen.getByText("Д-2026-777")).toBeTruthy();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
+    const form = (await screen.findByRole("textbox", { name: "Название" })).closest("form")!;
+    expect(within(form).queryByText("Договор")).toBeNull();
+    expect(within(form).queryByRole("combobox", { name: /Договор/ })).toBeNull();
+
+    fireEvent.change(within(form).getByRole("textbox", { name: "Название" }), {
+      target: { value: "Согласовать договор (v2)" },
+    });
+    fireEvent.submit(form);
+
+    await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(1));
+    const body = api.calls.find((c) => c.method === "PATCH")?.body as Record<string, unknown>;
+    expect(Object.prototype.hasOwnProperty.call(body, "contract_id")).toBe(false);
+    expect(await screen.findByText("Д-2026-777")).toBeTruthy();
   });
 
   it("shows the activity feed before the checklist", async () => {

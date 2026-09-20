@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { useContracts, useUniversities } from "../../api/catalogs";
+import { useUniversities } from "../../api/catalogs";
 import { useLaunches } from "../../api/queries";
 import {
   TASK_PRIORITY_LABELS,
@@ -25,7 +25,6 @@ export function TaskCreateForm({
   const users = useAssignableUsers();
   const universities = useUniversities();
   const launches = useLaunches();
-  const contracts = useContracts({});
   const create = useCreateTask();
 
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -33,7 +32,6 @@ export function TaskCreateForm({
     const f = new FormData(e.currentTarget);
     const deadline = formText(f, "deadline");
     const launchId = formText(f, "launch_id");
-    const contractId = formText(f, "contract_id");
     create.mutate(
       {
         title: formText(f, "title"),
@@ -42,7 +40,6 @@ export function TaskCreateForm({
         priority: formText(f, "priority") as TaskPriority,
         university_id: universityId ? Number(universityId) : null,
         launch_id: launchId ? Number(launchId) : null,
-        contract_id: contractId ? Number(contractId) : null,
         assignee_ids: f.getAll("assignee_ids").map(Number),
       },
       { onSuccess: onCreated },
@@ -51,9 +48,6 @@ export function TaskCreateForm({
 
   const universityLaunches = universityId
     ? launches.data?.filter((l) => l.university_id === Number(universityId))
-    : [];
-  const universityContracts = universityId
-    ? contracts.data?.items.filter((c) => c.university.id === Number(universityId))
     : [];
 
   return (
@@ -117,32 +111,18 @@ export function TaskCreateForm({
         <FieldError error={create.error} field="university_id" />
       </label>
       {universityId && (
-        <div className="form-row">
-          <label>
-            Взаимодействие
-            <select name="launch_id" defaultValue="">
-              <option value="">Без взаимодействия</option>
-              {universityLaunches?.map((l) => (
-                <option value={l.id} key={l.id}>
-                  {l.program}
-                </option>
-              ))}
-            </select>
-            <FieldError error={create.error} field="launch_id" />
-          </label>
-          <label>
-            Договор
-            <select name="contract_id" defaultValue="">
-              <option value="">Без договора</option>
-              {universityContracts?.map((c) => (
-                <option value={c.id} key={c.id}>
-                  {c.contract_number}
-                </option>
-              ))}
-            </select>
-            <FieldError error={create.error} field="contract_id" />
-          </label>
-        </div>
+        <label>
+          Взаимодействие
+          <select name="launch_id" defaultValue="">
+            <option value="">Без взаимодействия</option>
+            {universityLaunches?.map((l) => (
+              <option value={l.id} key={l.id}>
+                {l.program}
+              </option>
+            ))}
+          </select>
+          <FieldError error={create.error} field="launch_id" />
+        </label>
       )}
       <FormFooter error={create.error} pending={create.isPending} onCancel={onCancel} />
     </form>
