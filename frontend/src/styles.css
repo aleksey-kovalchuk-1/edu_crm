@@ -2875,17 +2875,6 @@ dialog.wide {
 .planner-column-settings {
   min-width: 220px;
 }
-.planner-column-setting {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-.planner-column-setting-order {
-  display: flex;
-  gap: 2px;
-  flex-shrink: 0;
-}
 .planner-board {
   display: flex;
   gap: 14px;
@@ -2901,15 +2890,68 @@ dialog.wide {
   max-width: 280px;
   flex: 1 0 240px;
 }
-.planner-column-head {
+.board-column-head {
+  padding: 2px 4px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.board-column-head-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 2px 4px 10px;
+  gap: 4px;
 }
-.planner-column-head h3 {
+.board-column-head-row h3 {
   font-size: 12px;
   margin: 0;
+  flex: 1;
+  text-align: center;
+}
+.board-column-rename {
+  display: flex;
+  flex: 1;
+  gap: 4px;
+}
+.board-column-rename input {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  padding: 3px 6px;
+  border: 1px solid #cbb8e6;
+  border-radius: 5px;
+}
+.board-column-actions {
+  display: flex;
+  gap: 2px;
+}
+.add-board-column {
+  align-self: flex-start;
+  flex-shrink: 0;
+}
+.add-board-column-form {
+  align-self: flex-start;
+  background: #f9f7fc;
+  border: 1px dashed #cbb8e6;
+  border-radius: 10px;
+  padding: 10px;
+  min-width: 220px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.add-board-column-form input {
+  width: 100%;
+  border: 1px solid #e4e1ec;
+  border-radius: 7px;
+  padding: 8px 10px;
+  font-size: 11px;
+}
+.add-board-column-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
 }
 .planner-column-list {
   list-style: none;

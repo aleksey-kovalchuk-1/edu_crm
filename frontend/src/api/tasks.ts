@@ -300,10 +300,31 @@ export type FilterView = "list" | "deadlines";
 /** The key a saved filter set is stored under — one per {view, scope} combination. */
 export const filterKey = (view: FilterView, scope: TaskScope): string => `${view}:${scope}`;
 
+/** One user-created personal column on the planner or Deadlines board — a non-empty title is all
+ * that's stored; the column's id (a `custom:<...>` string) is the key it's stored under. */
+export interface CustomColumn {
+  title: string;
+}
+
 export interface TaskPreferences {
   list_columns: string[] | null;
-  planner_columns: TaskStatus[] | null;
+  /** Ordered column ids for "Мой план" — a mix of TaskStatus codes and `custom:<id>` refs. A status
+   * absent from this list is hidden (D-180); a custom id absent is never shown (unlike the Deadlines
+   * board, this board's system columns stay optional/reorderable, not all-mandatory). */
+  planner_columns: string[] | null;
   planner_positions: Record<string, number[]> | null;
+  planner_custom_columns: Record<string, CustomColumn> | null;
+  /** task id (as a string key) -> custom column id; a task absent here shows in the system column
+   * matching its real status. */
+  planner_custom_members: Record<string, string> | null;
+  /** Ordered column ids for "Сроки" — the 6 system deadline buckets (always all present, never
+   * hidden) mixed with `custom:<id>` refs, in whatever order the user has arranged them. */
+  deadline_columns: string[] | null;
+  deadline_positions: Record<string, number[]> | null;
+  deadline_custom_columns: Record<string, CustomColumn> | null;
+  /** task id (as a string key) -> custom column id; a task absent here shows in the system bucket
+   * matching its real deadline. */
+  deadline_custom_members: Record<string, string> | null;
   filters: Record<string, SavedFilterSet> | null;
 }
 
@@ -313,14 +334,22 @@ export const useTaskPreferences = () =>
     queryFn: () => apiRequest<TaskPreferences>("/tasks/preferences"),
   });
 
-/** Each field is saved independently server-side — the List view's column picker, the planner's column
- * picker and its drag positions, and the filter dialog each call this with only the field they own, so
- * unsent fields keep their last saved value instead of being reset. `filters` is additionally merged
- * key-by-key server-side: saving one {view,scope} entry never drops another one. */
+/** Each field is saved independently server-side — the List view's column picker, the two boards'
+ * column/position state, and the filter dialog each call this with only the field(s) they own, so
+ * unsent fields keep their last saved value instead of being reset. `filters` is merged key-by-key
+ * server-side (saving one {view,scope} entry never drops another); every other field, including the
+ * four board-layout dicts, is a plain replace — the caller already holds the full current value from
+ * the same query that renders the board. */
 export interface TaskPreferencesPatch {
   list_columns?: string[];
-  planner_columns?: TaskStatus[];
+  planner_columns?: string[];
   planner_positions?: Record<string, number[]>;
+  planner_custom_columns?: Record<string, CustomColumn>;
+  planner_custom_members?: Record<string, string>;
+  deadline_columns?: string[];
+  deadline_positions?: Record<string, number[]>;
+  deadline_custom_columns?: Record<string, CustomColumn>;
+  deadline_custom_members?: Record<string, string>;
   filters?: Record<string, SavedFilterSet>;
 }
 

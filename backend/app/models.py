@@ -257,16 +257,33 @@ class TaskPlanRun(Base):
 
 class TaskUserPreferences(Base):
     """Per-user Tasks workspace preferences the spec asks to persist on the server (not in the URL):
-    visible List columns, the personal «My plan» column/card layout, and saved filter sets per
+    visible List columns, the personal «My plan» and «Сроки» board layouts, and saved filter sets per
     `{view}:{scope}` combination (`filters`, e.g. `{'list:mine': {...}}` — see task_routes.py's
     `SavedFilterIn`/`KNOWN_FILTER_KEYS`). Sort, pagination and the active view/scope stay in URL query
     parameters and are never stored here; a saved filter set is applied into the URL when there is no
-    explicit filter already there, not read directly by the frontend as page state."""
+    explicit filter already there, not read directly by the frontend as page state.
+
+    Board layout fields (planner_* / deadline_*) are a matched pair, one per board (D-202):
+    `*_columns` is the full ordered column list (system column keys mixed with `custom:<id>` refs —
+    the one source of truth for both visibility/order and which ids are "known" custom columns);
+    `*_positions` is manual card order per column id; `*_custom_columns` holds `{id: {title}}`
+    definitions for the custom (personal, non-status/non-deadline) columns; `*_custom_members` is
+    `{str(task_id): custom_column_id}`, the only per-task state that isn't derived from the task's own
+    status/deadline — a task absent from it always renders in the system column matching its real
+    status/deadline. All four are plain replace-on-write (unlike `filters`): the client already holds
+    the full current value from the same query that renders the board, so every change (add/rename/
+    delete/reorder a column, move a card) sends the complete updated value, no server-side merge."""
     __tablename__ = 'task_user_preferences'
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
     list_columns: Mapped[list | None] = mapped_column(JSONB)
     planner_columns: Mapped[list | None] = mapped_column(JSONB)
     planner_positions: Mapped[dict | None] = mapped_column(JSONB)
+    planner_custom_columns: Mapped[dict | None] = mapped_column(JSONB)
+    planner_custom_members: Mapped[dict | None] = mapped_column(JSONB)
+    deadline_columns: Mapped[list | None] = mapped_column(JSONB)
+    deadline_positions: Mapped[dict | None] = mapped_column(JSONB)
+    deadline_custom_columns: Mapped[dict | None] = mapped_column(JSONB)
+    deadline_custom_members: Mapped[dict | None] = mapped_column(JSONB)
     filters: Mapped[dict | None] = mapped_column(JSONB)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 

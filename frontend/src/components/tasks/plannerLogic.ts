@@ -1,34 +1,27 @@
 import { NEXT_STATUSES, type TaskListItem, type TaskStatus } from "../../api/tasks";
+import { bucketTasksByColumn, orderColumnCards } from "./boardColumns";
 
-export type PlannerColumns = Partial<Record<TaskStatus, TaskListItem[]>>;
+export type PlannerColumns = Record<string, TaskListItem[]>;
 
-/** Buckets tasks by status into only the visible columns; a task whose status isn't currently visible
- * simply doesn't appear on the board (it's not lost — the List/Deadline views still show it). */
-export function bucketByStatus(tasks: TaskListItem[], visibleColumns: TaskStatus[]): PlannerColumns {
-  const buckets: PlannerColumns = Object.fromEntries(visibleColumns.map((s) => [s, []]));
-  for (const task of tasks) {
-    buckets[task.status]?.push(task);
-  }
-  return buckets;
+/** Buckets tasks by column: a task goes to its custom-column override when one is recorded (and that
+ * column is still visible), otherwise to the system column matching its real status — dropped
+ * entirely if that status isn't currently visible (D-180; not lost, the List/Deadline views still show
+ * it). Thin wrapper over the shared boardColumns.bucketTasksByColumn. */
+export function bucketByStatus(
+  tasks: TaskListItem[],
+  visibleColumns: string[],
+  customMembers: Record<string, string> = {},
+): PlannerColumns {
+  return bucketTasksByColumn(tasks, visibleColumns, customMembers, (t) => t.status);
 }
 
 /** Orders a column's cards by the user's saved manual order; cards missing from that order keep the
  * list's original order and are appended after the ones the user has explicitly placed. */
-export function orderColumn(tasks: TaskListItem[], order: number[] | undefined): TaskListItem[] {
-  if (!order?.length) return tasks;
-  const byId = new Map(tasks.map((t) => [t.id, t]));
-  const ordered: TaskListItem[] = [];
-  for (const id of order) {
-    const task = byId.get(id);
-    if (task) {
-      ordered.push(task);
-      byId.delete(id);
-    }
-  }
-  return [...ordered, ...byId.values()];
-}
+export const orderColumn = orderColumnCards<TaskListItem>;
 
-/** Whether the server's fixed transition table (docs/design/tasks.md) permits this move. */
+/** Whether the server's fixed transition table (docs/design/tasks.md) permits this move. Only
+ * meaningful between two *system* status columns — moving into/out of a custom column never changes a
+ * task's real status (D-203), so callers check `isCustomColumnId` before reaching for this. */
 export function isValidMove(from: TaskStatus, to: TaskStatus): boolean {
   return NEXT_STATUSES[from]?.includes(to) ?? false;
 }

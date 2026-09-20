@@ -1,53 +1,38 @@
-import { useState } from "react";
 import { Link } from "react-router";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
-import {
-  NEEDS_COMMENT,
-  NEXT_STATUSES,
-  TASK_PRIORITY_LABELS,
-  TASK_STATUS_LABELS,
-  TRANSITION_LABELS,
-  useChangeTaskStatus,
-  type TaskListItem,
-  type TaskStatus,
-} from "../../api/tasks";
-import { errorText } from "../../api/client";
+import { NEXT_STATUSES, TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, TRANSITION_LABELS, type CustomColumn, type TaskListItem } from "../../api/tasks";
 import { taskPath } from "../../app/navigation";
 import { formatDate } from "../../lib/format";
-import { StatusCommentModal } from "./StatusCommentModal";
 
 /**
  * One card on the "Мой план" board. Draggable with the pointer (@dnd-kit) and, for keyboard/screen-reader
  * use, offers the same move as explicit controls: up/down buttons reorder within the column, and a
- * "Переместить" select changes status exactly like a cross-column drop would — same handler either way.
+ * "Переместить" select moves it to any other column — same onMove handler the parent uses for a
+ * cross-column drop, which decides what a move into a system vs. custom column actually does.
  */
 export function PlannerCard({
   task,
   index,
   columnSize,
+  currentColumnId,
+  customColumns,
   onMoveWithinColumn,
+  onMove,
 }: {
   task: TaskListItem;
   index: number;
   columnSize: number;
+  currentColumnId: string;
+  customColumns: Record<string, CustomColumn>;
   onMoveWithinColumn: (direction: -1 | 1) => void;
+  onMove: (toColumnId: string) => void;
 }) {
-  const [pendingComment, setPendingComment] = useState<TaskStatus | null>(null);
-  const change = useChangeTaskStatus(task.id);
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
-  const options = NEXT_STATUSES[task.status] ?? [];
-
-  function go(to: TaskStatus, comment = "") {
-    change.mutate({ to_status: to, comment, version: task.version });
-  }
-
-  function move(to: TaskStatus) {
-    const key = `${task.status}:${to}`;
-    if (NEEDS_COMMENT.has(key)) setPendingComment(to);
-    else go(to);
-  }
+  const statusTargets = NEXT_STATUSES[task.status] ?? [];
+  const customTargets = Object.entries(customColumns).filter(([id]) => id !== currentColumnId);
+  const hasTargets = statusTargets.length > 0 || customTargets.length > 0;
 
   return (
     <li
@@ -97,42 +82,27 @@ export function PlannerCard({
             <ArrowDown size={13} />
           </button>
         </span>
-        {options.length > 0 && (
+        {hasTargets && (
           <label className="planner-card-move">
             {`Переместить «${task.title}»`}
-            <select
-              value=""
-              disabled={change.isPending}
-              onChange={(e) => e.target.value && move(e.target.value as TaskStatus)}
-            >
+            <select value="" onChange={(e) => e.target.value && onMove(e.target.value)}>
               <option value="" disabled>
-                Выбрать статус
+                Выбрать колонку
               </option>
-              {options.map((to) => (
+              {statusTargets.map((to) => (
                 <option value={to} key={to}>
                   {TRANSITION_LABELS[task.status]?.[to] ?? TASK_STATUS_LABELS[to]}
+                </option>
+              ))}
+              {customTargets.map(([id, column]) => (
+                <option value={id} key={id}>
+                  {column.title}
                 </option>
               ))}
             </select>
           </label>
         )}
       </div>
-      {change.isError && (
-        <p className="danger" role="alert">
-          {errorText(change.error)}
-        </p>
-      )}
-      {pendingComment && (
-        <StatusCommentModal
-          pending={change.isPending}
-          error={change.error}
-          onCancel={() => setPendingComment(null)}
-          onSubmit={(comment) => {
-            go(pendingComment, comment);
-            setPendingComment(null);
-          }}
-        />
-      )}
     </li>
   );
 }

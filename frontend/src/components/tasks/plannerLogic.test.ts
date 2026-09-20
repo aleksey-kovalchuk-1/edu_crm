@@ -25,6 +25,13 @@ describe("bucketByStatus", () => {
     expect(buckets.in_progress?.map((t) => t.id)).toEqual([2]);
     expect(buckets.completed).toBeUndefined();
   });
+
+  it("places a task in its custom column override instead of its real status column", () => {
+    const tasks = [item(1, "new"), item(2, "new")];
+    const buckets = bucketByStatus(tasks, ["new", "custom:waiting"], { "1": "custom:waiting" });
+    expect(buckets.new.map((t) => t.id)).toEqual([2]);
+    expect(buckets["custom:waiting"].map((t) => t.id)).toEqual([1]);
+  });
 });
 
 describe("orderColumn", () => {
