@@ -129,6 +129,15 @@ describe("tasks: detail", () => {
     });
     expect(await screen.findByRole("heading", { level: 2, name: "Согласовать договор (v2)" })).toBeTruthy();
   });
+
+  it("shows the activity feed before the checklist", async () => {
+    mockApi();
+    renderApp("/tasks/1");
+    await screen.findByRole("heading", { level: 2, name: "Согласовать договор" });
+    const activity = await screen.findByRole("heading", { name: "Лента событий" });
+    const checklist = await screen.findByRole("heading", { name: "Чек-лист" });
+    expect(activity.compareDocumentPosition(checklist) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
 });
 
 describe("tasks: status workflow", () => {

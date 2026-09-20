@@ -177,6 +177,9 @@ export function TaskDetailPage() {
         </section>
       )}
       <section className="panel">
+        <TaskActivity taskId={t.id} />
+      </section>
+      <section className="panel">
         <TaskChecklist taskId={t.id} items={t.checklist} />
       </section>
       {!t.parent && (
@@ -186,9 +189,6 @@ export function TaskDetailPage() {
       )}
       <section className="panel">
         <TaskComments taskId={t.id} />
-      </section>
-      <section className="panel">
-        <TaskActivity taskId={t.id} />
       </section>
     </>
   );

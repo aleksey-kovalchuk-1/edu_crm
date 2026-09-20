@@ -477,12 +477,25 @@ export function useReorderChecklist(taskId: number) {
 
 /* Subtasks */
 
+export const subtasksKey = (taskId: number) => ["tasks", "subtasks", taskId] as const;
+
 export const useSubtasks = (taskId: number) =>
   useQuery({
-    queryKey: ["tasks", "subtasks", taskId] as const,
+    queryKey: subtasksKey(taskId),
     queryFn: () => apiRequest<TaskListItem[]>(`/tasks/${taskId}/subtasks`),
     enabled: Number.isInteger(taskId) && taskId > 0,
   });
+
+/** Replaces only a task's assignees (e.g. reassigning one subtask row) — narrower than
+ * useSetTaskMembers, which replaces all three member lists and would need the caller to already know
+ * the task's current participants/observers just to avoid clearing them. */
+export function useSetTaskAssignees(taskId: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (assignee_ids: number[]) => apiRequest<Task>(`/tasks/${taskId}/assignees`, "PATCH", { assignee_ids }),
+    onSuccess: () => afterTaskChange(client, taskId),
+  });
+}
 
 /* Comments */
 
