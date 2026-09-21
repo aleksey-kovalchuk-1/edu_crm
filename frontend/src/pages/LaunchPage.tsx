@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link, useParams } from "react-router";
-import { ArrowLeft, Columns3, RefreshCw } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router";
+import { ArrowLeft, Columns3, Plus, RefreshCw } from "lucide-react";
 import { useLaunchTasks } from "../api/launchTasks";
 import { useLaunches } from "../api/queries";
 import { TASK_STATUS_LABELS } from "../api/tasks";
@@ -11,19 +11,23 @@ import {
   useWorkflows,
 } from "../api/workflows";
 import { paths, taskPath } from "../app/navigation";
+import { Modal } from "../components/Modal";
 import { ErrorAlert, RefreshError, queryFallback } from "../components/QueryState";
 import { StatusChangeDialog } from "../components/StatusChangeDialog";
 import { StatusTimeline } from "../components/StatusTimeline";
+import { TaskCreateForm } from "../components/forms/TaskCreateForm";
 import { formatDate, launchCode } from "../lib/format";
 
 export function LaunchPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const launchId = Number(id);
   const launches = useLaunches();
   const workflows = useWorkflows();
   const changes = useStatusChanges(launchId);
   const launchTasks = useLaunchTasks(launchId);
   const [changing, setChanging] = useState(false);
+  const [creating, setCreating] = useState(false);
   const queries = [launches, workflows];
   const fallback = queryFallback(queries);
   if (fallback || !launches.data || !workflows.data) return fallback;
@@ -68,10 +72,16 @@ export function LaunchPage() {
               {launch.city ? `, ${launch.city}` : ""}
             </p>
           </div>
-          <button className="primary" onClick={() => setChanging(true)} disabled={!workflow}>
-            <RefreshCw size={17} />
-            Сменить статус
-          </button>
+          <div className="row-actions">
+            <button className="secondary" onClick={() => setCreating(true)}>
+              <Plus size={17} />
+              Создать задачу
+            </button>
+            <button className="primary" onClick={() => setChanging(true)} disabled={!workflow}>
+              <RefreshCw size={17} />
+              Сменить статус
+            </button>
+          </div>
         </div>
         <dl className="fields">
           <div>
@@ -161,6 +171,19 @@ export function LaunchPage() {
           currentStatusId={status?.id}
           close={() => setChanging(false)}
         />
+      )}
+      {creating && (
+        <Modal title="Новая задача" close={() => setCreating(false)}>
+          <TaskCreateForm
+            initialUniversityId={launch.university_id}
+            initialLaunchId={launch.id}
+            onCreated={(task) => {
+              setCreating(false);
+              navigate(taskPath(task.id));
+            }}
+            onCancel={() => setCreating(false)}
+          />
+        </Modal>
       )}
     </>
   );

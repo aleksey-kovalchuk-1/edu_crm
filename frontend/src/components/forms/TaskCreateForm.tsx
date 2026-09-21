@@ -14,14 +14,21 @@ export function TaskCreateForm({
   onCreated,
   onCancel,
   initialDeadline,
+  initialUniversityId,
+  initialLaunchId,
 }: {
   onCreated: (task: Task) => void;
   onCancel: () => void;
   /** Prefills the deadline field (e.g. from the Deadlines board's per-column "+" — D-205's mapping);
    * the user can still change or clear it before creating. */
   initialDeadline?: string | null;
+  /** When set (e.g. opened from an Interaction page), the University/Interaction fields are
+   * pre-filled and locked — a task created from that page always belongs to that Interaction. */
+  initialUniversityId?: number;
+  initialLaunchId?: number;
 }) {
-  const [universityId, setUniversityId] = useState("");
+  const [universityId, setUniversityId] = useState(initialUniversityId ? String(initialUniversityId) : "");
+  const locked = initialUniversityId !== undefined;
   const users = useAssignableUsers();
   const universities = useUniversities();
   const launches = useLaunches();
@@ -31,7 +38,7 @@ export function TaskCreateForm({
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const deadline = formText(f, "deadline");
-    const launchId = formText(f, "launch_id");
+    const launchId = locked ? initialLaunchId : formText(f, "launch_id");
     create.mutate(
       {
         title: formText(f, "title"),
@@ -96,31 +103,43 @@ export function TaskCreateForm({
       </label>
       <label>
         Учебное заведение
-        <select
-          name="university_id"
-          value={universityId}
-          onChange={(e) => setUniversityId(e.target.value)}
-        >
-          <option value="">Без учебного заведения</option>
-          {universities.data?.map((u) => (
-            <option value={u.id} key={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </select>
+        {locked ? (
+          <span className="muted">
+            {universities.data?.find((u) => u.id === initialUniversityId)?.name ?? initialUniversityId}
+          </span>
+        ) : (
+          <select
+            name="university_id"
+            value={universityId}
+            onChange={(e) => setUniversityId(e.target.value)}
+          >
+            <option value="">Без учебного заведения</option>
+            {universities.data?.map((u) => (
+              <option value={u.id} key={u.id}>
+                {u.name}
+              </option>
+            ))}
+          </select>
+        )}
         <FieldError error={create.error} field="university_id" />
       </label>
       {universityId && (
         <label>
           Взаимодействие
-          <select name="launch_id" defaultValue="">
-            <option value="">Без взаимодействия</option>
-            {universityLaunches?.map((l) => (
-              <option value={l.id} key={l.id}>
-                {l.program}
-              </option>
-            ))}
-          </select>
+          {locked ? (
+            <span className="muted">
+              {launches.data?.find((l) => l.id === initialLaunchId)?.program ?? initialLaunchId}
+            </span>
+          ) : (
+            <select name="launch_id" defaultValue="">
+              <option value="">Без взаимодействия</option>
+              {universityLaunches?.map((l) => (
+                <option value={l.id} key={l.id}>
+                  {l.program}
+                </option>
+              ))}
+            </select>
+          )}
           <FieldError error={create.error} field="launch_id" />
         </label>
       )}
