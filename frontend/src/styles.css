@@ -2145,6 +2145,35 @@ dialog.wide {
 .timeline-wrap {
   padding: 0 23px 23px;
 }
+.panel > h2 {
+  padding: 22px 23px 0;
+}
+.launch-task-category {
+  padding: 14px 23px;
+  border-bottom: 1px solid #f1edf6;
+}
+.launch-task-category:last-child {
+  border-bottom: 0;
+  padding-bottom: 22px;
+}
+.launch-task-category h3 {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.launch-task-category ul {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+.launch-task-category .muted {
+  margin-top: 8px;
+}
 .timeline {
   list-style: none;
   margin: 0;
