@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useParams } from "react-router";
 import { ArrowLeft, Columns3, Plus, RefreshCw } from "lucide-react";
 import { useLaunchTasks } from "../api/launchTasks";
 import { useLaunches } from "../api/queries";
@@ -20,7 +20,6 @@ import { formatDate, launchCode } from "../lib/format";
 
 export function LaunchPage() {
   const { id } = useParams();
-  const navigate = useNavigate();
   const launchId = Number(id);
   const launches = useLaunches();
   const workflows = useWorkflows();
@@ -177,10 +176,7 @@ export function LaunchPage() {
           <TaskCreateForm
             initialUniversityId={launch.university_id}
             initialLaunchId={launch.id}
-            onCreated={(task) => {
-              setCreating(false);
-              navigate(taskPath(task.id));
-            }}
+            onCreated={() => setCreating(false)}
             onCancel={() => setCreating(false)}
           />
         </Modal>
