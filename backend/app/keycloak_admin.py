@@ -3,7 +3,7 @@ crm-superadmin realm role, and reading the realm's password policy.
 
 Requires the `edu-crm-admin` service-account client (deploy/keycloak/realm-edu-crm.json) to have
 been granted view-users/manage-users/view-realm on the realm-management client — done live via
-scripts/keycloak-add-admin-permissions.sh (see docs/decisions.md), not via realm-import JSON.
+scripts/keycloak-grant-admin-permissions.sh (see docs/decisions.md), not via realm-import JSON.
 
 `KeycloakAdminClient.is_configured()` is False whenever KEYCLOAK_ADMIN_CLIENT_ID/_SECRET are unset
 (the default) — callers must check this and degrade to "admin features unavailable" rather than
