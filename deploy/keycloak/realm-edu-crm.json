@@ -68,15 +68,17 @@
       "baseUrl": "",
       "redirectUris": [
         "http://localhost:8080/api/v1/auth/callback",
-        "http://localhost:5173/api/v1/auth/callback"
+        "http://localhost:5173/api/v1/auth/callback",
+        "https://unicrm.tech/api/v1/auth/callback"
       ],
       "webOrigins": [
         "http://localhost:8080",
-        "http://localhost:5173"
+        "http://localhost:5173",
+        "https://unicrm.tech"
       ],
       "attributes": {
         "pkce.code.challenge.method": "S256",
-        "post.logout.redirect.uris": "http://localhost:8080/*##http://localhost:5173/*",
+        "post.logout.redirect.uris": "http://localhost:8080/*##http://localhost:5173/*##https://unicrm.tech/*",
         "oauth2.device.authorization.grant.enabled": "false",
         "oidc.ciba.grant.enabled": "false",
         "backchannel.logout.session.required": "true",
