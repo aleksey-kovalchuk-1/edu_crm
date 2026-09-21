@@ -23,6 +23,7 @@ from .workflows import active_statuses, all_statuses, default_template, launch_i
 from .oidc import OIDCClient
 from .schemas import LaunchInput, StageInput
 from .security import TokenCipher
+from .email import send_email
 from .settings import load_settings, validate_database_url
 from .sms import send_sms
 
@@ -63,7 +64,7 @@ def generate_default_plan_for_launch(db, request, auth, university, launch):
     run_generation(db, request, auth.user, default_plan, snapshot, university.id, launch.id, date.today(), [], overrides)
 
 
-def create_app(settings=None, *, http_client=None, sms_sender=None):
+def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender=None):
     # The server calls create_app() and reads the environment; tests pass settings and a fake identity provider.
     settings = load_settings() if settings is None else settings
     validate_database_url(settings.database_url)
@@ -102,6 +103,8 @@ def create_app(settings=None, *, http_client=None, sms_sender=None):
     # Defaults to the real sender (log-only or HTTP, per settings.sms_provider_url — see app/sms.py);
     # tests substitute a fake here so phone verification tests assert on calls, not logs or real HTTP.
     app.state.sms_sender = sms_sender or send_sms
+    # Same pattern as sms_sender, for outgoing email — see app/email.py.
+    app.state.email_sender = email_sender or send_email
     install_error_handlers(app)
     app.include_router(auth_router)
     app.include_router(audit_router)
