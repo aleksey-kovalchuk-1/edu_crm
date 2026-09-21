@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { CSRF_TOKEN, apiError, mockApi, renderApp, sessionFixture } from "../test/utils";
-import { paths } from "./navigation";
+import { NOT_FOUND_TITLE, paths } from "./navigation";
 
 /** Board column title that currently holds the card with this code. */
 const columnOf = (code: string) =>
@@ -239,7 +239,9 @@ describe("Настройки menu", () => {
 
     fireEvent.click(settingsButton);
     fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
-    expect(await screen.findByRole("heading", { name: "Личный профиль" })).toBeTruthy();
+    // Both the page's own <h2> and the Layout's <h1>/breadcrumb now read "Личный профиль"
+    // (see the header/breadcrumb regression test below) — level 1 targets the Layout heading.
+    expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
   });
 
   it("hides Пользователи и роли and Резервное копирование from a plain crm-user", async () => {
@@ -254,7 +256,26 @@ describe("Настройки menu", () => {
   it("Персональные данные is a real, distinctly-worded placeholder", async () => {
     mockApi();
     renderApp(paths.settingsPersonalData);
-    expect(await screen.findByRole("heading", { name: "Персональные данные" })).toBeTruthy();
+    expect(await screen.findByRole("heading", { level: 2, name: "Персональные данные" })).toBeTruthy();
     expect(screen.queryByText(/скоро|появится в одном из следующих/i)).toBeNull();
   });
+
+  it.each([
+    [paths.settingsProfile, "Личный профиль"],
+    [paths.settingsOrganization, "Организация"],
+    [paths.settingsPersonalData, "Персональные данные"],
+  ])(
+    "shows %s as the page header and breadcrumb, not the not-found fallback",
+    async (path, name) => {
+      mockApi();
+      renderApp(path);
+      // findPage() must resolve settings routes too, not just the flat sidebar `pages` list —
+      // otherwise the Layout header/breadcrumb silently falls back to NOT_FOUND_TITLE even
+      // though the routed page's own content renders fine underneath.
+      expect(await screen.findByRole("heading", { level: 1, name })).toBeTruthy();
+      const breadcrumb = document.querySelector(".breadcrumbs strong");
+      expect(breadcrumb?.textContent).toBe(name);
+      expect(screen.queryByText(NOT_FOUND_TITLE)).toBeNull();
+    },
+  );
 });
