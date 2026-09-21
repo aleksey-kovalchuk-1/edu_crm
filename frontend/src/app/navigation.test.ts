@@ -1,6 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { ROLES } from "../lib/user";
-import { settingsPages } from "./navigation";
+import { pages, paths, settingsPages } from "./navigation";
+
+describe("sidebar placement", () => {
+  it("keeps Процессы (workflows) as the last non-hidden entry in pages", () => {
+    // The «Настройки» menu is placed directly after the last flat sidebar NavLink
+    // (Layout.tsx renders it as the next sibling of the visiblePages() list). That
+    // placement — and the App.test.tsx adjacency test for it — silently depends on
+    // Процессы staying last among the non-hidden pages. Pin it here so a future page
+    // added after it in `pages` fails loudly instead of quietly reordering the sidebar.
+    const visible = pages.filter((p) => !p.hidden);
+    expect(visible[visible.length - 1].path).toBe(paths.workflows);
+  });
+});
 
 describe("settings navigation data", () => {
   it("lists the seven settings pages in the required order", () => {

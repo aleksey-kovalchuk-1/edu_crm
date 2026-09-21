@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { UserRound } from "lucide-react";
 import { SettingsMenu } from "./SettingsMenu";
 import type { PageMeta } from "./navigation";
@@ -105,5 +105,53 @@ describe("SettingsMenu", () => {
     fireEvent.click(screen.getByRole("button", { name: /Настройки/ }));
     const items = screen.getAllByRole("menuitem").map((el) => el.textContent);
     expect(items).toEqual(["Пункт А", "Пункт Б", "Только для суперадмина"]);
+  });
+
+  it("calls onNavigate (in addition to its own close) when an item is clicked", () => {
+    const onNavigate = vi.fn();
+    renderMenu({ onNavigate });
+    fireEvent.click(screen.getByRole("button", { name: /Настройки/ }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "Пункт А" }));
+    expect(onNavigate).toHaveBeenCalledTimes(1);
+    // Still closes on its own too — onNavigate is additive, not a replacement.
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
+  it("marks the styling wrapper between the menu and its items role=none", () => {
+    // role="menu" requires its DOM children to be menuitem/group — the wrapper that
+    // carries background/shadow styling sits directly inside it, so it needs role="none"
+    // to not break that relationship for assistive technology.
+    renderMenu();
+    fireEvent.click(screen.getByRole("button", { name: /Настройки/ }));
+    const menu = screen.getByRole("menu");
+    expect(menu.firstElementChild?.getAttribute("role")).toBe("none");
+  });
+
+  it("does not close on a hover-triggered mouseleave while focus is still inside the panel", async () => {
+    renderMenu();
+    const trigger = screen.getByRole("button", { name: /Настройки/ });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: "ArrowDown" });
+    const items = screen.getAllByRole("menuitem");
+    expect(document.activeElement).toBe(items[0]);
+    // A stray mouseleave on the root (e.g. the pointer just happens to be elsewhere)
+    // must not steal focus from the keyboard user still inside the panel.
+    fireEvent.mouseLeave(trigger.closest("[data-settings-menu-root]")!);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it("Escape at the document level closes a hover-opened menu and returns focus to the trigger", async () => {
+    // Hover-opened means focus never moved into the panel — only a document-level
+    // listener (not the trigger's or items' own keydown handlers) can catch this.
+    renderMenu();
+    const trigger = screen.getByRole("button", { name: /Настройки/ });
+    fireEvent.mouseEnter(trigger.closest("[data-settings-menu-root]")!);
+    await screen.findByRole("menu");
+    expect(document.activeElement).not.toBe(trigger);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 });

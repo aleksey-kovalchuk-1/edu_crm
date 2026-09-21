@@ -230,17 +230,41 @@ describe("Настройки menu", () => {
     mockApi({ "GET /auth/me": () => sessionFixture(["crm-supervisor"]) });
     renderApp("/");
     const nav = await screen.findByRole("navigation");
-    // "Процессы" is a link; "Настройки" is the SettingsMenu's own button — assert relative order:
+    // "Процессы" is a link; "Настройки" is the SettingsMenu's own button, rendered as the
+    // next element sibling of the "Процессы" link (SettingsMenu's root <div> is the very
+    // next child of <nav> after the mapped NavLinks) — assert direct adjacency, not just
+    // "somewhere after", so a page inserted between them would fail this test.
     const processesLink = within(nav).getByRole("link", { name: /Процессы/ });
     const settingsButton = within(nav).getByRole("button", { name: /Настройки/ });
-    expect(
-      processesLink.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    expect(processesLink.nextElementSibling?.contains(settingsButton)).toBe(true);
 
     fireEvent.click(settingsButton);
     fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
     // Both the page's own <h2> and the Layout's <h1>/breadcrumb now read "Личный профиль"
     // (see the header/breadcrumb regression test below) — level 1 targets the Layout heading.
+    expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
+  });
+
+  it("closes the mobile slide-over sidebar (and bumps the page reset) when a settings item is clicked", async () => {
+    mockApi();
+    renderApp("/");
+    const nav = await screen.findByRole("navigation");
+    const sidebar = document.querySelector(".sidebar");
+    expect(sidebar?.className).not.toContain("mobile-open");
+    fireEvent.click(screen.getByRole("button", { name: "Меню" }));
+    expect(sidebar?.className).toContain("mobile-open");
+    fireEvent.click(within(nav).getByRole("button", { name: /Настройки/ }));
+    fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
+    // Matches what the flat sidebar NavLinks already do on click (closeMenu() + setNavResets):
+    // the mobile overlay must not keep covering the page after navigating.
+    expect(sidebar?.className).not.toContain("mobile-open");
+  });
+
+  it("redirects the bare /settings path to the first settings page", async () => {
+    mockApi();
+    renderApp(paths.settings);
     expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
   });
 

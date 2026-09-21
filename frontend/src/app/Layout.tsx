@@ -94,6 +94,10 @@ export function Layout() {
               pages={settingsPages}
               currentPath={location.pathname}
               userRoles={user.roles}
+              onNavigate={() => {
+                closeMenu();
+                setNavResets((n) => n + 1);
+              }}
             />
           </nav>
           <div className="sidebar-bottom">
