@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from .audit import record_event
 from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_roles
 from .db import get_db
+from .email import EmailSendError, send_email
 from .errors import AppError, ErrorCode
 from .models import EmailSenderIdentity
 
@@ -67,3 +68,35 @@ def deactivate_sender(sender_id: int, request: Request, auth: AuthContext = Depe
     record_event(db, request, auth.user, 'email_sender.deactivate', entity_type='email_sender_identity', entity_id=row.id,
                  summary=f'Деактивирован отправитель писем «{row.display_name}» ({row.email_address})', payload={})
     db.commit()
+
+
+class TestSendOut(BaseModel):
+    delivered: bool
+    message: str
+
+
+@router.post('/test', response_model=TestSendOut, summary='Отправить тестовое письмо на свой адрес')
+def test_send(request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    settings = request.app.state.settings
+    # Defaults to the real settings-driven sender (see app/email.py); tests substitute a fake here,
+    # same pattern as app.state.sms_sender.
+    sender = getattr(request.app.state, 'email_sender', None) or send_email
+    # "Configured" means real delivery is actually possible: either the settings-driven default
+    # sender has a provider URL to call (the same condition send_email itself checks before falling
+    # back to logging), or the request-scoped sender has been swapped for something other than that
+    # default — which is how tests stand in for "a working provider is in place" without touching
+    # settings.email_provider_url or hitting real HTTP.
+    configured = bool(settings.email_provider_url) or sender is not send_email
+    from_identity = db.get(EmailSenderIdentity, auth.user.email_sender_identity_id) if auth.user.email_sender_identity_id else None
+    from_label = from_identity.email_address if from_identity else (settings.email_sender_address or settings.email_sender_name)
+    subject = 'Тестовое письмо UniCRM'
+    body = f'Это тестовое письмо, отправленное от имени «{from_label}». Если вы получили его, отправка почты настроена верно.'
+    try:
+        # Always the caller's own Keycloak-sourced address — never a client-supplied one: an
+        # endpoint that could target any address would be an open mail-relay-testing primitive.
+        sender(settings, auth.user.email, subject, body)
+    except EmailSendError as error:
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось отправить письмо, попробуйте ещё раз позже') from error
+    if configured:
+        return TestSendOut(delivered=True, message=f'Письмо отправлено на {auth.user.email}.')
+    return TestSendOut(delivered=False, message='Почтовый провайдер не настроен: письмо записано только в журнал сервера, реальная отправка недоступна.')
