@@ -59,6 +59,29 @@ describe("interaction detail: timeline", () => {
   });
 });
 
+describe("interaction detail: task plan", () => {
+  it("shows the plan's tasks grouped by category, with unfinished-earlier flagged", async () => {
+    mockApi({
+      "GET /launches/1/tasks": () => ({
+        current_category: 2,
+        categories: [
+          { index: 0, name: "Первый контакт", tasks: [{ id: 1, title: "Найти контакт", status: "completed", priority: "normal", deadline: "2026-01-01", assignee: null, is_optional: false }], unfinished_count: 0 },
+          { index: 1, name: "Документы", tasks: [{ id: 2, title: "Подписать документы", status: "new", priority: "normal", deadline: "2026-01-05", assignee: null, is_optional: false }], unfinished_count: 1 },
+          { index: 2, name: "Внедрение", tasks: [], unfinished_count: 0 },
+          { index: 3, name: "Обучение", tasks: [], unfinished_count: 0 },
+          { index: 4, name: "Сопровождение", tasks: [], unfinished_count: 0 },
+        ],
+        uncategorized: [],
+      }),
+    });
+    renderApp("/interactions/1");
+    await screen.findByRole("heading", { name: "Связанные задачи" });
+    expect(await screen.findByText("Документы")).toBeTruthy();
+    expect(await screen.findByText(/1 незаверш/)).toBeTruthy(); // unfinished_count badge on an earlier-than-current category
+    expect(screen.getByText("Подписать документы")).toBeTruthy();
+  });
+});
+
 describe("interaction detail: status change dialog", () => {
   async function openDialog() {
     await openLaunch();
