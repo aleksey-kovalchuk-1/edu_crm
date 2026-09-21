@@ -13,7 +13,8 @@ from .catalog_routes import active_university_in_scope, router as catalog_router
 from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
-from .models import AnnualMetric, Launch, StageEvent, StatusChange, University, WorkflowStatus
+from .models import AnnualMetric, Launch, StageEvent, StatusChange, TaskPlanRun, TaskPlanTemplate, University, WorkflowStatus
+from .plan_routes import resolve_assignee, run_generation, snapshot_template
 from .plan_routes import router as plan_router
 from .profile_routes import router as profile_router
 from .task_routes import router as task_router
@@ -36,6 +37,30 @@ def serialize(record):
 
 def is_overdue(launch):
     return launch.deadline < date.today() and launch.stage < 10
+
+
+def generate_default_plan_for_launch(db, request, auth, university, launch):
+    """Generates the one is_default_plan template's tasks for a newly created Interaction, exactly once.
+
+    Never raises for a per-launch reason: any step whose assignee can't be resolved (no university
+    manager, several of them, etc.) falls back to the Interaction's own creator, so this never blocks
+    Interaction creation. Guarded against duplicate generation for the same launch_id.
+    """
+    already_generated = db.scalar(select(TaskPlanRun.id).where(TaskPlanRun.launch_id == launch.id))
+    if already_generated is not None:
+        return
+    default_plan = db.scalar(select(TaskPlanTemplate).where(
+        TaskPlanTemplate.is_default_plan.is_(True), TaskPlanTemplate.is_active.is_(True),
+    ))
+    if default_plan is None:
+        return
+    snapshot = snapshot_template(db, default_plan)
+    overrides = {}
+    for step in snapshot['steps']:
+        assignee_id, issue = resolve_assignee(db, step, university.id, launch, auth.user.id)
+        if assignee_id is None:
+            overrides[str(step['id'])] = auth.user.id  # fall back to the Interaction's creator
+    run_generation(db, request, auth.user, default_plan, snapshot, university.id, launch.id, date.today(), [], overrides)
 
 
 def create_app(settings=None, *, http_client=None, sms_sender=None):
@@ -115,6 +140,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None):
         db.flush()
         db.add(StageEvent(launch_id=record.id, stage=first_status.position))
         db.add(StatusChange(launch_id=record.id, from_status_id=None, to_status_id=first_status.id, user_id=auth.user.id))
+        generate_default_plan_for_launch(db, request, auth, university, record)
         record_event(db, request, auth.user, 'launch.create', entity_type='launch', entity_id=record.id,
                      summary=f'Создано взаимодействие «{record.program}» с «{university.name}»',
                      payload={**data.model_dump(mode='json'), 'stage': first_status.position})

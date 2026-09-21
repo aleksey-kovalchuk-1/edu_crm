@@ -1,8 +1,10 @@
 from datetime import date, timedelta
+from types import SimpleNamespace
 
 from sqlalchemy import select
 
-from app.models import Task, TaskPlanRun
+from app.main import generate_default_plan_for_launch
+from app.models import Launch, Task, TaskMember, TaskPlanRun, University, User
 from helpers import database, login
 
 
@@ -305,3 +307,69 @@ def test_generate_snapshot_includes_step_category(client, keycloak, database_url
     with database(database_url) as db:
         run = db.scalar(select(TaskPlanRun).where(TaskPlanRun.id == response.json()['run_id']))
         assert run.template_snapshot['steps'][0]['category'] == 2
+
+
+def test_creating_a_launch_generates_the_default_plan_once(client, keycloak, database_url):
+    manager = login(client, keycloak, subject='kc-manager-launch', roles=('crm-user',), name='Менеджер Запуска', email='launchmgr@demo.local')
+    client.cookies.clear()
+    login(client, keycloak, roles=('crm-supervisor',))
+    university = create_university(client)
+    assign_manager(client, university['id'], manager['user']['id'])
+    response = client.post('/api/v1/launches', json={
+        'university_id': university['id'], 'program': 'Пилот', 'product': 'ИТ-школа',
+        'owner': 'Тест Тестов', 'students': 10, 'deadline': str(date.today() + timedelta(days=90)),
+    })
+    assert response.status_code == 201, response.text
+    launch_id = response.json()['id']
+
+    with database(database_url) as db:
+        runs = db.scalars(select(TaskPlanRun).where(TaskPlanRun.launch_id == launch_id)).all()
+        assert len(runs) == 1
+        tasks = db.scalars(select(Task).where(Task.launch_id == launch_id, Task.university_id == university['id'])).all()
+        assert len(tasks) == 14
+        assert all(t.origin_plan_run_id == runs[0].id for t in tasks)
+
+
+def test_launch_creation_falls_back_to_creator_when_no_university_manager(client, keycloak, database_url):
+    me = login(client, keycloak, roles=('crm-supervisor',))['user']
+    university = create_university(client)  # deliberately no manager assigned
+    response = client.post('/api/v1/launches', json={
+        'university_id': university['id'], 'program': 'Пилот', 'product': 'ИТ-школа',
+        'owner': 'Тест Тестов', 'students': 10, 'deadline': str(date.today() + timedelta(days=90)),
+    })
+    assert response.status_code == 201, response.text
+    launch_id = response.json()['id']
+
+    with database(database_url) as db:
+        tasks = db.scalars(select(Task).where(Task.launch_id == launch_id)).all()
+        assert len(tasks) == 14  # generation must not have failed or been skipped
+        task_ids = [t.id for t in tasks]
+        members = db.scalars(select(TaskMember).where(TaskMember.task_id.in_(task_ids), TaskMember.role == 'assignee')).all()
+        assert len(members) == 14
+        assert all(m.user_id == me['id'] for m in members)  # every step falls back to the Interaction's creator
+
+
+def test_launch_creation_does_not_duplicate_the_plan(client, keycloak, database_url):
+    """Simulates the one scenario this feature could double-generate in: the auto-generation hook
+    running twice for the same launch_id. The real endpoint only ever calls the hook once per
+    Interaction, so this exercises its idempotency guard directly."""
+    me = login(client, keycloak, roles=('crm-supervisor',))['user']
+    university = create_university(client)
+    response = client.post('/api/v1/launches', json={
+        'university_id': university['id'], 'program': 'Пилот', 'product': 'ИТ-школа',
+        'owner': 'Тест Тестов', 'students': 10, 'deadline': str(date.today() + timedelta(days=90)),
+    })
+    assert response.status_code == 201, response.text
+    launch_id = response.json()['id']
+
+    with database(database_url) as db:
+        launch = db.get(Launch, launch_id)
+        uni = db.get(University, university['id'])
+        actor = db.get(User, me['id'])
+        generate_default_plan_for_launch(db, None, SimpleNamespace(user=actor), uni, launch)
+        db.commit()
+
+        runs = db.scalars(select(TaskPlanRun).where(TaskPlanRun.launch_id == launch_id)).all()
+        assert len(runs) == 1
+        tasks = db.scalars(select(Task).where(Task.launch_id == launch_id)).all()
+        assert len(tasks) == 14

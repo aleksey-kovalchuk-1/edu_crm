@@ -20,12 +20,14 @@ def test_each_change_is_recorded_once_with_actor_and_summary(client, keycloak, d
     assert client.patch(f"/api/v1/launches/{launch['id']}", json={'stage': 2}).status_code == 200
 
     events = recorded_events(database_url)
-    assert [event.action for event in events] == ['university.create', 'launch.create', 'launch.stage_change']
+    # Creating the launch also auto-generates the default plan's 14 tasks (task.create per task)
+    # between university.create and launch.create — see generate_default_plan_for_launch in app/main.py.
+    assert [event.action for event in events] == ['university.create'] + ['task.create'] * 14 + ['launch.create', 'launch.stage_change']
     assert {event.user_id for event in events} == {me['user']['id']}
     assert events[0].entity_id == str(university['id'])
-    assert events[1].payload['university_id'] == university['id']
-    assert events[2].payload == {'from': 0, 'to': 2}
-    assert events[2].summary == '«Python»: этап «Поиск контакта» → «Встреча»'
+    assert events[-2].payload['university_id'] == university['id']
+    assert events[-1].payload == {'from': 0, 'to': 2}
+    assert events[-1].summary == '«Python»: этап «Поиск контакта» → «Встреча»'
     assert all(event.ip for event in events)
 
 
@@ -72,11 +74,12 @@ def test_managers_see_only_their_own_recent_actions(app, keycloak):
         assert manager.post('/api/v1/launches', json={**LAUNCH, 'university_id': university['id']}).status_code == 201
 
         mine = manager.get('/api/v1/audit/recent').json()
-        assert [event['action'] for event in mine] == ['launch.create']
+        # Most-recent-first: the launch itself, then the 14 auto-generated plan tasks it triggered.
+        assert [event['action'] for event in mine] == ['launch.create'] + ['task.create'] * 14
         assert mine[0]['user']['full_name'] == 'Анна Демо'
 
         everyone = head.get('/api/v1/audit/recent').json()
-        assert [event['action'] for event in everyone] == ['launch.create', 'university.managers', 'university.create']
+        assert [event['action'] for event in everyone] == ['launch.create'] + ['task.create'] * 14 + ['university.managers', 'university.create']
 
 
 def test_recent_actions_limit_is_bounded(client, keycloak):
