@@ -1,4 +1,4 @@
-import { BrowserRouter, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { AnalyticsPage } from "../pages/AnalyticsPage";
 import { CatalogsPage } from "../pages/CatalogsPage";
 import { ContractsPage } from "../pages/ContractsPage";
@@ -25,6 +25,7 @@ import { SettingsUsersPage } from "../pages/settings/SettingsUsersPage";
 import { AppProviders } from "./AppProviders";
 import { AuthGate } from "./AuthGate";
 import { Layout } from "./Layout";
+import { paths } from "./navigation";
 
 export function AppRoutes() {
   return (
@@ -46,6 +47,10 @@ export function AppRoutes() {
           <Route path="tasks/:id" element={<TaskDetailPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route
+            path="settings"
+            element={<Navigate to={paths.settingsProfile} replace />}
+          />
           <Route path="settings/profile" element={<SettingsProfilePage />} />
           <Route path="settings/organization" element={<SettingsOrganizationPage />} />
           <Route path="settings/notifications" element={<SettingsNotificationsPage />} />

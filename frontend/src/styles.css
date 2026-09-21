@@ -182,7 +182,10 @@ svg {
 }
 .settings-menu-panel {
   position: absolute;
-  top: 0;
+  /* Grows upward from the trigger rather than downward — safe because the trigger is
+     always the sidebar's bottom-most row, so there's always clear space above it, unlike
+     below it where a short viewport or a longer item list could run off-screen. */
+  bottom: 0;
   left: 100%;
   /* Zero gap: no margin between trigger and panel — this padding extends the panel's own
      hoverable box (it's still a DOM descendant of .settings-menu-root, so hovering it never
@@ -198,6 +201,10 @@ svg {
   box-shadow: 0 5px 18px #12052335;
   padding: 6px;
   animation: settings-menu-in 120ms ease-out;
+  /* Defensive: keeps a long item list from running off-screen (still relevant even with
+     the upward-growing anchor above) by scrolling internally instead. */
+  max-height: 70vh;
+  overflow-y: auto;
 }
 @keyframes settings-menu-in {
   from {
@@ -1338,6 +1345,15 @@ dialog::backdrop {
   .main-shell {
     margin-left: 0;
     width: 100%;
+  }
+  /* On the narrow slide-over sidebar there's no room for a side flyout — render the
+     submenu in-flow below the trigger instead, so it can't overflow off the right edge. */
+  .settings-menu-panel {
+    position: static;
+    left: auto;
+    bottom: auto;
+    padding-left: 0;
+    padding-top: 6px;
   }
   .breadcrumbs .icon-button {
     display: inline-grid;

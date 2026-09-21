@@ -18,10 +18,15 @@ export function SettingsMenu({
   pages,
   currentPath,
   userRoles,
+  onNavigate,
 }: {
   pages: PageMeta[];
   currentPath: string;
   userRoles: string[];
+  /** Called (alongside the menu's own close) when an item is clicked — lets the parent
+   *  close a mobile slide-over sidebar and reset page-local state, matching what the
+   *  flat sidebar NavLinks already do on click. */
+  onNavigate?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const panelId = useId();
@@ -49,7 +54,13 @@ export function SettingsMenu({
   }, []);
   const scheduleClose = useCallback(() => {
     cancelScheduledClose();
-    closeTimer.current = setTimeout(() => setOpen(false), HOVER_CLOSE_DELAY_MS);
+    closeTimer.current = setTimeout(() => {
+      // Don't let a stray hover-triggered close steal focus from a keyboard user who is
+      // still inside the panel (e.g. opened via keyboard, then a mouseleave fires because
+      // the pointer happens to be elsewhere) — that would drop focus back to <body>.
+      if (rootRef.current?.contains(document.activeElement)) return;
+      setOpen(false);
+    }, HOVER_CLOSE_DELAY_MS);
   }, [cancelScheduledClose]);
   const closeNow = useCallback(() => {
     cancelScheduledClose();
@@ -76,6 +87,21 @@ export function SettingsMenu({
   }, [open, closeNow]);
 
   useEffect(() => cancelScheduledClose, [cancelScheduledClose]);
+
+  // Escape closes the menu regardless of where focus currently is — the trigger/item
+  // keydown handlers below only fire when focus is inside the menu, which misses the
+  // hover-opened case where focus never moved into it.
+  useEffect(() => {
+    if (!open) return;
+    function onDocumentKeyDown(e: globalThis.KeyboardEvent) {
+      if (e.key === "Escape") {
+        closeNow();
+        triggerRef.current?.focus();
+      }
+    }
+    document.addEventListener("keydown", onDocumentKeyDown);
+    return () => document.removeEventListener("keydown", onDocumentKeyDown);
+  }, [open, closeNow]);
 
   function onRootMouseEnter() {
     cancelScheduledClose();
@@ -160,7 +186,7 @@ export function SettingsMenu({
             padding-left extends the hoverable box right up against the trigger, with no
             dead space a pointer moving diagonally toward the panel could slip through).
           */}
-          <div className="settings-menu-panel-inner">
+          <div className="settings-menu-panel-inner" role="none">
             {visible.map((p, i) => (
               <Link
                 key={p.path}
@@ -170,7 +196,10 @@ export function SettingsMenu({
                 ref={(el) => {
                   itemRefs.current[i] = el;
                 }}
-                onClick={closeNow}
+                onClick={() => {
+                  closeNow();
+                  onNavigate?.();
+                }}
                 onKeyDown={(e) => onItemKeyDown(i, e)}
               >
                 <p.icon size={16} />
