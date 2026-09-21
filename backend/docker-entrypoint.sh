@@ -3,6 +3,7 @@
 # Seeding runs here, once, rather than inside each server worker, so parallel workers cannot seed twice.
 set -e
 python -m app.db_migrate
+python -m app.bootstrap_superadmin
 if [ "${SEED_DEMO:-false}" = "true" ]; then
   python -m app.seed
 fi
