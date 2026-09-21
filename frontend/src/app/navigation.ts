@@ -235,6 +235,13 @@ export const visiblePages = (roles: string[]) =>
     (p) => !p.hidden && (!p.roles || p.roles.some((r) => roles.includes(r))),
   );
 
+/**
+ * Every page findPage() can resolve to — the flat sidebar pages plus the settings submenu
+ * pages, which are deliberately excluded from `pages`/`visiblePages()` (they must never
+ * appear in the flat sidebar list) but still need a header/breadcrumb when routed to.
+ */
+const allPages: PageMeta[] = [...pages, ...settingsPages];
+
 export const NOT_FOUND_TITLE = "Страница не найдена";
 
 const normalize = (pathname: string) => pathname.replace(/\/+$/, "") || "/";
@@ -243,8 +250,8 @@ const normalize = (pathname: string) => pathname.replace(/\/+$/, "") || "/";
 export function findPage(pathname: string): PageMeta | undefined {
   const normalized = normalize(pathname);
   return (
-    pages.find((p) => p.path === normalized) ??
-    pages.find((p) => p.path !== "/" && normalized.startsWith(`${p.path}/`))
+    allPages.find((p) => p.path === normalized) ??
+    allPages.find((p) => p.path !== "/" && normalized.startsWith(`${p.path}/`))
   );
 }
 
