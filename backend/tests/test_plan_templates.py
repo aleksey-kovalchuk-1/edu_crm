@@ -276,3 +276,32 @@ def test_university_runs_listing(client, keycloak, database_url):
     assert by_name['Второй план']['progress']['total'] == 3
     assert by_name['Тестовый план']['started_by']['id'] == me['id']
     assert by_name['Второй план']['started_by']['id'] == me['id']
+
+
+def test_default_plan_template_has_categorized_steps(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    response = client.get('/api/v1/task-plan-templates')
+    assert response.status_code == 200
+    template = next(t for t in response.json() if t['name'] == 'Адаптация нового вуза')
+    categories = [s['category'] for s in template['steps']]
+    assert categories == [0, 0, 0, 1, 1, 1, 2, 2, 3, 3, 3, 4, 4, 4]
+
+
+def test_generate_snapshot_includes_step_category(client, keycloak, database_url):
+    manager = login(client, keycloak, subject='kc-manager-cat', roles=('crm-user',), name='Менеджер Категории', email='catmgr@demo.local')
+    client.cookies.clear()
+    login(client, keycloak, roles=('crm-supervisor',))
+    university = create_university(client)
+    assign_manager(client, university['id'], manager['user']['id'])
+    template = create_template(client, steps=[
+        {'title': 'Шаг', 'assignee_rule': 'university_manager', 'category': 2,
+         'start_offset_days': 0, 'deadline_offset_days': 2, 'offset_unit': 'calendar'},
+    ])
+    response = client.post(f"/api/v1/task-plan-templates/{template['id']}/generate", json={
+        'university_id': university['id'], 'start_date': str(date.today()),
+    })
+    assert response.status_code == 201, response.text
+
+    with database(database_url) as db:
+        run = db.scalar(select(TaskPlanRun).where(TaskPlanRun.id == response.json()['run_id']))
+        assert run.template_snapshot['steps'][0]['category'] == 2

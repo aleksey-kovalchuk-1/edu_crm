@@ -82,6 +82,7 @@ class TemplateStepOut(BaseModel):
     priority: Priority
     approval_required: bool
     is_optional: bool
+    category: int | None
     depends_on_step_id: int | None
     checklist_items: list[TemplateStepChecklistOut]
 
@@ -106,6 +107,7 @@ class TemplateStepIn(BaseModel):
     priority: Priority = 'normal'
     approval_required: bool = False
     is_optional: bool = False
+    category: int | None = Field(default=None, ge=0, le=4)
     # Index into the *same* create request's `steps` list (a template's steps don't have ids yet).
     depends_on_position: int | None = Field(default=None, ge=0)
     checklist_items: list[Title] = Field(default_factory=list, max_length=50)
@@ -134,6 +136,7 @@ class TemplateStepAddIn(BaseModel):
     priority: Priority = 'normal'
     approval_required: bool = False
     is_optional: bool = False
+    category: int | None = Field(default=None, ge=0, le=4)
     depends_on_step_id: int | None = Field(default=None, gt=0)
     checklist_items: list[Title] = Field(default_factory=list, max_length=50)
 
@@ -149,6 +152,7 @@ class TemplateStepPatchIn(BaseModel):
     priority: Priority | None = None
     approval_required: bool | None = None
     is_optional: bool | None = None
+    category: int | None = Field(default=None, ge=0, le=4)
     depends_on_step_id: int | None = Field(default=None, gt=0)
     checklist_items: list[Title] | None = Field(default=None, max_length=50)
 
@@ -169,7 +173,7 @@ def step_out(step):
         assignee_rule=step.assignee_rule, assignee_rule_user_id=step.assignee_rule_user_id,
         start_offset_days=step.start_offset_days, deadline_offset_days=step.deadline_offset_days,
         offset_unit=step.offset_unit, priority=step.priority, approval_required=step.approval_required,
-        is_optional=step.is_optional, depends_on_step_id=step.depends_on_step_id,
+        is_optional=step.is_optional, category=step.category, depends_on_step_id=step.depends_on_step_id,
         checklist_items=[checklist_out(i) for i in sorted(step.checklist_items, key=lambda i: i.position)],
     )
 
@@ -224,7 +228,7 @@ def snapshot_template(db, template):
                 'assignee_rule': s.assignee_rule, 'assignee_rule_user_id': s.assignee_rule_user_id,
                 'start_offset_days': s.start_offset_days, 'deadline_offset_days': s.deadline_offset_days,
                 'offset_unit': s.offset_unit, 'priority': s.priority, 'approval_required': s.approval_required,
-                'is_optional': s.is_optional, 'depends_on_step_id': s.depends_on_step_id,
+                'is_optional': s.is_optional, 'category': s.category, 'depends_on_step_id': s.depends_on_step_id,
                 'checklist_items': [i.title for i in sorted(s.checklist_items, key=lambda i: i.position)],
             }
             for s in steps
@@ -410,7 +414,7 @@ def create_template(data: TemplateIn, request: Request, auth: AuthContext = Depe
             assignee_rule=step_in.assignee_rule, assignee_rule_user_id=step_in.assignee_rule_user_id,
             start_offset_days=step_in.start_offset_days, deadline_offset_days=step_in.deadline_offset_days,
             offset_unit=step_in.offset_unit, priority=step_in.priority, approval_required=step_in.approval_required,
-            is_optional=step_in.is_optional, depends_on_step_id=depends_on_step_id,
+            is_optional=step_in.is_optional, category=step_in.category, depends_on_step_id=depends_on_step_id,
         )
         db.add(step)
         db.flush()
@@ -450,7 +454,7 @@ def add_step(template_id: int, data: TemplateStepAddIn, request: Request, auth: 
         assignee_rule=data.assignee_rule, assignee_rule_user_id=data.assignee_rule_user_id,
         start_offset_days=data.start_offset_days, deadline_offset_days=data.deadline_offset_days,
         offset_unit=data.offset_unit, priority=data.priority, approval_required=data.approval_required,
-        is_optional=data.is_optional, depends_on_step_id=data.depends_on_step_id,
+        is_optional=data.is_optional, category=data.category, depends_on_step_id=data.depends_on_step_id,
     )
     db.add(step)
     db.flush()

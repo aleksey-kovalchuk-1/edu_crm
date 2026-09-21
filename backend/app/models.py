@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import BigInteger, CheckConstraint, Column, ForeignKey, Index, String, Date, DateTime, Boolean, MetaData, Table, Text, UniqueConstraint, false, true
+from sqlalchemy import BigInteger, CheckConstraint, Column, ForeignKey, Index, SmallInteger, String, Date, DateTime, Boolean, MetaData, Table, Text, UniqueConstraint, false, true
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -203,6 +203,7 @@ class TaskPlanTemplate(Base):
     name: Mapped[str] = mapped_column(russian_text(200), unique=True)
     description: Mapped[str] = mapped_column(Text, default='', server_default='')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    is_default_plan: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     steps: Mapped[list['TaskPlanTemplateStep']] = relationship(order_by='TaskPlanTemplateStep.position', viewonly=True)
@@ -228,6 +229,7 @@ class TaskPlanTemplateStep(Base):
     priority: Mapped[str] = mapped_column(String(10), default='normal', server_default='normal')
     approval_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     is_optional: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    category: Mapped[int | None] = mapped_column(SmallInteger, CheckConstraint('category >= 0 and category <= 4', name='category_range'))
     depends_on_step_id: Mapped[int | None] = mapped_column(ForeignKey('task_plan_template_steps.id'))
     checklist_items: Mapped[list['TaskPlanTemplateStepChecklistItem']] = relationship(
         order_by='TaskPlanTemplateStepChecklistItem.position', viewonly=True,
