@@ -83,6 +83,32 @@ def test_cookies_are_secure_by_default():
     assert load_settings(valid_environ()).cookie_secure is True
 
 
+def test_keycloak_admin_client_id_defaults_to_empty():
+    settings = make_settings('postgresql+psycopg://u:p@h:5432/db')
+    assert settings.keycloak_admin_client_id == ''
+    assert settings.keycloak_admin_client_secret == ''
+
+
+def test_keycloak_admin_settings_default_to_unconfigured():
+    settings = load_settings(valid_environ())
+    assert settings.keycloak_admin_client_id == ''
+    assert settings.keycloak_admin_client_secret == ''
+
+
+def test_keycloak_admin_settings_are_read_from_environment():
+    settings = load_settings(valid_environ(
+        KEYCLOAK_ADMIN_CLIENT_ID='edu-crm-admin', KEYCLOAK_ADMIN_CLIENT_SECRET='secret',
+    ))
+    assert settings.keycloak_admin_client_id == 'edu-crm-admin'
+    assert settings.keycloak_admin_client_secret == 'secret'
+
+
+def test_keycloak_admin_base_url_derived_from_internal_oidc_url():
+    # valid_environ()'s default OIDC_INTERNAL_BASE_URL is http://keycloak:8080/auth/realms/edu-crm.
+    settings = load_settings(valid_environ())
+    assert settings.keycloak_admin_base_url == 'http://keycloak:8080/auth'
+
+
 def test_server_factory_requires_configuration(monkeypatch):
     monkeypatch.delenv('DATABASE_URL', raising=False)
     with pytest.raises(SettingsError):

@@ -43,6 +43,10 @@
       {
         "name": "crm-admin",
         "description": "Администратор: видит все данные и управляет доступом"
+      },
+      {
+        "name": "crm-superadmin",
+        "description": "Полный административный доступ: пользователи, роли, безопасность, конфигурация системы"
       }
     ]
   },
@@ -103,6 +107,26 @@
           }
         }
       ]
+    },
+    {
+      "clientId": "edu-crm-admin",
+      "name": "Образование CRM — административный доступ",
+      "description": "Служебная учётная запись для Keycloak Admin API (список пользователей, роли, политика паролей)",
+      "enabled": true,
+      "protocol": "openid-connect",
+      "publicClient": false,
+      "bearerOnly": false,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "${EDU_CRM_ADMIN_CLIENT_SECRET}",
+      "standardFlowEnabled": false,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": false,
+      "serviceAccountsEnabled": true,
+      "frontchannelLogout": false,
+      "consentRequired": false,
+      "fullScopeAllowed": false,
+      "redirectUris": [],
+      "webOrigins": []
     }
   ],
   "users": [
