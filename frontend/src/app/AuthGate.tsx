@@ -112,8 +112,7 @@ function AuthScreen({
             <GraduationCap size={25} />
           </span>
           <span>
-            <strong>образование</strong>
-            <small>CRM · ЦИФРОВЫЕ НАВЫКИ</small>
+            <strong>UniCRM</strong>
           </span>
         </div>
         <p className="eyebrow">ОБРАЗОВАТЕЛЬНЫЕ ПАРТНЁРСТВА</p>
