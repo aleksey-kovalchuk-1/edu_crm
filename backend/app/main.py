@@ -140,10 +140,10 @@ def create_app(settings=None, *, http_client=None, sms_sender=None):
         db.flush()
         db.add(StageEvent(launch_id=record.id, stage=first_status.position))
         db.add(StatusChange(launch_id=record.id, from_status_id=None, to_status_id=first_status.id, user_id=auth.user.id))
-        generate_default_plan_for_launch(db, request, auth, university, record)
         record_event(db, request, auth.user, 'launch.create', entity_type='launch', entity_id=record.id,
                      summary=f'Создано взаимодействие «{record.program}» с «{university.name}»',
                      payload={**data.model_dump(mode='json'), 'stage': first_status.position})
+        generate_default_plan_for_launch(db, request, auth, university, record)
         db.commit()
         db.refresh(record)
         return serialize(record)

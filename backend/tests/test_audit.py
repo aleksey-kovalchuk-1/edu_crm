@@ -20,9 +20,10 @@ def test_each_change_is_recorded_once_with_actor_and_summary(client, keycloak, d
     assert client.patch(f"/api/v1/launches/{launch['id']}", json={'stage': 2}).status_code == 200
 
     events = recorded_events(database_url)
-    # Creating the launch also auto-generates the default plan's 14 tasks (task.create per task)
-    # between university.create and launch.create — see generate_default_plan_for_launch in app/main.py.
-    assert [event.action for event in events] == ['university.create'] + ['task.create'] * 14 + ['launch.create', 'launch.stage_change']
+    # Creating the launch also auto-generates the default plan's 14 tasks (task.create per task),
+    # recorded after launch.create so the audit log shows the Interaction existing before its tasks
+    # — see generate_default_plan_for_launch in app/main.py, called after record_event('launch.create').
+    assert [event.action for event in events] == ['university.create', 'launch.create'] + ['task.create'] * 14 + ['launch.stage_change']
     assert {event.user_id for event in events} == {me['user']['id']}
     assert events[0].entity_id == str(university['id'])
     assert events[-2].payload['university_id'] == university['id']
@@ -74,12 +75,13 @@ def test_managers_see_only_their_own_recent_actions(app, keycloak):
         assert manager.post('/api/v1/launches', json={**LAUNCH, 'university_id': university['id']}).status_code == 201
 
         mine = manager.get('/api/v1/audit/recent').json()
-        # Most-recent-first: the launch itself, then the 14 auto-generated plan tasks it triggered.
-        assert [event['action'] for event in mine] == ['launch.create'] + ['task.create'] * 14
+        # Most-recent-first: the 14 auto-generated plan tasks, then the launch that triggered them
+        # (launch.create is now recorded before generation, so it's the older of the two actions).
+        assert [event['action'] for event in mine] == ['task.create'] * 14 + ['launch.create']
         assert mine[0]['user']['full_name'] == 'Анна Демо'
 
         everyone = head.get('/api/v1/audit/recent').json()
-        assert [event['action'] for event in everyone] == ['launch.create'] + ['task.create'] * 14 + ['university.managers', 'university.create']
+        assert [event['action'] for event in everyone] == ['task.create'] * 14 + ['launch.create', 'university.managers', 'university.create']
 
 
 def test_recent_actions_limit_is_bounded(client, keycloak):
