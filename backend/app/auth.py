@@ -33,6 +33,9 @@ ROLE_USER = 'crm-user'
 ROLE_SUPERVISOR = 'crm-supervisor'
 ROLE_ADMIN = 'crm-admin'
 ALL_ROLES = (ROLE_USER, ROLE_SUPERVISOR, ROLE_ADMIN)
+# Orthogonal admin-only capability (Keycloak Admin API access), not a 4th tier of the ALL_ROLES ladder —
+# deliberately excluded from ALL_ROLES, which means "any signed-in CRM role" for the generic any_role dependency.
+ROLE_SUPERADMIN = 'crm-superadmin'
 
 router = APIRouter(prefix='/api/v1/auth', tags=['Аутентификация'])
 

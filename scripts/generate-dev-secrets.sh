@@ -25,6 +25,7 @@ random_text() {
 mkdir -p "$dir"
 umask 077
 client_secret="$(random_text 40)"
+admin_client_secret="$(random_text 40)"
 # A Fernet key is URL-safe base64 of 32 random bytes.
 session_key="$(openssl rand -base64 32 | tr '+/' '-_')"
 
@@ -33,6 +34,7 @@ KC_BOOTSTRAP_ADMIN_USERNAME=admin
 KC_BOOTSTRAP_ADMIN_PASSWORD=$(random_text 24)
 KC_DB_PASSWORD=$(random_text 32)
 EDU_CRM_CLIENT_SECRET=$client_secret
+EDU_CRM_ADMIN_CLIENT_SECRET=$admin_client_secret
 EDU_CRM_DEMO_USER_PASSWORD=$(random_text 20)
 EDU_CRM_DEMO_SUPERVISOR_PASSWORD=$(random_text 20)
 EDU_CRM_DEMO_ADMIN_PASSWORD=$(random_text 20)
@@ -40,6 +42,7 @@ EOF
 
 cat > "$api_env" <<EOF
 OIDC_CLIENT_SECRET=$client_secret
+KEYCLOAK_ADMIN_CLIENT_SECRET=$admin_client_secret
 SESSION_ENCRYPTION_KEY=$session_key
 EOF
 

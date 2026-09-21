@@ -16,7 +16,7 @@ from .security import tokens_match
 
 logger = logging.getLogger(__name__)
 
-CRM_ROLES = frozenset({'crm-user', 'crm-supervisor', 'crm-admin'})
+CRM_ROLES = frozenset({'crm-user', 'crm-supervisor', 'crm-admin', 'crm-superadmin'})
 SIGNING_ALGORITHMS = ['RS256']
 CLOCK_SKEW_SECONDS = 30
 # ID tokens arrive straight from the token endpoint, so anything older points to a replay or a clock problem.

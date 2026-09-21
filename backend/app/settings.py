@@ -41,6 +41,12 @@ class Settings:
     sms_provider_url: str = ''
     sms_provider_api_key: str = ''
     sms_sender: str = 'CRM'
+    # Keycloak Admin API access (Users & Roles, Security's password-policy display). Unset by
+    # default — admin features degrade to "not configured" rather than the app failing to start;
+    # see keycloak_admin.py. Real credentials come only from deploy/local/*.env, never committed.
+    keycloak_admin_client_id: str = ''
+    keycloak_admin_client_secret: str = ''
+    keycloak_admin_base_url: str = ''
 
     @property
     def callback_url(self):
@@ -133,4 +139,7 @@ def load_settings(environ=None):
         sms_provider_url=(environ.get('SMS_PROVIDER_URL') or '').strip(),
         sms_provider_api_key=(environ.get('SMS_PROVIDER_API_KEY') or '').strip(),
         sms_sender=(environ.get('SMS_SENDER') or '').strip() or 'CRM',
+        keycloak_admin_client_id=(environ.get('KEYCLOAK_ADMIN_CLIENT_ID') or '').strip(),
+        keycloak_admin_client_secret=(environ.get('KEYCLOAK_ADMIN_CLIENT_SECRET') or '').strip(),
+        keycloak_admin_base_url=environ['OIDC_INTERNAL_BASE_URL'].strip().rstrip('/').rsplit('/realms/', 1)[0],
     )
