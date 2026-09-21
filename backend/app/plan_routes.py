@@ -538,6 +538,57 @@ def preview_plan(template_id: int, data: PlanRequestIn, auth: AuthContext = Depe
     return PreviewOut(template_id=template.id, template_name=template.name, steps=[PreviewStepOut(**s) for s in steps])
 
 
+def run_generation(db, request, actor, template, snapshot, university_id, launch_id, start_date, skip_step_ids, assignee_overrides):
+    """Shared by the manual /generate endpoint and automatic generation on Interaction creation.
+    Caller is responsible for template.is_active checks, skip_step_ids validation, and commit/events.
+    """
+    launch = resolve_plan_links(db, university_id, launch_id)
+    included = [s for s in snapshot['steps'] if s['id'] not in skip_step_ids]
+    resolved = {}
+    for step in included:
+        override = assignee_overrides.get(str(step['id']))
+        if override is not None:
+            user = db.get(User, override)
+            if user is None or not user.is_active:
+                raise field_error(ErrorCode.VALIDATION_ERROR, f'assignee_{step["id"]}', 'Указанный пользователь не найден или неактивен')
+            resolved[step['id']] = user.id
+            continue
+        assignee_id, issue = resolve_assignee(db, step, university_id, launch, actor.id)
+        if assignee_id is None:
+            raise field_error(ErrorCode.VALIDATION_ERROR, f'assignee_{step["id"]}', f'«{step["title"]}»: {issue}')
+        resolved[step['id']] = assignee_id
+
+    run = TaskPlanRun(
+        template_id=template.id, template_snapshot=snapshot, university_id=university_id,
+        launch_id=launch_id, started_by_user_id=actor.id, start_date=start_date,
+    )
+    db.add(run)
+    db.flush()
+
+    created_tasks = []
+    for step in included:
+        planned_start = add_offset(start_date, step['start_offset_days'], step['offset_unit'])
+        deadline = add_offset(start_date, step['deadline_offset_days'], step['offset_unit']) if step['deadline_offset_days'] is not None else None
+        task = Task(
+            title=step['title'], description=step['description'], priority=step['priority'],
+            deadline=deadline, planned_start=planned_start, creator_id=actor.id,
+            university_id=university_id, launch_id=launch_id,
+            approval_required=step['approval_required'], origin_plan_run_id=run.id,
+            origin_template_step_key=str(step['id']),
+        )
+        db.add(task)
+        db.flush()
+        db.add(TaskMember(task_id=task.id, user_id=resolved[step['id']], role='assignee'))
+        for item_position, title in enumerate(step['checklist_items']):
+            db.add(TaskChecklistItem(task_id=task.id, title=title, position=item_position))
+        db.add(TaskEvent(task_id=task.id, event_type='created', actor_user_id=actor.id))
+        record_event(db, request, actor, 'task.create', entity_type='task', entity_id=task.id,
+                     summary=f'Создана задача «{task.title}» по плану «{template.name}»',
+                     payload={'title': task.title, 'university_id': university_id, 'plan_run_id': run.id})
+        created_tasks.append(task)
+    return run, created_tasks
+
+
 @router.post('/task-plan-templates/{template_id}/generate', response_model=GenerateOut, status_code=201,
              summary='Создать задачи по плану', dependencies=[Depends(any_role)])
 def generate_plan(template_id: int, data: GenerateIn, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
@@ -545,7 +596,6 @@ def generate_plan(template_id: int, data: GenerateIn, request: Request, auth: Au
     if not template.is_active:
         raise field_error(ErrorCode.VALIDATION_ERROR, 'template_id', 'Шаблон неактивен')
     check_university_access(db, auth, data.university_id)
-    launch = resolve_plan_links(db, data.university_id, data.launch_id)
     snapshot = snapshot_template(db, template)
 
     steps_by_id = {s['id']: s for s in snapshot['steps']}
@@ -556,49 +606,10 @@ def generate_plan(template_id: int, data: GenerateIn, request: Request, auth: Au
         if not step['is_optional']:
             raise field_error(ErrorCode.VALIDATION_ERROR, 'skip_step_ids', f'Шаг «{step["title"]}» обязателен и не может быть пропущен')
 
-    included = [s for s in snapshot['steps'] if s['id'] not in data.skip_step_ids]
-    resolved = {}
-    for step in included:
-        override = data.assignee_overrides.get(str(step['id']))
-        if override is not None:
-            user = db.get(User, override)
-            if user is None or not user.is_active:
-                raise field_error(ErrorCode.VALIDATION_ERROR, f'assignee_{step["id"]}', 'Указанный пользователь не найден или неактивен')
-            resolved[step['id']] = user.id
-            continue
-        assignee_id, issue = resolve_assignee(db, step, data.university_id, launch, auth.user.id)
-        if assignee_id is None:
-            raise field_error(ErrorCode.VALIDATION_ERROR, f'assignee_{step["id"]}', f'«{step["title"]}»: {issue}')
-        resolved[step['id']] = assignee_id
-
-    run = TaskPlanRun(
-        template_id=template.id, template_snapshot=snapshot, university_id=data.university_id,
-        launch_id=data.launch_id, started_by_user_id=auth.user.id, start_date=data.start_date,
+    run, created_tasks = run_generation(
+        db, request, auth.user, template, snapshot, data.university_id, data.launch_id,
+        data.start_date, data.skip_step_ids, data.assignee_overrides,
     )
-    db.add(run)
-    db.flush()
-
-    created_tasks = []
-    for step in included:
-        planned_start = add_offset(data.start_date, step['start_offset_days'], step['offset_unit'])
-        deadline = add_offset(data.start_date, step['deadline_offset_days'], step['offset_unit']) if step['deadline_offset_days'] is not None else None
-        task = Task(
-            title=step['title'], description=step['description'], priority=step['priority'],
-            deadline=deadline, planned_start=planned_start, creator_id=auth.user.id,
-            university_id=data.university_id, launch_id=data.launch_id,
-            approval_required=step['approval_required'], origin_plan_run_id=run.id,
-            origin_template_step_key=str(step['id']),
-        )
-        db.add(task)
-        db.flush()
-        db.add(TaskMember(task_id=task.id, user_id=resolved[step['id']], role='assignee'))
-        for item_position, title in enumerate(step['checklist_items']):
-            db.add(TaskChecklistItem(task_id=task.id, title=title, position=item_position))
-        db.add(TaskEvent(task_id=task.id, event_type='created', actor_user_id=auth.user.id))
-        record_event(db, request, auth.user, 'task.create', entity_type='task', entity_id=task.id,
-                     summary=f'Создана задача «{task.title}» по плану «{template.name}»',
-                     payload={'title': task.title, 'university_id': data.university_id, 'plan_run_id': run.id})
-        created_tasks.append(task)
 
     record_event(db, request, auth.user, 'task_plan.generate', entity_type='task_plan_run', entity_id=run.id,
                  summary=f'Запущен план «{template.name}»: создано задач — {len(created_tasks)}',
