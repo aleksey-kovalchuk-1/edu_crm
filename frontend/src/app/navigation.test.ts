@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ROLES } from "../lib/user";
-import { paths, settingsPages } from "./navigation";
+import { settingsPages } from "./navigation";
 
 describe("settings navigation data", () => {
   it("lists the seven settings pages in the required order", () => {
