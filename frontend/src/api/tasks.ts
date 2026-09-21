@@ -374,7 +374,15 @@ export function useCreateTask() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (data: TaskCreateInput) => apiRequest<Task>("/tasks", "POST", data),
-    onSuccess: () => afterTaskChange(client),
+    onSuccess: (task) => {
+      afterTaskChange(client);
+      // A task linked to an Interaction also needs its plan's category list (the Interaction
+      // page's "Связанные задачи" section) refreshed, so a manually created task shows up there
+      // without a manual reload.
+      if (task.interaction) {
+        void client.invalidateQueries({ queryKey: ["launches", task.interaction.id, "tasks"] });
+      }
+    },
   });
 }
 

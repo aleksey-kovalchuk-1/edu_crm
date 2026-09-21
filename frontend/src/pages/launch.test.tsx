@@ -107,13 +107,55 @@ describe("interaction detail: task plan", () => {
 });
 
 describe("interaction detail: manual task creation", () => {
-  it("creating a task from the Interaction page locks it to that university and interaction", async () => {
+  it("locks the task to that university and interaction, closes the modal, and shows it under Связанные задачи without a manual reload", async () => {
+    let created = false;
     const api = mockApi({
-      "POST /tasks": (call) => [201, { ...api.data.task, id: 9, ...(call.body as object) }],
+      "POST /tasks": (call) => {
+        created = true;
+        return [
+          201,
+          {
+            ...api.data.task,
+            id: 9,
+            ...(call.body as object),
+            interaction: { id: 1, program: "Аналитика данных" },
+          },
+        ];
+      },
+      "GET /launches/1/tasks": () => ({
+        current_category: 0,
+        categories: [
+          {
+            index: 0,
+            name: "Первый контакт",
+            tasks: created
+              ? [
+                  {
+                    id: 9,
+                    title: "Ручная задача",
+                    status: "new",
+                    priority: "normal",
+                    deadline: null,
+                    assignee: null,
+                    is_optional: false,
+                  },
+                ]
+              : [],
+            unfinished_count: 0,
+          },
+        ],
+        uncategorized: [],
+      }),
     });
     await openLaunch();
+    await screen.findByRole("heading", { name: "Связанные задачи" });
+    expect(screen.queryByText("Ручная задача")).toBeNull();
+
     fireEvent.click(await screen.findByRole("button", { name: /Создать задачу/ }));
     const dialog = await screen.findByRole("dialog", { name: "Новая задача" });
+    // the University/Interaction fields are not editable from this entry point
+    expect(within(dialog).queryByRole("combobox", { name: "Учебное заведение" })).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: "Взаимодействие" })).toBeNull();
     fireEvent.change(within(dialog).getByPlaceholderText("Например, собрать документы"), {
       target: { value: "Ручная задача" },
     });
@@ -125,8 +167,12 @@ describe("interaction detail: manual task creation", () => {
       university_id: 1,
       launch_id: 1,
     });
-    // the University/Interaction fields are not editable from this entry point
-    expect(within(dialog).queryByRole("combobox", { name: "Учебное заведение" })).toBeNull();
+
+    // the modal closes without redirecting away from the Interaction page
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // ...and the new task appears in "Связанные задачи" via the launch-tasks query being
+    // invalidated and refetched, with no manual reload.
+    expect(await screen.findByText("Ручная задача")).toBeTruthy();
   });
 });
 
