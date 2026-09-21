@@ -687,7 +687,9 @@ class LaunchTasksOut(BaseModel):
 def launch_tasks(launch_id: int, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
     launch = launch_in_scope(db, auth.user, launch_id)  # 404s if the launch itself isn't in scope
     tasks = db.scalars(
-        select(Task).where(Task.launch_id == launch_id, visible_tasks_query(auth.user)).order_by(Task.deadline)
+        select(Task)
+        .where(Task.launch_id == launch_id, visible_tasks_query(auth.user), Task.archived_at.is_(None))
+        .order_by(Task.deadline, Task.id)
     ).all()
     run_ids = {t.origin_plan_run_id for t in tasks if t.origin_plan_run_id is not None}
     runs = {r.id: r for r in db.scalars(select(TaskPlanRun).where(TaskPlanRun.id.in_(run_ids)))} if run_ids else {}
@@ -705,7 +707,7 @@ def launch_tasks(launch_id: int, auth: AuthContext = Depends(any_role), db: Sess
         return LaunchTaskOut(
             id=t.id, title=t.title, status=t.status, priority=t.priority, deadline=t.deadline,
             assignee=PersonOut(id=assignee.user_id, full_name=db.get(User, assignee.user_id).full_name) if assignee else None,
-            is_optional=bool(step['is_optional']) if step else False,
+            is_optional=bool(step.get('is_optional', False)) if step else False,
         )
 
     current = stage_group(launch.stage)
@@ -713,8 +715,8 @@ def launch_tasks(launch_id: int, auth: AuthContext = Depends(any_role), db: Sess
     uncategorized = []
     for t in tasks:
         step = snapshot_step(t)
-        cat = step['category'] if step else None
-        (buckets[cat] if cat is not None else uncategorized).append(task_out_small(t, step))
+        cat = step.get('category') if step else None
+        buckets.get(cat, uncategorized).append(task_out_small(t, step))
 
     categories = [
         LaunchCategoryOut(
