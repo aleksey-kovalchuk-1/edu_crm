@@ -106,6 +106,30 @@ describe("interaction detail: task plan", () => {
   });
 });
 
+describe("interaction detail: manual task creation", () => {
+  it("creating a task from the Interaction page locks it to that university and interaction", async () => {
+    const api = mockApi({
+      "POST /tasks": (call) => [201, { ...api.data.task, id: 9, ...(call.body as object) }],
+    });
+    await openLaunch();
+    fireEvent.click(await screen.findByRole("button", { name: /Создать задачу/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Новая задача" });
+    fireEvent.change(within(dialog).getByPlaceholderText("Например, собрать документы"), {
+      target: { value: "Ручная задача" },
+    });
+    fireEvent.submit(dialog.querySelector("form")!);
+
+    await waitFor(() => expect(api.count("POST", "/tasks")).toBe(1));
+    expect(api.calls.find((c) => c.method === "POST")?.body).toMatchObject({
+      title: "Ручная задача",
+      university_id: 1,
+      launch_id: 1,
+    });
+    // the University/Interaction fields are not editable from this entry point
+    expect(within(dialog).queryByRole("combobox", { name: "Учебное заведение" })).toBeNull();
+  });
+});
+
 describe("interaction detail: status change dialog", () => {
   async function openDialog() {
     await openLaunch();
