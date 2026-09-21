@@ -21,7 +21,8 @@ from .models import (
     TaskPlanTemplateStep, TaskPlanTemplateStepChecklistItem, University, UniversityManager, User, utcnow,
 )
 from .task_routes import task_out
-from .task_policy import TaskAction, can
+from .task_policy import TaskAction, can, visible_tasks_query
+from .workflows import STAGE_GROUPS, launch_in_scope, stage_group
 
 router = APIRouter(prefix='/api/v1', tags=['Шаблоны планов задач'])
 any_role = require_roles(*ALL_ROLES)
@@ -655,3 +656,71 @@ def plan_run_progress(run_id: int, auth: AuthContext = Depends(any_role), db: Se
     check_university_access(db, auth, run.university_id)
     tasks = db.scalars(select(Task).where(Task.origin_plan_run_id == run.id)).all()
     return compute_progress(tasks, run.template_snapshot)
+
+
+# ---------- Interaction tasks grouped by plan category ----------
+
+class LaunchTaskOut(BaseModel):
+    id: int
+    title: str
+    status: str
+    priority: str
+    deadline: date | None
+    assignee: PersonOut | None
+    is_optional: bool
+
+
+class LaunchCategoryOut(BaseModel):
+    index: int
+    name: str
+    tasks: list[LaunchTaskOut]
+    unfinished_count: int
+
+
+class LaunchTasksOut(BaseModel):
+    current_category: int
+    categories: list[LaunchCategoryOut]
+    uncategorized: list[LaunchTaskOut]
+
+
+@router.get('/launches/{launch_id}/tasks', response_model=LaunchTasksOut, summary='Задачи взаимодействия по категориям плана', dependencies=[Depends(any_role)])
+def launch_tasks(launch_id: int, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    launch = launch_in_scope(db, auth.user, launch_id)  # 404s if the launch itself isn't in scope
+    tasks = db.scalars(
+        select(Task).where(Task.launch_id == launch_id, visible_tasks_query(auth.user)).order_by(Task.deadline)
+    ).all()
+    run_ids = {t.origin_plan_run_id for t in tasks if t.origin_plan_run_id is not None}
+    runs = {r.id: r for r in db.scalars(select(TaskPlanRun).where(TaskPlanRun.id.in_(run_ids)))} if run_ids else {}
+
+    def snapshot_step(task):
+        if task.origin_plan_run_id is None or task.origin_template_step_key is None:
+            return None
+        run = runs.get(task.origin_plan_run_id)
+        if run is None:
+            return None
+        return next((s for s in run.template_snapshot['steps'] if str(s['id']) == task.origin_template_step_key), None)
+
+    def task_out_small(t, step):
+        assignee = next((m for m in t.members if m.role == 'assignee'), None)
+        return LaunchTaskOut(
+            id=t.id, title=t.title, status=t.status, priority=t.priority, deadline=t.deadline,
+            assignee=PersonOut(id=assignee.user_id, full_name=db.get(User, assignee.user_id).full_name) if assignee else None,
+            is_optional=bool(step['is_optional']) if step else False,
+        )
+
+    current = stage_group(launch.stage)
+    buckets = {i: [] for i in range(5)}
+    uncategorized = []
+    for t in tasks:
+        step = snapshot_step(t)
+        cat = step['category'] if step else None
+        (buckets[cat] if cat is not None else uncategorized).append(task_out_small(t, step))
+
+    categories = [
+        LaunchCategoryOut(
+            index=i, name=STAGE_GROUPS[i], tasks=buckets[i],
+            unfinished_count=sum(1 for t in buckets[i] if t.status not in ('completed', 'cancelled')) if i < current else 0,
+        )
+        for i in range(5)
+    ]
+    return LaunchTasksOut(current_category=current, categories=categories, uncategorized=uncategorized)
