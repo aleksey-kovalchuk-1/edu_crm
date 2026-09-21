@@ -2,6 +2,7 @@ export const ROLES = {
   user: "crm-user",
   supervisor: "crm-supervisor",
   admin: "crm-admin",
+  superadmin: "crm-superadmin",
 } as const;
 
 /** Highest role first. */
