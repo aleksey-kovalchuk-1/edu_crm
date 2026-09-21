@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { StatusChange } from "../api/workflows";
+import { formatDate } from "../lib/format";
 import { CSRF_TOKEN, apiError, mockApi, renderApp } from "../test/utils";
 
 const CHANGES: StatusChange[] = [
@@ -66,7 +67,22 @@ describe("interaction detail: task plan", () => {
         current_category: 2,
         categories: [
           { index: 0, name: "Первый контакт", tasks: [{ id: 1, title: "Найти контакт", status: "completed", priority: "normal", deadline: "2026-01-01", assignee: null, is_optional: false }], unfinished_count: 0 },
-          { index: 1, name: "Документы", tasks: [{ id: 2, title: "Подписать документы", status: "new", priority: "normal", deadline: "2026-01-05", assignee: null, is_optional: false }], unfinished_count: 1 },
+          {
+            index: 1,
+            name: "Документы",
+            tasks: [
+              {
+                id: 2,
+                title: "Подписать документы",
+                status: "new",
+                priority: "normal",
+                deadline: "2026-01-05",
+                assignee: { id: 7, full_name: "Иван Смирнов" },
+                is_optional: false,
+              },
+            ],
+            unfinished_count: 1,
+          },
           { index: 2, name: "Внедрение", tasks: [], unfinished_count: 0 },
           { index: 3, name: "Обучение", tasks: [], unfinished_count: 0 },
           { index: 4, name: "Сопровождение", tasks: [], unfinished_count: 0 },
@@ -78,7 +94,15 @@ describe("interaction detail: task plan", () => {
     await screen.findByRole("heading", { name: "Связанные задачи" });
     expect(await screen.findByText("Документы")).toBeTruthy();
     expect(await screen.findByText(/1 незаверш/)).toBeTruthy(); // unfinished_count badge on an earlier-than-current category
-    expect(screen.getByText("Подписать документы")).toBeTruthy();
+    const taskItem = screen.getByText("Подписать документы").closest("li")!;
+    expect(within(taskItem).getByText(/Новая/)).toBeTruthy(); // TASK_STATUS_LABELS["new"]
+    expect(within(taskItem).getByText(/Иван Смирнов/)).toBeTruthy(); // assignee.full_name
+    expect(within(taskItem).getByText(new RegExp(formatDate("2026-01-05")))).toBeTruthy(); // deadline
+
+    const currentHeading = screen.getByText("Внедрение").closest("h3")!;
+    expect(within(currentHeading).getByText("текущий этап")).toBeTruthy(); // badge on current_category
+
+    expect(within(currentHeading.parentElement!).getByText("Нет задач")).toBeTruthy(); // empty category
   });
 });
 
