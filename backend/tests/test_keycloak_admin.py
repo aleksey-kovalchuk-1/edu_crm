@@ -1,3 +1,4 @@
+import httpx
 import pytest
 
 from app.keycloak_admin import KeycloakAdminClient, KeycloakAdminError, KeycloakAdminUnavailable
@@ -63,6 +64,19 @@ def test_count_users_with_role():
     assert make_client(fake).count_users_with_role('crm-superadmin') == 1
 
 
+def test_count_users_with_role_uses_role_members_endpoint_not_capped_list_users():
+    # Simulates the old bug: if count_users_with_role still listed every user via GET /users (which
+    # Keycloak caps at 100 by default) and filtered client-side, a realm with more users than that
+    # cap could under-count. Here the fake's GET /users is made to return a wrong/capped answer
+    # ('not a list' — obviously broken) while the real GET /roles/{name}/users endpoint returns the
+    # correct membership, proving the client reads from the role-members endpoint, not /users.
+    fake = FakeKeycloak()
+    fake.add_admin_user(id='u1', email='a@demo.local', username='a', roles=['crm-superadmin'])
+    fake.add_admin_user(id='u2', email='b@demo.local', username='b', roles=['crm-user'])
+    fake.malformed_users_response = 'wrong_shape'
+    assert make_client(fake).count_users_with_role('crm-superadmin') == 1
+
+
 def test_get_password_policy():
     fake = FakeKeycloak()
     fake.realm_password_policy = "length(12) and notUsername"
@@ -81,3 +95,42 @@ def test_keycloak_unavailable_raises_unavailable():
     fake.unavailable = True
     with pytest.raises(KeycloakAdminUnavailable):
         make_client(fake).list_users()
+
+
+def test_non_json_body_raises_keycloak_admin_error_not_json_decode_error():
+    fake = FakeKeycloak()
+    fake.malformed_users_response = 'not_json'
+    with pytest.raises(KeycloakAdminError):
+        make_client(fake).list_users()
+
+
+def test_wrong_shape_body_raises_keycloak_admin_error_not_type_error():
+    fake = FakeKeycloak()
+    fake.malformed_users_response = 'wrong_shape'
+    with pytest.raises(KeycloakAdminError):
+        make_client(fake).list_users()
+
+
+def test_token_response_missing_access_token_raises_keycloak_admin_error_not_key_error():
+    fake = FakeKeycloak()
+    fake.token_response_missing_access_token = True
+    with pytest.raises(KeycloakAdminError):
+        make_client(fake).list_users()
+
+
+def test_401_on_a_request_clears_the_cached_token():
+    fake = FakeKeycloak()
+    client = make_client(fake)
+    # Prime a cached token, then make Keycloak start rejecting it (simulated by making credentials
+    # wrong so the *next* token fetch would 401 too — the point here is only that the cached token
+    # slot is cleared, forcing a fresh fetch rather than silently reusing the now-invalid one).
+    client.list_users()
+    assert client._token is not None
+
+    def force_401(request):
+        return httpx.Response(401, json={'error': 'invalid_token'})
+
+    client._http = httpx.Client(transport=httpx.MockTransport(force_401))
+    with pytest.raises(KeycloakAdminError):
+        client.list_users()
+    assert client._token is None

@@ -38,8 +38,18 @@ class FakeKeycloak:
         self.omit_id_token_on_refresh = False
         # Simulates an outage: every endpoint answers 503.
         self.unavailable = False
+        # Simulates a cold-start race: the next N requests (any endpoint) answer 503, then normal
+        # responses resume. Decremented on every request while > 0.
+        self.unavailable_calls_remaining = 0
         self.admin_users = {}  # id -> {"id", "email", "username", "roles": [...]}
         self.realm_password_policy = "length(12) and notUsername and notEmail and passwordHistory(3)"
+        # Malformed-response simulation for the admin API, settable per test:
+        #   'not_json'    -> GET /users returns 200 with a non-JSON body.
+        #   'wrong_shape' -> GET /users returns 200 with a JSON object instead of a JSON array.
+        self.malformed_users_response = None
+        # When True, the admin client_credentials token endpoint returns 200 with a JSON body that
+        # has no access_token key.
+        self.token_response_missing_access_token = False
 
     def jwks(self):
         public = jwt.algorithms.RSAAlgorithm.to_jwk(self.private_key.public_key(), as_dict=True)
@@ -75,6 +85,9 @@ class FakeKeycloak:
     def handler(self, request):
         if self.unavailable:
             return httpx.Response(503, text='Service Unavailable')
+        if self.unavailable_calls_remaining > 0:
+            self.unavailable_calls_remaining -= 1
+            return httpx.Response(503, text='Service Unavailable')
         path = request.url.path
         if path.endswith('/protocol/openid-connect/certs'):
             self.jwks_requests += 1
@@ -85,6 +98,8 @@ class FakeKeycloak:
             form = {key: values[0] for key, values in parse_qs(request.content.decode()).items()}
             if form.get('client_id') != ADMIN_CLIENT_ID or form.get('client_secret') != ADMIN_CLIENT_SECRET:
                 return httpx.Response(401, json={'error': 'unauthorized_client'})
+            if self.token_response_missing_access_token:
+                return httpx.Response(200, json={'expires_in': 60})
             return httpx.Response(200, json={'access_token': 'admin-access-token', 'expires_in': 60})
         if path == ADMIN_PATH_PREFIX or path.startswith(ADMIN_PATH_PREFIX + '/'):
             return self._admin_handler(request, path)
@@ -130,12 +145,22 @@ class FakeKeycloak:
     def _admin_handler(self, request, path):
         suffix = path[len(ADMIN_PATH_PREFIX):].lstrip('/')
         if suffix == 'users' and request.method == 'GET':
+            if self.malformed_users_response == 'not_json':
+                return httpx.Response(200, text='not json')
+            if self.malformed_users_response == 'wrong_shape':
+                return httpx.Response(200, json={'not': 'a list'})
             email = request.url.params.get('email')
             users = list(self.admin_users.values())
             if email:
                 users = [u for u in users if u['email'] == email]
             return httpx.Response(200, json=[
                 {'id': u['id'], 'email': u['email'], 'username': u['username']} for u in users
+            ])
+        if suffix.startswith('roles/') and suffix.endswith('/users') and request.method == 'GET':
+            role_name = suffix[len('roles/'):-len('/users')]
+            members = [u for u in self.admin_users.values() if role_name in u['roles']]
+            return httpx.Response(200, json=[
+                {'id': u['id'], 'email': u['email'], 'username': u['username']} for u in members
             ])
         if suffix.startswith('users/') and suffix.endswith('/role-mappings/realm') and request.method in ('POST', 'DELETE'):
             user_id = suffix[len('users/'):-len('/role-mappings/realm')]
