@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 from types import SimpleNamespace
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.main import generate_default_plan_for_launch
 from app.models import Launch, Task, TaskMember, TaskPlanRun, University, User
@@ -373,3 +373,94 @@ def test_launch_creation_does_not_duplicate_the_plan(client, keycloak, database_
         assert len(runs) == 1
         tasks = db.scalars(select(Task).where(Task.launch_id == launch_id)).all()
         assert len(tasks) == 14
+
+
+def test_launch_tasks_endpoint_groups_by_category_and_flags_unfinished_earlier(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    university = create_university(client)
+    launch = client.post('/api/v1/launches', json={
+        'university_id': university['id'], 'program': 'Пилот', 'product': 'ИТ-школа',
+        'owner': 'Тест Тестов', 'students': 10, 'deadline': str(date.today() + timedelta(days=90)),
+    }).json()
+
+    response = client.get(f"/api/v1/launches/{launch['id']}/tasks")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body['current_category'] == 0  # freshly created launch starts at stage 0
+    assert len(body['categories']) == 5
+    assert [c['name'] for c in body['categories']] == [
+        'Первый контакт', 'Документы', 'Внедрение', 'Обучение', 'Сопровождение',
+    ]
+    assert [c['index'] for c in body['categories']] == [0, 1, 2, 3, 4]
+    assert sum(len(c['tasks']) for c in body['categories']) == 14
+    assert body['uncategorized'] == []
+    # All 14 default-plan tasks fall in category 0 (stage 0, before the launch has progressed) or
+    # later categories; unfinished_count is only computed for categories *before* current_category (0),
+    # so none of them should count anything as unfinished yet.
+    assert all(c['unfinished_count'] == 0 for c in body['categories'])
+    optional_titles = [t['title'] for c in body['categories'] for t in c['tasks'] if t['is_optional']]
+    assert optional_titles == ['Доработать документы при необходимости']
+    categorized_ids = {t['id'] for c in body['categories'] for t in c['tasks']}
+    assert len(categorized_ids) == 14  # every task appeared exactly once
+
+
+def test_launch_tasks_endpoint_404s_for_a_user_outside_the_university_scope(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    university = create_university(client)
+    manager = login(client, keycloak, subject='kc-scope-manager', roles=('crm-user',), name='Менеджер Области', email='scopemgr@demo.local')
+    client.cookies.clear()
+    login(client, keycloak, roles=('crm-supervisor',))
+    assign_manager(client, university['id'], manager['user']['id'])
+    launch = client.post('/api/v1/launches', json={
+        'university_id': university['id'], 'program': 'Пилот', 'product': 'ИТ-школа',
+        'owner': manager['user']['full_name'], 'students': 10, 'deadline': str(date.today() + timedelta(days=90)),
+    }).json()
+
+    client.cookies.clear()
+    login(client, keycloak, subject='kc-scope-outsider', roles=('crm-user',), name='Посторонний', email='outsider@demo.local')
+    response = client.get(f"/api/v1/launches/{launch['id']}/tasks")
+    assert response.status_code == 404
+
+
+def test_launch_tasks_endpoint_hides_a_task_the_viewer_cannot_view(client, keycloak, database_url):
+    """A task tied to this launch but with no university_id (so university-scope doesn't grant
+    access to it) and created by someone else must not appear for a manager who can see every
+    *other* task in the same launch — proves the endpoint applies per-task visibility, not just
+    'can this viewer see the launch'."""
+    login(client, keycloak, roles=('crm-supervisor',))
+    university = create_university(client)
+    manager = login(client, keycloak, subject='kc-hide-manager', roles=('crm-user',), name='Менеджер Скрытых', email='hidemgr@demo.local')
+    client.cookies.clear()
+    login(client, keycloak, roles=('crm-supervisor',))
+    assign_manager(client, university['id'], manager['user']['id'])
+    launch = client.post('/api/v1/launches', json={
+        'university_id': university['id'], 'program': 'Пилот', 'product': 'ИТ-школа',
+        'owner': manager['user']['full_name'], 'students': 10, 'deadline': str(date.today() + timedelta(days=90)),
+    }).json()
+
+    client.cookies.clear()
+    other_user = login(client, keycloak, subject='kc-hide-other', roles=('crm-user',), name='Другой Пользователь', email='hideother@demo.local')
+    client.cookies.clear()
+    # The task's creator must be in the university's scope (or see-all) to create it with launch_id
+    # at all, so use the supervisor as creator — the point under test is the *viewing* manager's
+    # visibility, not who created the task.
+    login(client, keycloak, roles=('crm-supervisor',))
+    hidden = client.post('/api/v1/tasks', json={
+        'title': 'Приватная задача', 'launch_id': launch['id'], 'assignee_ids': [other_user['user']['id']],
+    }).json()
+    # Deliberately leave university_id unset on this one task via a direct DB update, to exercise
+    # the one case where launch-level and task-level scope genuinely diverge (see task_policy.py's
+    # _in_university_scope: `if task.university_id is None: return False`).
+    with database(database_url) as db:
+        db.execute(update(Task).where(Task.id == hidden['id']).values(university_id=None))
+        db.commit()
+
+    client.cookies.clear()
+    login(client, keycloak, subject='kc-hide-manager', roles=('crm-user',), name='Менеджер Скрытых', email='hidemgr@demo.local')  # back to the manager
+    response = client.get(f"/api/v1/launches/{launch['id']}/tasks")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    all_titles = [t['title'] for c in body['categories'] for t in c['tasks']] + [t['title'] for t in body['uncategorized']]
+    assert 'Приватная задача' not in all_titles
+    # Sanity check: the manager does see the other 14 (visible) tasks from the same launch.
+    assert sum(len(c['tasks']) for c in body['categories']) + len(body['uncategorized']) == 14
