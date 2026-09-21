@@ -355,6 +355,21 @@ class AnnualMetric(Base):
     streams: Mapped[int]
 
 
+class EmailSenderIdentity(Base):
+    """A "from" address a user may send university correspondence as (Настройки → Личный профиль).
+    Every row is inherently admin-approved: only crm-supervisor/crm-admin can create one — there is
+    no self-service "verify my own mailbox" flow. Deactivated (is_active=False), never hard-deleted,
+    so a user who previously selected one keeps a valid historical reference.
+    """
+    __tablename__ = 'email_sender_identities'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email_address: Mapped[str] = mapped_column(String(254), unique=True)
+    display_name: Mapped[str] = mapped_column(russian_text(200))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class User(Base):
     """Local mirror of a Keycloak account; Keycloak stays the source of identity and roles."""
     __tablename__ = 'users'
@@ -370,6 +385,9 @@ class User(Base):
     # Keycloak user attribute, because it is a CRM profile fact, not an identity fact Keycloak needs.
     phone: Mapped[str] = mapped_column(String(20), default='', server_default='')
     phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Selected "from" address for outgoing correspondence (Настройки → Личный профиль); nullable
+    # because "no sender selected yet" is the normal default state for every existing/new user.
+    email_sender_identity_id: Mapped[int | None] = mapped_column(ForeignKey('email_sender_identities.id'))
 
 
 class UserSession(Base):
