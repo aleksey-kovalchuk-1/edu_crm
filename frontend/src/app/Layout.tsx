@@ -56,10 +56,7 @@ export function Layout() {
             <span className="brand-mark">
               <GraduationCap size={27} />
             </span>
-            <span>
-              образование
-              <span className="brand-sub">CRM · ЦИФРОВЫЕ НАВЫКИ</span>
-            </span>
+            <span>UniCRM</span>
           </Link>
           <div className="workspace">
             <span className="workspace-icon">ИТ</span>
@@ -169,7 +166,7 @@ export function Layout() {
             */}
             <Outlet key={`${location.pathname}#${navResets}`} />
             <footer>
-              Образование CRM <span>Рабочий шаблон · Данные вымышлены</span>
+              UniCRM <span>Рабочий шаблон · Данные вымышлены</span>
             </footer>
           </main>
         </div>
