@@ -17,9 +17,11 @@ import {
   findPage,
   isPageRoot,
   paths,
+  settingsPages,
   visiblePages,
   type CreateKind,
 } from "./navigation";
+import { SettingsMenu } from "./SettingsMenu";
 
 const CREATE_LABELS: Record<CreateKind, string> = {
   university: "Добавить заведение",
@@ -88,6 +90,11 @@ export function Layout() {
                 )}
               </NavLink>
             ))}
+            <SettingsMenu
+              pages={settingsPages}
+              currentPath={location.pathname}
+              userRoles={user.roles}
+            />
           </nav>
           <div className="sidebar-bottom">
             <div className="sidebar-note">

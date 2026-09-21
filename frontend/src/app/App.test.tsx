@@ -1,6 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { CSRF_TOKEN, apiError, mockApi, renderApp } from "../test/utils";
+import { CSRF_TOKEN, apiError, mockApi, renderApp, sessionFixture } from "../test/utils";
+import { paths } from "./navigation";
 
 /** Board column title that currently holds the card with this code. */
 const columnOf = (code: string) =>
@@ -221,5 +222,39 @@ describe("create forms", () => {
     expect(within(dialog).getByRole("alert").textContent).toBe(
       "Проверьте заполненные поля (код VALIDATION_ERROR)",
     );
+  });
+});
+
+describe("Настройки menu", () => {
+  it("renders directly after Процессы for a supervisor, and reaches each settings page", async () => {
+    mockApi({ "GET /auth/me": () => sessionFixture(["crm-supervisor"]) });
+    renderApp("/");
+    const nav = await screen.findByRole("navigation");
+    // "Процессы" is a link; "Настройки" is the SettingsMenu's own button — assert relative order:
+    const processesLink = within(nav).getByRole("link", { name: /Процессы/ });
+    const settingsButton = within(nav).getByRole("button", { name: /Настройки/ });
+    expect(
+      processesLink.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+
+    fireEvent.click(settingsButton);
+    fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
+    expect(await screen.findByRole("heading", { name: "Личный профиль" })).toBeTruthy();
+  });
+
+  it("hides Пользователи и роли and Резервное копирование from a plain crm-user", async () => {
+    mockApi({ "GET /auth/me": () => sessionFixture(["crm-user"]) });
+    renderApp("/");
+    const nav = await screen.findByRole("navigation");
+    fireEvent.click(within(nav).getByRole("button", { name: /Настройки/ }));
+    expect(within(nav).queryByRole("menuitem", { name: "Пользователи и роли" })).toBeNull();
+    expect(within(nav).queryByRole("menuitem", { name: "Резервное копирование" })).toBeNull();
+  });
+
+  it("Персональные данные is a real, distinctly-worded placeholder", async () => {
+    mockApi();
+    renderApp(paths.settingsPersonalData);
+    expect(await screen.findByRole("heading", { name: "Персональные данные" })).toBeTruthy();
+    expect(screen.queryByText(/скоро|появится в одном из следующих/i)).toBeNull();
   });
 });

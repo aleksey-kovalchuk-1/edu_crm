@@ -15,6 +15,13 @@ import { TasksPage } from "../pages/TasksPage";
 import { UniversitiesPage } from "../pages/UniversitiesPage";
 import { UniversityPage } from "../pages/UniversityPage";
 import { WorkflowsPage } from "../pages/WorkflowsPage";
+import { SettingsBackupsPage } from "../pages/settings/SettingsBackupsPage";
+import { SettingsNotificationsPage } from "../pages/settings/SettingsNotificationsPage";
+import { SettingsOrganizationPage } from "../pages/settings/SettingsOrganizationPage";
+import { SettingsPersonalDataPage } from "../pages/settings/SettingsPersonalDataPage";
+import { SettingsProfilePage } from "../pages/settings/SettingsProfilePage";
+import { SettingsSecurityPage } from "../pages/settings/SettingsSecurityPage";
+import { SettingsUsersPage } from "../pages/settings/SettingsUsersPage";
 import { AppProviders } from "./AppProviders";
 import { AuthGate } from "./AuthGate";
 import { Layout } from "./Layout";
@@ -39,6 +46,13 @@ export function AppRoutes() {
           <Route path="tasks/:id" element={<TaskDetailPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
           <Route path="profile" element={<ProfilePage />} />
+          <Route path="settings/profile" element={<SettingsProfilePage />} />
+          <Route path="settings/organization" element={<SettingsOrganizationPage />} />
+          <Route path="settings/notifications" element={<SettingsNotificationsPage />} />
+          <Route path="settings/security" element={<SettingsSecurityPage />} />
+          <Route path="settings/users" element={<SettingsUsersPage />} />
+          <Route path="settings/personal-data" element={<SettingsPersonalDataPage />} />
+          <Route path="settings/backups" element={<SettingsBackupsPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>
