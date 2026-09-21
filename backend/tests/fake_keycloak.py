@@ -1,6 +1,7 @@
 """A stand-in for Keycloak in tests: signs ID tokens with a local RSA key and answers token, logout and JWKS requests."""
 import base64
 import hashlib
+import json
 import secrets
 import time
 from urllib.parse import parse_qs
@@ -13,6 +14,11 @@ ISSUER = 'http://localhost:8080/auth/realms/edu-crm'
 INTERNAL_BASE_URL = 'http://keycloak.test/auth/realms/edu-crm'
 CLIENT_ID = 'edu-crm-api'
 CLIENT_SECRET = 'test-client-secret'
+
+ADMIN_BASE_URL = 'http://keycloak.test/auth'
+ADMIN_CLIENT_ID = 'edu-crm-admin'
+ADMIN_CLIENT_SECRET = 'test-admin-secret'
+ADMIN_PATH_PREFIX = '/auth/admin/realms/edu-crm'
 
 
 def s256(verifier):
@@ -32,6 +38,8 @@ class FakeKeycloak:
         self.omit_id_token_on_refresh = False
         # Simulates an outage: every endpoint answers 503.
         self.unavailable = False
+        self.admin_users = {}  # id -> {"id", "email", "username", "roles": [...]}
+        self.realm_password_policy = "length(12) and notUsername and notEmail and passwordHistory(3)"
 
     def jwks(self):
         public = jwt.algorithms.RSAAlgorithm.to_jwk(self.private_key.public_key(), as_dict=True)
@@ -61,6 +69,9 @@ class FakeKeycloak:
             if claims['sub'] == subject:
                 claims['roles'] = list(roles)
 
+    def add_admin_user(self, *, id, email, username, roles):
+        self.admin_users[id] = {'id': id, 'email': email, 'username': username, 'roles': list(roles)}
+
     def handler(self, request):
         if self.unavailable:
             return httpx.Response(503, text='Service Unavailable')
@@ -69,6 +80,16 @@ class FakeKeycloak:
             self.jwks_requests += 1
             return httpx.Response(200, json=self.jwks())
 
+        # Admin API surface: token (client_credentials, admin client) + /admin/realms/edu-crm/*.
+        if path.endswith('/protocol/openid-connect/token') and b'grant_type=client_credentials' in request.content:
+            form = {key: values[0] for key, values in parse_qs(request.content.decode()).items()}
+            if form.get('client_id') != ADMIN_CLIENT_ID or form.get('client_secret') != ADMIN_CLIENT_SECRET:
+                return httpx.Response(401, json={'error': 'unauthorized_client'})
+            return httpx.Response(200, json={'access_token': 'admin-access-token', 'expires_in': 60})
+        if path == ADMIN_PATH_PREFIX or path.startswith(ADMIN_PATH_PREFIX + '/'):
+            return self._admin_handler(request, path)
+
+        # (everything below this point is the existing OIDC login/refresh/logout handling, unchanged)
         form = {key: values[0] for key, values in parse_qs(request.content.decode()).items()}
         if form.get('client_id') != CLIENT_ID or form.get('client_secret') != CLIENT_SECRET:
             return httpx.Response(401, json={'error': 'unauthorized_client'})
@@ -105,6 +126,41 @@ class FakeKeycloak:
         if include_id_token:
             body['id_token'] = self.id_token({**claims, 'nonce': nonce} if nonce else dict(claims))
         return httpx.Response(200, json=body)
+
+    def _admin_handler(self, request, path):
+        suffix = path[len(ADMIN_PATH_PREFIX):].lstrip('/')
+        if suffix == 'users' and request.method == 'GET':
+            email = request.url.params.get('email')
+            users = list(self.admin_users.values())
+            if email:
+                users = [u for u in users if u['email'] == email]
+            return httpx.Response(200, json=[
+                {'id': u['id'], 'email': u['email'], 'username': u['username']} for u in users
+            ])
+        if suffix.startswith('users/') and suffix.endswith('/role-mappings/realm') and request.method in ('POST', 'DELETE'):
+            user_id = suffix[len('users/'):-len('/role-mappings/realm')]
+            roles = json.loads(request.content)
+            user = self.admin_users.get(user_id)
+            if user is None:
+                return httpx.Response(404)
+            names = {r['name'] for r in roles}
+            if request.method == 'POST':
+                user['roles'] = user['roles'] + [name for name in names if name not in user['roles']]
+            else:
+                user['roles'] = [r for r in user['roles'] if r not in names]
+            return httpx.Response(204)
+        if suffix.startswith('users/') and suffix.endswith('/role-mappings/realm') and request.method == 'GET':
+            user_id = suffix[len('users/'):-len('/role-mappings/realm')]
+            user = self.admin_users.get(user_id)
+            if user is None:
+                return httpx.Response(404)
+            return httpx.Response(200, json=[{'id': r, 'name': r} for r in user['roles']])
+        if suffix.startswith('roles/') and request.method == 'GET':
+            role_name = suffix[len('roles/'):]
+            return httpx.Response(200, json={'id': role_name, 'name': role_name})
+        if suffix == '' and request.method == 'GET':
+            return httpx.Response(200, json={'passwordPolicy': self.realm_password_policy})
+        return httpx.Response(404)
 
     def http_client(self):
         return httpx.Client(transport=httpx.MockTransport(self.handler))
