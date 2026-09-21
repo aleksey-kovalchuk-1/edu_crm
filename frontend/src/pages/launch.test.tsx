@@ -104,6 +104,67 @@ describe("interaction detail: task plan", () => {
 
     expect(within(currentHeading.parentElement!).getByText("Нет задач")).toBeTruthy(); // empty category
   });
+
+  it("renders status, assignee and deadline for uncategorized tasks too, not just title", async () => {
+    mockApi({
+      "GET /launches/1/tasks": () => ({
+        current_category: 0,
+        categories: [
+          { index: 0, name: "Первый контакт", tasks: [], unfinished_count: 0 },
+          { index: 1, name: "Документы", tasks: [], unfinished_count: 0 },
+          { index: 2, name: "Внедрение", tasks: [], unfinished_count: 0 },
+          { index: 3, name: "Обучение", tasks: [], unfinished_count: 0 },
+          { index: 4, name: "Сопровождение", tasks: [], unfinished_count: 0 },
+        ],
+        uncategorized: [
+          {
+            id: 5,
+            title: "Ручная задача без категории",
+            status: "in_progress",
+            priority: "normal",
+            deadline: "2026-02-10",
+            assignee: { id: 3, full_name: "Ольга Семёнова" },
+            is_optional: false,
+          },
+        ],
+      }),
+    });
+    await openLaunch();
+    await screen.findByRole("heading", { name: "Связанные задачи" });
+    const taskItem = (await screen.findByText("Ручная задача без категории")).closest("li")!;
+    expect(within(taskItem).getByText(/В работе/)).toBeTruthy(); // TASK_STATUS_LABELS["in_progress"]
+    expect(within(taskItem).getByText(/Ольга Семёнова/)).toBeTruthy(); // assignee.full_name
+    expect(within(taskItem).getByText(new RegExp(formatDate("2026-02-10")))).toBeTruthy(); // deadline
+  });
+
+  it("shows an error with retry when the launch-tasks request fails, and a loading message while pending", async () => {
+    let attempt = 0;
+    mockApi({
+      "GET /launches/1/tasks": () => {
+        attempt += 1;
+        // A 4xx status (unlike 5xx) is treated as final by retryTransient and won't be silently
+        // retried by react-query before the test can observe the error UI.
+        if (attempt === 1) return apiError(400, "VALIDATION_ERROR", "Не удалось загрузить задачи", []);
+        return {
+          current_category: 0,
+          categories: [
+            { index: 0, name: "Первый контакт", tasks: [], unfinished_count: 0 },
+            { index: 1, name: "Документы", tasks: [], unfinished_count: 0 },
+            { index: 2, name: "Внедрение", tasks: [], unfinished_count: 0 },
+            { index: 3, name: "Обучение", tasks: [], unfinished_count: 0 },
+            { index: 4, name: "Сопровождение", tasks: [], unfinished_count: 0 },
+          ],
+          uncategorized: [],
+        };
+      },
+    });
+    await openLaunch();
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("Не удалось загрузить задачи");
+
+    fireEvent.click(within(alert).getByRole("button", { name: /Повторить/ }));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  });
 });
 
 describe("interaction detail: manual task creation", () => {
