@@ -464,3 +464,59 @@ def test_launch_tasks_endpoint_hides_a_task_the_viewer_cannot_view(client, keycl
     assert 'Приватная задача' not in all_titles
     # Sanity check: the manager does see the other 14 (visible) tasks from the same launch.
     assert sum(len(c['tasks']) for c in body['categories']) + len(body['uncategorized']) == 14
+
+
+def test_launch_tasks_endpoint_excludes_archived_tasks(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    university = create_university(client)
+    launch = client.post('/api/v1/launches', json={
+        'university_id': university['id'], 'program': 'Пилот', 'product': 'ИТ-школа',
+        'owner': 'Тест Тестов', 'students': 10, 'deadline': str(date.today() + timedelta(days=90)),
+    }).json()
+
+    with database(database_url) as db:
+        tasks = db.scalars(select(Task).where(Task.launch_id == launch['id'])).all()
+        assert len(tasks) == 14
+        archived_task_id = tasks[0].id
+
+    archive = client.post('/api/v1/tasks/bulk/archive', json={'task_ids': [archived_task_id], 'confirm': True})
+    assert archive.status_code == 200, archive.text
+
+    response = client.get(f"/api/v1/launches/{launch['id']}/tasks")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    all_ids = {t['id'] for c in body['categories'] for t in c['tasks']} | {t['id'] for t in body['uncategorized']}
+    assert archived_task_id not in all_ids
+    assert len(all_ids) == 13
+
+
+def test_launch_tasks_endpoint_tolerates_a_snapshot_from_before_categories_existed(client, keycloak, database_url):
+    """A TaskPlanRun generated before migration 0014 (which added `category` to template steps)
+    has a template_snapshot whose steps have no 'category' or 'is_optional' keys. The endpoint must
+    read those defensively (step.get(...)) instead of raising KeyError, and such tasks must land in
+    `uncategorized` rather than crash the endpoint."""
+    login(client, keycloak, roles=('crm-supervisor',))
+    university = create_university(client)
+    launch = client.post('/api/v1/launches', json={
+        'university_id': university['id'], 'program': 'Пилот', 'product': 'ИТ-школа',
+        'owner': 'Тест Тестов', 'students': 10, 'deadline': str(date.today() + timedelta(days=90)),
+    }).json()
+
+    with database(database_url) as db:
+        run = db.scalar(select(TaskPlanRun).where(TaskPlanRun.launch_id == launch['id']))
+        old_style_snapshot = dict(run.template_snapshot)
+        old_style_snapshot['steps'] = [
+            {k: v for k, v in step.items() if k not in ('category', 'is_optional')}
+            for step in run.template_snapshot['steps']
+        ]
+        db.execute(
+            update(TaskPlanRun).where(TaskPlanRun.id == run.id).values(template_snapshot=old_style_snapshot)
+        )
+        db.commit()
+
+    response = client.get(f"/api/v1/launches/{launch['id']}/tasks")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert all(c['tasks'] == [] for c in body['categories'])
+    assert len(body['uncategorized']) == 14
+    assert all(t['is_optional'] is False for t in body['uncategorized'])
