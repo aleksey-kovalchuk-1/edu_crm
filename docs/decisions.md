@@ -146,3 +146,13 @@ Status values: `OWNER` (explicit owner decision), `ASSUMED` (default the owner m
 | P-001 | MinIO for attachments | New external service (D-010) |
 | P-002 | ClamAV scanning of uploads | New external service; about 1–3 GB RAM |
 | P-003 | Branch protection on `main` | Repository setting; owner action |
+
+## Flagged follow-up work (handover, 2026-09-22)
+
+Not decisions — open items carried forward for whoever picks up this branch next. Full detail
+and evidence in `report file/2026-09-22-handover-report.md`.
+
+| ID | Item | Priority | Status on `ai/phone-verification` |
+|---|---|---|---|
+| F-001 | Rostelecom LMS + Laravel CMS website API integration (spec's "Data sources" section; D-008 already authorizes building this as a labelled mock until the real contract arrives). A complete, tested, documented mock connector (`app/connectors.py`/`app/connector_routes.py`, `docs/api/integrations.md`, migration `0013_integration_links`, D-184–D-187) **already exists**, but only on the unreconciled sibling branch `ai/integration-candidate` (`.worktrees/ai-integration-candidate`) — it has never been merged or ported into this branch, which currently has zero integration code (no connector module, no `IntegrationLink` model, no route). | **IMPORTANT** | NOT STARTED here (built elsewhere, unmerged) |
+| F-002 | General interface-design polish pass needed — visual density and spacing/margin consistency across pages. Specifically re-verify the Задачи page after its 2026-09-22 redesign (tab sizing, the counters/«Шаблоны планов» utility row) on narrow and wide viewports; check other pages for the same kind of crowding this pass just fixed there. | Design | NOT STARTED |
