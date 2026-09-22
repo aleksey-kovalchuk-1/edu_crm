@@ -104,7 +104,7 @@ export const pages: PageMeta[] = [
     name: "Задачи",
     icon: ListChecks,
     heading: "Задачи",
-    subtitle: "Ближайшие действия, сроки и ответственные.",
+    subtitle: "",
     // The workspace has its own «Создать задачу» action (TasksPage), not the shared header button.
     create: null,
   },

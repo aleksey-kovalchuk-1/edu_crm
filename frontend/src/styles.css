@@ -1527,6 +1527,21 @@ textarea {
   color: #5c2f9e;
   border-bottom-color: #7844d0;
 }
+/* Задачи: the view (Список/Сроки/Мой план) and scope (Мои задачи/…) tabs are the page's primary
+   navigation, so they're enlarged relative to the shared .tab default used elsewhere (Справочники). */
+.tabs-primary {
+  margin-bottom: 6px;
+}
+.tabs-primary .tab {
+  font-size: 15px;
+  font-weight: 800;
+  padding: 14px 22px;
+}
+.tabs-scope .tab {
+  font-size: 13px;
+  font-weight: 700;
+  padding: 12px 18px;
+}
 .toggle,
 .inline-select {
   display: inline-flex;
@@ -2687,32 +2702,39 @@ dialog.wide {
 }
 
 /* Tasks: counters, filters, bulk actions, column picker, Deadline view (T-1xx slice 4) */
+.task-utility-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-bottom: 22px;
+}
 .task-counters {
   display: flex;
   flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 20px;
+  gap: 8px;
 }
 .counter-tile {
   display: flex;
   flex-direction: column;
-  gap: 2px;
-  padding: 12px 18px;
+  gap: 1px;
+  padding: 8px 12px;
   border: 1px solid #e4e1ec;
-  border-radius: 10px;
+  border-radius: 8px;
   background: #fff;
-  min-width: 96px;
+  min-width: 72px;
   text-align: left;
 }
 .counter-tile:hover {
   border-color: #c9bdda;
 }
 .counter-tile strong {
-  font-size: 20px;
+  font-size: 15px;
   color: #2c2438;
 }
 .counter-tile span {
-  font-size: 10px;
+  font-size: 9px;
   color: #6c647a;
 }
 .filter-toggle {

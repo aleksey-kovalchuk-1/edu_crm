@@ -15,12 +15,15 @@ export function Tabs({
   selected,
   onSelect,
   children,
+  className,
 }: {
   label: string;
   tabs: TabItem[];
   selected: string;
   onSelect: (id: string) => void;
   children: ReactNode;
+  /** Extra class on the tablist itself (e.g. to enlarge it), on top of the base "tabs" class. */
+  className?: string;
 }) {
   const baseId = useId();
   const refs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -45,7 +48,7 @@ export function Tabs({
 
   return (
     <>
-      <div className="tabs" role="tablist" aria-label={label}>
+      <div className={className ? `tabs ${className}` : "tabs"} role="tablist" aria-label={label}>
         {tabs.map((t, i) => (
           <button
             key={t.id}

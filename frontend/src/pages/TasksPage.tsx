@@ -148,33 +148,45 @@ export function TasksPage() {
 
   if (fallback) return fallback;
 
+  // Below both tab rows (moved up and enlarged per the current design): the template-library
+  // link stays available, alongside the counters — both shrunk and right-aligned as a single
+  // secondary row, since day-to-day navigation is the view/scope tabs above them, not these.
+  const utilityRow = (
+    <div className="task-utility-row">
+      {canEditWorkflows(user.roles) && (
+        <Link className="text-button" to={paths.taskTemplates}>
+          <ListTree size={16} />
+          Шаблоны планов
+        </Link>
+      )}
+      <TaskCounters scope={scope} onSelect={(patch) => update(patch)} />
+    </div>
+  );
+
   return (
     <>
       {activeQuery && <RefreshError queries={[activeQuery]} />}
-      {canEditWorkflows(user.roles) && (
-        <div className="detail-links">
-          <Link className="text-button" to={paths.taskTemplates}>
-            <ListTree size={16} />
-            Шаблоны планов
-          </Link>
-        </div>
-      )}
-      <TaskCounters scope={scope} onSelect={(patch) => update(patch)} />
       <Tabs
         label="Представление"
         tabs={VIEWS}
         selected={view}
         onSelect={(id) => update({ view: id === "list" ? null : id, ...CLEAR_FILTERS })}
+        className="tabs-primary"
       >
         {view === "planner" ? (
-          <TaskPlannerView />
+          <>
+            {utilityRow}
+            <TaskPlannerView />
+          </>
         ) : (
           <Tabs
             label="Область видимости"
             tabs={SCOPE_TABS}
             selected={scope}
             onSelect={(id) => update({ scope: id === "mine" ? null : id, ...CLEAR_FILTERS })}
+            className="tabs-scope"
           >
+            {utilityRow}
             <SearchToolbar
               search={search}
               onSearch={(value) => update({ q: value || null })}
