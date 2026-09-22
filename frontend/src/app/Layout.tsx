@@ -7,7 +7,7 @@ import {
   PanelLeftClose,
   Plus,
 } from "lucide-react";
-import { useTasks } from "../api/queries";
+import { useTaskList } from "../api/tasks";
 import { CreateModal } from "../components/forms/CreateModal";
 import { ErrorAlert } from "../components/QueryState";
 import { canEditCatalog, roleLabel, userInitials } from "../lib/user";
@@ -17,9 +17,11 @@ import {
   findPage,
   isPageRoot,
   paths,
+  settingsPages,
   visiblePages,
   type CreateKind,
 } from "./navigation";
+import { SettingsMenu } from "./SettingsMenu";
 
 const CREATE_LABELS: Record<CreateKind, string> = {
   university: "Добавить заведение",
@@ -35,9 +37,10 @@ export function Layout() {
   const [create, setCreate] = useState<CreateKind | null>(null);
   // Bumped by a sidebar click so re-opening the current page resets its local state.
   const [navResets, setNavResets] = useState(0);
-  const tasks = useTasks();
+  // Total tasks in "Мои задачи" scope; not filtered to open-only yet (counters land with T-104's filters).
+  const tasks = useTaskList({ scope: "mine", limit: 1 });
   const page = findPage(location.pathname);
-  const openTasks = tasks.data?.filter((t) => !t.done).length;
+  const openTasks = tasks.data?.total;
   const closeMenu = () => setMenu(false);
   const initials = userInitials(user);
   // The server enforces roles; the interface only hides actions that would be refused.
@@ -55,10 +58,7 @@ export function Layout() {
             <span className="brand-mark">
               <GraduationCap size={27} />
             </span>
-            <span>
-              образование
-              <span className="brand-sub">CRM · ЦИФРОВЫЕ НАВЫКИ</span>
-            </span>
+            <span>UniCRM</span>
           </Link>
           <div className="workspace">
             <span className="workspace-icon">ИТ</span>
@@ -90,6 +90,15 @@ export function Layout() {
                 )}
               </NavLink>
             ))}
+            <SettingsMenu
+              pages={settingsPages}
+              currentPath={location.pathname}
+              userRoles={user.roles}
+              onNavigate={() => {
+                closeMenu();
+                setNavResets((n) => n + 1);
+              }}
+            />
           </nav>
           <div className="sidebar-bottom">
             <div className="sidebar-note">
@@ -101,13 +110,19 @@ export function Layout() {
               </p>
             </div>
             <div className="profile">
-              <span className="avatar" aria-hidden="true">
-                {initials}
-              </span>
-              <div>
-                <strong>{user.full_name || user.email}</strong>
-                <small>{roleLabel(user.roles)}</small>
-              </div>
+              <Link
+                to={paths.settingsProfile}
+                className="profile-link"
+                onClick={closeMenu}
+              >
+                <span className="avatar" aria-hidden="true">
+                  {initials}
+                </span>
+                <div>
+                  <strong>{user.full_name || user.email}</strong>
+                  <small>{roleLabel(user.roles)}</small>
+                </div>
+              </Link>
               <button
                 className="icon-button logout-button"
                 onClick={() => logout.mutate()}
@@ -135,18 +150,21 @@ export function Layout() {
               <strong>{page?.name ?? NOT_FOUND_TITLE}</strong>
             </div>
             <div className="topbar-right">
-              <span className="demo-label">ДЕМО</span>
-              <span className="avatar tiny" aria-hidden="true">
+              <Link
+                to={paths.settingsProfile}
+                className="avatar"
+                aria-label="Настройки аккаунта"
+                title="Настройки аккаунта"
+              >
                 {initials}
-              </span>
+              </Link>
             </div>
           </header>
           <main>
             <div className="page-heading">
               <div>
-                <p className="eyebrow">ОБРАЗОВАТЕЛЬНЫЕ ПАРТНЁРСТВА</p>
                 <h1>{page?.heading ?? NOT_FOUND_TITLE}</h1>
-                {page && <p className="subtitle">{page.subtitle}</p>}
+                {page?.subtitle && <p className="subtitle">{page.subtitle}</p>}
               </div>
               {createKind && canCreate && (
                 <button className="primary" onClick={() => setCreate(createKind)}>
@@ -162,7 +180,7 @@ export function Layout() {
             */}
             <Outlet key={`${location.pathname}#${navResets}`} />
             <footer>
-              Образование CRM <span>Рабочий шаблон · Данные вымышлены</span>
+              UniCRM <span>Рабочий шаблон · Данные вымышлены</span>
             </footer>
           </main>
         </div>

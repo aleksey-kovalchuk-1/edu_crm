@@ -1,13 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import {
-  CSRF_TOKEN,
-  apiError,
-  deferred,
-  mockApi,
-  never,
-  renderApp,
-} from "../test/utils";
+import { CSRF_TOKEN, apiError, mockApi, renderApp, sessionFixture } from "../test/utils";
+import { NOT_FOUND_TITLE, paths } from "./navigation";
 
 /** Board column title that currently holds the card with this code. */
 const columnOf = (code: string) =>
@@ -91,65 +85,54 @@ describe("interactions page", () => {
   });
 });
 
-describe("task toggle", () => {
-  it("sends PATCH and refetches only tasks", async () => {
+describe("task creation", () => {
+  it("creates a task and opens its detail page", async () => {
     const api = mockApi({
-      "PATCH /tasks/1": (call) => {
-        const done = (call.body as { done: boolean }).done;
-        api.data.tasks = api.data.tasks.map((t) => (t.id === 1 ? { ...t, done } : t));
-        return api.data.tasks[0];
+      "POST /tasks": (call) => {
+        const body = call.body as { title: string };
+        return [201, { ...api.data.task, id: 2, title: body.title }];
       },
+      "GET /tasks/2": () => ({ ...api.data.task, id: 2, title: "Новая задача" }),
     });
     renderApp("/tasks");
-    const checkbox = (await screen.findByRole("checkbox", {
-      name: "Согласовать договор",
-    })) as HTMLInputElement;
-    expect(checkbox.checked).toBe(false);
+    fireEvent.click(await screen.findByRole("button", { name: /Создать задачу/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Новая задача" });
+    fireEvent.change(
+      within(dialog).getByPlaceholderText("Например, собрать документы"),
+      { target: { value: "Новая задача" } },
+    );
+    fireEvent.submit(dialog.querySelector("form")!);
 
-    fireEvent.click(checkbox);
-
-    await waitFor(() => expect(checkbox.checked).toBe(true));
-    await waitFor(() => expect(api.count("GET", "/tasks")).toBe(2));
-    expect(api.calls.find((c) => c.method === "PATCH")).toMatchObject({
-      method: "PATCH",
-      path: "/tasks/1",
-      body: { done: true },
+    await waitFor(() => expect(api.count("POST", "/tasks")).toBe(1));
+    expect(api.calls.find((c) => c.method === "POST")).toMatchObject({
+      method: "POST",
+      path: "/tasks",
       headers: { "x-csrf-token": CSRF_TOKEN },
     });
     expect(
-      api.calls.filter((c) => c.method === "GET").some((c) => "x-csrf-token" in c.headers),
-    ).toBe(false);
-    expect(api.count("GET", "/launches")).toBe(1);
-    expect(api.count("GET", "/universities")).toBe(0);
-    expect(api.count("GET", "/stages")).toBe(0);
-    expect(api.count("GET", "/dashboard")).toBe(0);
-    await waitFor(() => expect(checkbox.disabled).toBe(false));
-    expect(checkbox.checked).toBe(true);
+      await screen.findByRole("heading", { level: 2, name: "Новая задача" }),
+    ).toBeTruthy();
   });
 
-  it("rolls back the optimistic value when PATCH fails", async () => {
-    const patch = deferred<unknown>();
-    const api = mockApi({
-      "PATCH /tasks/1": () => patch.promise,
-      // Any refetch after the error hangs, so only the rollback can restore the value.
-      "GET /tasks": () =>
-        api.count("GET", "/tasks") > 1 ? never() : api.data.tasks,
+  it("shows the server's field error and keeps the form open", async () => {
+    mockApi({
+      "POST /tasks": () =>
+        apiError(422, "VALIDATION_ERROR", "Проверьте заполненные поля", [
+          { field: "title", message: "Название обязательно", type: "missing" },
+        ]),
     });
     renderApp("/tasks");
-    const checkbox = (await screen.findByRole("checkbox", {
-      name: "Согласовать договор",
-    })) as HTMLInputElement;
-
-    fireEvent.click(checkbox);
-    await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(1));
-    expect(checkbox.checked).toBe(true);
-
-    patch.resolve(apiError(404, "RECORD_NOT_FOUND", "Запись не найдена"));
-
-    expect((await screen.findByRole("alert")).textContent).toContain(
-      "Запись не найдена (код RECORD_NOT_FOUND)",
+    fireEvent.click(await screen.findByRole("button", { name: /Создать задачу/ }));
+    const dialog = await screen.findByRole("dialog", { name: "Новая задача" });
+    fireEvent.change(
+      within(dialog).getByPlaceholderText("Например, собрать документы"),
+      { target: { value: "x" } },
     );
-    expect(checkbox.checked).toBe(false);
+    fireEvent.submit(dialog.querySelector("form")!);
+    expect(await within(dialog).findByText("Название обязательно")).toBeTruthy();
+    expect(within(dialog).getByRole("alert").textContent).toBe(
+      "Проверьте заполненные поля (код VALIDATION_ERROR)",
+    );
   });
 });
 
@@ -206,7 +189,7 @@ describe("create forms", () => {
           { field: "university_id", message: "Учебное заведение не найдено", type: "missing" },
         ]),
     });
-    renderApp("/tasks");
+    renderApp("/interactions");
     fireEvent.click(await screen.findByRole("button", { name: /Новое взаимодействие/ }));
     const dialog = await screen.findByRole("dialog", { name: "Новое взаимодействие" });
     await within(dialog).findByRole("option", { name: "Технический университет" });
@@ -239,5 +222,101 @@ describe("create forms", () => {
     expect(within(dialog).getByRole("alert").textContent).toBe(
       "Проверьте заполненные поля (код VALIDATION_ERROR)",
     );
+  });
+});
+
+describe("Настройки menu", () => {
+  it("renders directly after Процессы for a supervisor, and reaches each settings page", async () => {
+    mockApi({ "GET /auth/me": () => sessionFixture(["crm-supervisor"]) });
+    renderApp("/");
+    const nav = await screen.findByRole("navigation");
+    // "Процессы" is a link; "Настройки" is the SettingsMenu's own button, rendered as the
+    // next element sibling of the "Процессы" link (SettingsMenu's root <div> is the very
+    // next child of <nav> after the mapped NavLinks) — assert direct adjacency, not just
+    // "somewhere after", so a page inserted between them would fail this test.
+    const processesLink = within(nav).getByRole("link", { name: /Процессы/ });
+    const settingsButton = within(nav).getByRole("button", { name: /Настройки/ });
+    expect(processesLink.nextElementSibling?.contains(settingsButton)).toBe(true);
+
+    fireEvent.click(settingsButton);
+    fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
+    // The Layout's <h1>/breadcrumb read "Личный профиль" (see the header/breadcrumb regression
+    // test below); the page's own content below it is the real phone-verification panel, whose
+    // own heading is "Телефон" — level 1 targets the Layout heading, not that inner one.
+    expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
+  });
+
+  it("closes the mobile slide-over sidebar (and bumps the page reset) when a settings item is clicked", async () => {
+    mockApi();
+    renderApp("/");
+    const nav = await screen.findByRole("navigation");
+    const sidebar = document.querySelector(".sidebar");
+    expect(sidebar?.className).not.toContain("mobile-open");
+    fireEvent.click(screen.getByRole("button", { name: "Меню" }));
+    expect(sidebar?.className).toContain("mobile-open");
+    fireEvent.click(within(nav).getByRole("button", { name: /Настройки/ }));
+    fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
+
+    expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
+    // Matches what the flat sidebar NavLinks already do on click (closeMenu() + setNavResets):
+    // the mobile overlay must not keep covering the page after navigating.
+    expect(sidebar?.className).not.toContain("mobile-open");
+  });
+
+  it("redirects the bare /settings path to the first settings page", async () => {
+    mockApi();
+    renderApp(paths.settings);
+    expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
+  });
+
+  it("hides Пользователи и роли and Резервное копирование from a plain crm-user", async () => {
+    mockApi({ "GET /auth/me": () => sessionFixture(["crm-user"]) });
+    renderApp("/");
+    const nav = await screen.findByRole("navigation");
+    fireEvent.click(within(nav).getByRole("button", { name: /Настройки/ }));
+    expect(within(nav).queryByRole("menuitem", { name: "Пользователи и роли" })).toBeNull();
+    expect(within(nav).queryByRole("menuitem", { name: "Резервное копирование" })).toBeNull();
+  });
+
+  it("Персональные данные is a real, distinctly-worded placeholder", async () => {
+    mockApi();
+    renderApp(paths.settingsPersonalData);
+    expect(await screen.findByRole("heading", { level: 2, name: "Персональные данные" })).toBeTruthy();
+    expect(screen.queryByText(/скоро|появится в одном из следующих/i)).toBeNull();
+  });
+
+  it.each([
+    [paths.settingsProfile, "Личный профиль"],
+    [paths.settingsOrganization, "Организация"],
+    [paths.settingsPersonalData, "Персональные данные"],
+  ])(
+    "shows %s as the page header and breadcrumb, not the not-found fallback",
+    async (path, name) => {
+      mockApi();
+      renderApp(path);
+      // findPage() must resolve settings routes too, not just the flat sidebar `pages` list —
+      // otherwise the Layout header/breadcrumb silently falls back to NOT_FOUND_TITLE even
+      // though the routed page's own content renders fine underneath.
+      expect(await screen.findByRole("heading", { level: 1, name })).toBeTruthy();
+      const breadcrumb = document.querySelector(".breadcrumbs strong");
+      expect(breadcrumb?.textContent).toBe(name);
+      expect(screen.queryByText(NOT_FOUND_TITLE)).toBeNull();
+    },
+  );
+});
+
+describe("topbar account avatar", () => {
+  it("has no demo label and links to Личный профиль", async () => {
+    mockApi();
+    renderApp("/");
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText("ДЕМО")).toBeNull();
+    const header = document.querySelector(".topbar-right");
+    const link = header?.querySelector("a.avatar");
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute("href")).toBe(paths.settingsProfile);
+
+    fireEvent.click(link!);
+    expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
   });
 });

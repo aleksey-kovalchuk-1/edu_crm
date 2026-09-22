@@ -28,6 +28,23 @@ def status_at_position(db, template_id, position):
     ))
 
 
+STAGE_GROUPS = ['Первый контакт', 'Документы', 'Внедрение', 'Обучение', 'Сопровождение']
+
+
+def stage_group(stage):
+    """Index of the board column a stage belongs to (mirrors frontend/src/lib/format.ts's
+    `stageGroup` exactly — keep both in sync by hand, same as `NEXT_STATUSES`)."""
+    if stage < 3:
+        return 0
+    if stage < 6:
+        return 1
+    if stage < 8:
+        return 2
+    if stage < 11:
+        return 3
+    return 4
+
+
 def launch_in_scope(db, user, launch_id, *, lock=False):
     # Launches belong to a university, so a manager only reaches launches of universities assigned to them (D-141).
     query = select(Launch).where(Launch.id == launch_id, university_scope(Launch.university_id, user))

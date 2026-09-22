@@ -1,18 +1,33 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
-import { ArrowLeft, Columns3, RefreshCw } from "lucide-react";
+import { ArrowLeft, Columns3, Plus, RefreshCw } from "lucide-react";
+import { useLaunchTasks, type LaunchTask } from "../api/launchTasks";
 import { useLaunches } from "../api/queries";
+import { TASK_STATUS_LABELS } from "../api/tasks";
 import {
   currentStatus,
   launchWorkflow,
   useStatusChanges,
   useWorkflows,
 } from "../api/workflows";
-import { paths } from "../app/navigation";
+import { paths, taskPath } from "../app/navigation";
+import { Modal } from "../components/Modal";
 import { ErrorAlert, RefreshError, queryFallback } from "../components/QueryState";
 import { StatusChangeDialog } from "../components/StatusChangeDialog";
 import { StatusTimeline } from "../components/StatusTimeline";
+import { TaskCreateForm } from "../components/forms/TaskCreateForm";
 import { formatDate, launchCode } from "../lib/format";
+
+function LaunchTaskItem({ task }: { task: LaunchTask }) {
+  return (
+    <li>
+      <Link to={taskPath(task.id)}>{task.title}</Link>
+      {" — "}{TASK_STATUS_LABELS[task.status]}
+      {task.assignee && ` · ${task.assignee.full_name}`}
+      {task.deadline && ` · ${formatDate(task.deadline)}`}
+    </li>
+  );
+}
 
 export function LaunchPage() {
   const { id } = useParams();
@@ -20,7 +35,9 @@ export function LaunchPage() {
   const launches = useLaunches();
   const workflows = useWorkflows();
   const changes = useStatusChanges(launchId);
+  const launchTasks = useLaunchTasks(launchId);
   const [changing, setChanging] = useState(false);
+  const [creating, setCreating] = useState(false);
   const queries = [launches, workflows];
   const fallback = queryFallback(queries);
   if (fallback || !launches.data || !workflows.data) return fallback;
@@ -65,10 +82,16 @@ export function LaunchPage() {
               {launch.city ? `, ${launch.city}` : ""}
             </p>
           </div>
-          <button className="primary" onClick={() => setChanging(true)} disabled={!workflow}>
-            <RefreshCw size={17} />
-            Сменить статус
-          </button>
+          <div className="row-actions">
+            <button className="secondary" onClick={() => setCreating(true)}>
+              <Plus size={17} />
+              Создать задачу
+            </button>
+            <button className="primary" onClick={() => setChanging(true)} disabled={!workflow}>
+              <RefreshCw size={17} />
+              Сменить статус
+            </button>
+          </div>
         </div>
         <dl className="fields">
           <div>
@@ -113,6 +136,47 @@ export function LaunchPage() {
           {changes.data && <StatusTimeline changes={changes.data} />}
         </div>
       </section>
+      <section className="panel launch-tasks">
+        <h2>Связанные задачи</h2>
+        {launchTasks.isError && (
+          <ErrorAlert error={launchTasks.error} onRetry={() => void launchTasks.refetch()} />
+        )}
+        {launchTasks.isPending && !launchTasks.isError && (
+          <div className="loading">Загружаем задачи…</div>
+        )}
+        {launchTasks.data && (
+          <>
+            {launchTasks.data.categories.map((c) => (
+              <div key={c.index} className="launch-task-category">
+                <h3>
+                  {c.name}
+                  {c.index === launchTasks.data!.current_category && <span className="badge">текущий этап</span>}
+                  {c.unfinished_count > 0 && <span className="badge badge-warning">{c.unfinished_count} незаверш.</span>}
+                </h3>
+                {c.tasks.length === 0 ? (
+                  <p className="muted">Нет задач</p>
+                ) : (
+                  <ul>
+                    {c.tasks.map((t) => (
+                      <LaunchTaskItem key={t.id} task={t} />
+                    ))}
+                  </ul>
+                )}
+              </div>
+            ))}
+            {launchTasks.data.uncategorized.length > 0 && (
+              <div className="launch-task-category">
+                <h3>Без категории</h3>
+                <ul>
+                  {launchTasks.data.uncategorized.map((t) => (
+                    <LaunchTaskItem key={t.id} task={t} />
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )}
+      </section>
       {changing && workflow && (
         <StatusChangeDialog
           launch={launch}
@@ -120,6 +184,16 @@ export function LaunchPage() {
           currentStatusId={status?.id}
           close={() => setChanging(false)}
         />
+      )}
+      {creating && (
+        <Modal title="Новая задача" close={() => setCreating(false)}>
+          <TaskCreateForm
+            initialUniversityId={launch.university_id}
+            initialLaunchId={launch.id}
+            onCreated={() => setCreating(false)}
+            onCancel={() => setCreating(false)}
+          />
+        </Modal>
       )}
     </>
   );

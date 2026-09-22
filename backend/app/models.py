@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import BigInteger, CheckConstraint, Column, ForeignKey, Index, String, Date, DateTime, Boolean, MetaData, Table, Text, UniqueConstraint, false, true
+from sqlalchemy import BigInteger, CheckConstraint, Column, ForeignKey, Index, SmallInteger, String, Date, DateTime, Boolean, MetaData, Table, Text, UniqueConstraint, false, true
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -18,6 +18,10 @@ RUSSIAN_COLLATION = 'ru-RU-x-icu'
 
 def russian_text(length):
     return String(length, collation=RUSSIAN_COLLATION)
+
+
+def utcnow():
+    return datetime.now(timezone.utc)
 
 
 class Base(DeclarativeBase):
@@ -57,14 +61,233 @@ class Launch(Base):
     workflow_template_id: Mapped[int] = mapped_column(ForeignKey('workflow_templates.id'))
     status_id: Mapped[int] = mapped_column(ForeignKey('workflow_statuses.id'))
 
+TASK_STATUSES = ('new', 'in_progress', 'awaiting_review', 'completed', 'deferred', 'cancelled')
+TASK_PRIORITIES = ('low', 'normal', 'high', 'urgent')
+TASK_MEMBER_ROLES = ('assignee', 'participant', 'observer')
+TASK_PLAN_ASSIGNEE_RULES = ('specific_user', 'interaction_owner', 'university_manager', 'plan_creator', 'manual')
+TASK_PLAN_OFFSET_UNITS = ('calendar', 'business')
+
+
 class Task(Base):
+    """Tasks workspace (docs/design/tasks.md, decisions D-158-D-161).
+
+    `owner`/`done` are the placeholder module's original columns (migration 0010 keeps them, unused
+    by new code, for the legacy `GET/PATCH /api/v1/tasks` endpoints only).
+    """
     __tablename__ = 'tasks'
+    __table_args__ = (
+        CheckConstraint(f"status in ({', '.join(repr(s) for s in TASK_STATUSES)})", name='status'),
+        CheckConstraint(f"priority in ({', '.join(repr(s) for s in TASK_PRIORITIES)})", name='priority'),
+        CheckConstraint('parent_task_id != id', name='no_self_parent'),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
-    launch_id: Mapped[int] = mapped_column(ForeignKey('launches.id'))
     title: Mapped[str] = mapped_column(russian_text(200))
-    owner: Mapped[str] = mapped_column(russian_text(100))
-    deadline: Mapped[date] = mapped_column(Date)
-    done: Mapped[bool] = mapped_column(Boolean, default=False)
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    status: Mapped[str] = mapped_column(String(20), default='new', server_default='new', index=True)
+    priority: Mapped[str] = mapped_column(String(10), default='normal', server_default='normal')
+    deadline: Mapped[date | None] = mapped_column(Date, index=True)
+    planned_start: Mapped[date | None] = mapped_column(Date)
+    creator_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), index=True)
+    university_id: Mapped[int | None] = mapped_column(ForeignKey('universities.id'), index=True)
+    launch_id: Mapped[int | None] = mapped_column(ForeignKey('launches.id'), index=True)
+    contract_id: Mapped[int | None] = mapped_column(ForeignKey('contracts.id'), index=True)
+    parent_task_id: Mapped[int | None] = mapped_column(ForeignKey('tasks.id'), index=True)
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    require_checklist_complete: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    completed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    archived_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    archived_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    origin_plan_run_id: Mapped[int | None] = mapped_column(ForeignKey('task_plan_runs.id'))
+    # Which template step generated this task, kept even after the run's template_snapshot is only history.
+    origin_template_step_key: Mapped[str | None] = mapped_column(String(64))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    version: Mapped[int] = mapped_column(default=1, server_default='1')
+    # Placeholder-module columns, kept for the legacy endpoints only (see class docstring).
+    owner: Mapped[str] = mapped_column(russian_text(100), default='', server_default='')
+    done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    __mapper_args__ = {'version_id_col': version}
+
+    members: Mapped[list['TaskMember']] = relationship(order_by='TaskMember.role', viewonly=True)
+    checklist_items: Mapped[list['TaskChecklistItem']] = relationship(order_by='TaskChecklistItem.position', viewonly=True)
+    comments: Mapped[list['TaskComment']] = relationship(order_by='TaskComment.created_at', viewonly=True)
+    events: Mapped[list['TaskEvent']] = relationship(order_by='TaskEvent.created_at', viewonly=True)
+
+
+class TaskMember(Base):
+    """One assignee, participant (co-executor) or observer of a task; several rows give a task several assignees."""
+    __tablename__ = 'task_members'
+    __table_args__ = (CheckConstraint(f"role in ({', '.join(repr(r) for r in TASK_MEMBER_ROLES)})", name='role'),)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True, index=True)
+    role: Mapped[str] = mapped_column(String(20), primary_key=True)
+    added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskChecklistItem(Base):
+    """A mini-task inside a task's checklist; distinct from a subtask (a full Task with parent_task_id)."""
+    __tablename__ = 'task_checklist_items'
+    __table_args__ = (UniqueConstraint('task_id', 'position'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), index=True)
+    title: Mapped[str] = mapped_column(russian_text(200))
+    position: Mapped[int]
+    is_done: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    assignee_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    deadline: Mapped[date | None] = mapped_column(Date)
+    completed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskTag(Base):
+    __tablename__ = 'task_tags'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(russian_text(60), unique=True)
+    color: Mapped[str] = mapped_column(String(20), default='', server_default='')
+
+
+class TaskTagLink(Base):
+    __tablename__ = 'task_tag_links'
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), primary_key=True)
+    tag_id: Mapped[int] = mapped_column(ForeignKey('task_tags.id', ondelete='CASCADE'), primary_key=True, index=True)
+
+
+class TaskComment(Base):
+    """A comment on a task; may carry personal data, so audit events record only that one was added (D-153 pattern)."""
+    __tablename__ = 'task_comments'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), index=True)
+    author_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskAttachment(Base):
+    """Same shape as the existing `Attachment` (launch status changes), scoped to a task instead (D-153)."""
+    __tablename__ = 'task_attachments'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), index=True)
+    comment_id: Mapped[int | None] = mapped_column(ForeignKey('task_comments.id', ondelete='CASCADE'), index=True)
+    filename: Mapped[str] = mapped_column(String(255))
+    content_type: Mapped[str] = mapped_column(String(100))
+    size_bytes: Mapped[int] = mapped_column(BigInteger)
+    sha256: Mapped[str] = mapped_column(String(64))
+    storage_key: Mapped[str] = mapped_column(String(64), unique=True)
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskEvent(Base):
+    """One task's activity timeline (status/deadline changes, reassignment, checklist, review, archive, ...).
+
+    Alongside the global `AuditEvent` (entity_type='task'), the same dual-write pattern as
+    `StatusChange` + `AuditEvent` for launches.
+    """
+    __tablename__ = 'task_events'
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey('tasks.id', ondelete='CASCADE'), index=True)
+    event_type: Mapped[str] = mapped_column(String(30))
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    from_value: Mapped[str | None] = mapped_column(String(100))
+    to_value: Mapped[str | None] = mapped_column(String(100))
+    comment: Mapped[str] = mapped_column(Text, default='', server_default='')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class TaskPlanTemplate(Base):
+    """A reusable task plan template (the central use case, docs/design/tasks.md) - separate from WorkflowTemplate."""
+    __tablename__ = 'task_plan_templates'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(russian_text(200), unique=True)
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    is_default_plan: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    steps: Mapped[list['TaskPlanTemplateStep']] = relationship(order_by='TaskPlanTemplateStep.position', viewonly=True)
+
+
+class TaskPlanTemplateStep(Base):
+    __tablename__ = 'task_plan_template_steps'
+    __table_args__ = (
+        UniqueConstraint('template_id', 'position'),
+        CheckConstraint(f"assignee_rule in ({', '.join(repr(r) for r in TASK_PLAN_ASSIGNEE_RULES)})", name='assignee_rule'),
+        CheckConstraint(f"offset_unit in ({', '.join(repr(u) for u in TASK_PLAN_OFFSET_UNITS)})", name='offset_unit'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey('task_plan_templates.id'), index=True)
+    position: Mapped[int]
+    title: Mapped[str] = mapped_column(russian_text(200))
+    description: Mapped[str] = mapped_column(Text, default='', server_default='')
+    assignee_rule: Mapped[str] = mapped_column(String(30))
+    assignee_rule_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    start_offset_days: Mapped[int] = mapped_column(default=0, server_default='0')
+    deadline_offset_days: Mapped[int | None]
+    offset_unit: Mapped[str] = mapped_column(String(10), default='calendar', server_default='calendar')
+    priority: Mapped[str] = mapped_column(String(10), default='normal', server_default='normal')
+    approval_required: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    is_optional: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    category: Mapped[int | None] = mapped_column(SmallInteger, CheckConstraint('category >= 0 and category <= 4', name='category_range'))
+    depends_on_step_id: Mapped[int | None] = mapped_column(ForeignKey('task_plan_template_steps.id'))
+    checklist_items: Mapped[list['TaskPlanTemplateStepChecklistItem']] = relationship(
+        order_by='TaskPlanTemplateStepChecklistItem.position', viewonly=True,
+    )
+
+
+class TaskPlanTemplateStepChecklistItem(Base):
+    __tablename__ = 'task_plan_template_step_checklist_items'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    step_id: Mapped[int] = mapped_column(ForeignKey('task_plan_template_steps.id'), index=True)
+    title: Mapped[str] = mapped_column(russian_text(200))
+    position: Mapped[int]
+
+
+class TaskPlanRun(Base):
+    """One transactional generation of a template's tasks (docs/design/tasks.md); later template edits never rewrite it."""
+    __tablename__ = 'task_plan_runs'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    template_id: Mapped[int] = mapped_column(ForeignKey('task_plan_templates.id'), index=True)
+    template_snapshot: Mapped[dict] = mapped_column(JSONB)
+    university_id: Mapped[int] = mapped_column(ForeignKey('universities.id'), index=True)
+    launch_id: Mapped[int | None] = mapped_column(ForeignKey('launches.id'))
+    started_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    start_date: Mapped[date] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class TaskUserPreferences(Base):
+    """Per-user Tasks workspace preferences the spec asks to persist on the server (not in the URL):
+    visible List columns, the personal «My plan» and «Сроки» board layouts, and saved filter sets per
+    `{view}:{scope}` combination (`filters`, e.g. `{'list:mine': {...}}` — see task_routes.py's
+    `SavedFilterIn`/`KNOWN_FILTER_KEYS`). Sort, pagination and the active view/scope stay in URL query
+    parameters and are never stored here; a saved filter set is applied into the URL when there is no
+    explicit filter already there, not read directly by the frontend as page state.
+
+    Board layout fields (planner_* / deadline_*) are a matched pair, one per board (D-202):
+    `*_columns` is the full ordered column list (system column keys mixed with `custom:<id>` refs —
+    the one source of truth for both visibility/order and which ids are "known" custom columns);
+    `*_positions` is manual card order per column id; `*_custom_columns` holds `{id: {title}}`
+    definitions for the custom (personal, non-status/non-deadline) columns; `*_custom_members` is
+    `{str(task_id): custom_column_id}`, the only per-task state that isn't derived from the task's own
+    status/deadline — a task absent from it always renders in the system column matching its real
+    status/deadline. All four are plain replace-on-write (unlike `filters`): the client already holds
+    the full current value from the same query that renders the board, so every change (add/rename/
+    delete/reorder a column, move a card) sends the complete updated value, no server-side merge."""
+    __tablename__ = 'task_user_preferences'
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id', ondelete='CASCADE'), primary_key=True)
+    list_columns: Mapped[list | None] = mapped_column(JSONB)
+    planner_columns: Mapped[list | None] = mapped_column(JSONB)
+    planner_positions: Mapped[dict | None] = mapped_column(JSONB)
+    planner_custom_columns: Mapped[dict | None] = mapped_column(JSONB)
+    planner_custom_members: Mapped[dict | None] = mapped_column(JSONB)
+    deadline_columns: Mapped[list | None] = mapped_column(JSONB)
+    deadline_positions: Mapped[dict | None] = mapped_column(JSONB)
+    deadline_custom_columns: Mapped[dict | None] = mapped_column(JSONB)
+    deadline_custom_members: Mapped[dict | None] = mapped_column(JSONB)
+    filters: Mapped[dict | None] = mapped_column(JSONB)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 class StageEvent(Base):
     __tablename__ = 'stage_events'
@@ -132,8 +355,19 @@ class AnnualMetric(Base):
     streams: Mapped[int]
 
 
-def utcnow():
-    return datetime.now(timezone.utc)
+class EmailSenderIdentity(Base):
+    """A "from" address a user may send university correspondence as (Настройки → Личный профиль).
+    Every row is inherently admin-approved: only crm-supervisor/crm-admin can create one — there is
+    no self-service "verify my own mailbox" flow. Deactivated (is_active=False), never hard-deleted,
+    so a user who previously selected one keeps a valid historical reference.
+    """
+    __tablename__ = 'email_sender_identities'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    email_address: Mapped[str] = mapped_column(String(254), unique=True)
+    display_name: Mapped[str] = mapped_column(russian_text(200))
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class User(Base):
@@ -147,6 +381,17 @@ class User(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     last_login_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # CRM-owned phone verification (not Keycloak/OIDC, D-002 unaffected): phone lives here, not as a
+    # Keycloak user attribute, because it is a CRM profile fact, not an identity fact Keycloak needs.
+    phone: Mapped[str] = mapped_column(String(20), default='', server_default='')
+    phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Cooldown timestamp for POST /api/v1/email-senders/test — mirrors PhoneVerificationCode's
+    # cooldown (profile_routes.py's COOLDOWN_SECONDS) but needs no separate table since there is no
+    # per-attempt code to store, just a rate limit.
+    email_test_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Selected "from" address for outgoing correspondence (Настройки → Личный профиль); nullable
+    # because "no sender selected yet" is the normal default state for every existing/new user.
+    email_sender_identity_id: Mapped[int | None] = mapped_column(ForeignKey('email_sender_identities.id'))
 
 
 class UserSession(Base):
@@ -175,6 +420,22 @@ class LoginState(Base):
     browser_hash: Mapped[str] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class PhoneVerificationCode(Base):
+    """A one-time SMS code for CRM-owned phone verification; only the hash is stored (`app/phone.py`)."""
+    __tablename__ = 'phone_verification_codes'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    # The number this code was sent to; kept alongside the code so a later edit to users.phone before this
+    # code is verified can't be mistaken for what was actually sent.
+    phone: Mapped[str] = mapped_column(String(20))
+    code_hash: Mapped[str] = mapped_column(String(64))
+    attempts: Mapped[int] = mapped_column(default=0, server_default='0')
+    correlation_id: Mapped[str | None] = mapped_column(String(36))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    consumed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 TRANSFER_STATUSES = ('not_started', 'in_progress', 'transferred', 'cancelled')

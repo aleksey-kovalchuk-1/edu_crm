@@ -37,11 +37,12 @@ def test_demo_tasks_and_dashboard(database_url, client, keycloak):
     login(client, keycloak, roles=('crm-supervisor',))
     launches = client.get('/api/v1/launches').json()
     assert len(launches) > 0
-    task = client.get('/api/v1/tasks').json()[0]
-    assert client.patch(f"/api/v1/tasks/{task['id']}", json={'done': True}).json()['done'] is True
+    task = client.post('/api/v1/tasks', json={'title': 'Проверка демо-данных'}).json()
+    updated = client.patch(f"/api/v1/tasks/{task['id']}", json={'title': 'Обновлено', 'version': task['version']})
+    assert updated.json()['title'] == 'Обновлено'
     assert client.get('/api/v1/dashboard').json()['students'] == sum(x['students'] for x in launches)
     assert client.get('/api/v1/dashboard').json()['overdue'] == sum(x['overdue'] for x in launches)
-    assert client.patch('/api/v1/tasks/999', json={'done': True}).status_code == 404
+    assert client.patch('/api/v1/tasks/999', json={'title': 'x', 'version': 1}).status_code == 404
 
 
 def test_seeding_twice_does_not_duplicate_data(database_url):

@@ -6,20 +6,29 @@ from fastapi import Depends, FastAPI, Request
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from .admin_routes import router as admin_router
 from .audit import record_event
 from .audit_routes import router as audit_router
 from .auth import ALL_ROLES, AuthContext, require_roles, router as auth_router
 from .catalog_routes import active_university_in_scope, router as catalog_router, university_scope
+from .email_routes import router as email_router
 from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
-from .models import AnnualMetric, Launch, StageEvent, StatusChange, Task, University, WorkflowStatus
+from .keycloak_admin import KeycloakAdminClient
+from .models import AnnualMetric, Launch, StageEvent, StatusChange, TaskPlanRun, TaskPlanTemplate, University, WorkflowStatus
+from .plan_routes import resolve_assignee, run_generation, snapshot_template
+from .plan_routes import router as plan_router
+from .profile_routes import router as profile_router
+from .task_routes import router as task_router
 from .workflow_routes import router as workflow_router
 from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
-from .schemas import LaunchInput, StageInput, TaskInput
+from .schemas import LaunchInput, StageInput
 from .security import TokenCipher
+from .email import send_email
 from .settings import load_settings, validate_database_url
+from .sms import send_sms
 
 STAGES = ['Поиск контакта', 'Уточнение интереса', 'Встреча', 'Обмен документами', 'Согласование документов', 'Подписание', 'Передача материалов и лицензий', 'Внедрение продукта', 'Обучение преподавателей', 'Актуализация программы', 'Проведение занятий', 'Обновление материалов', 'Повышение квалификации']
 
@@ -34,7 +43,31 @@ def is_overdue(launch):
     return launch.deadline < date.today() and launch.stage < 10
 
 
-def create_app(settings=None, *, http_client=None):
+def generate_default_plan_for_launch(db, request, auth, university, launch):
+    """Generates the one is_default_plan template's tasks for a newly created Interaction, exactly once.
+
+    Never raises for a per-launch reason: any step whose assignee can't be resolved (no university
+    manager, several of them, etc.) falls back to the Interaction's own creator, so this never blocks
+    Interaction creation. Guarded against duplicate generation for the same launch_id.
+    """
+    already_generated = db.scalar(select(TaskPlanRun.id).where(TaskPlanRun.launch_id == launch.id))
+    if already_generated is not None:
+        return
+    default_plan = db.scalar(select(TaskPlanTemplate).where(
+        TaskPlanTemplate.is_default_plan.is_(True), TaskPlanTemplate.is_active.is_(True),
+    ))
+    if default_plan is None:
+        return
+    snapshot = snapshot_template(db, default_plan)
+    overrides = {}
+    for step in snapshot['steps']:
+        assignee_id, issue = resolve_assignee(db, step, university.id, launch, auth.user.id)
+        if assignee_id is None:
+            overrides[str(step['id'])] = auth.user.id  # fall back to the Interaction's creator
+    run_generation(db, request, auth.user, default_plan, snapshot, university.id, launch.id, date.today(), [], overrides)
+
+
+def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender=None):
     # The server calls create_app() and reads the environment; tests pass settings and a fake identity provider.
     settings = load_settings() if settings is None else settings
     validate_database_url(settings.database_url)
@@ -70,11 +103,27 @@ def create_app(settings=None, *, http_client=None):
         http=http,
     )
     app.state.cipher = TokenCipher(settings.session_encryption_key)
+    # Defaults to the real sender (log-only or HTTP, per settings.sms_provider_url — see app/sms.py);
+    # tests substitute a fake here so phone verification tests assert on calls, not logs or real HTTP.
+    app.state.sms_sender = sms_sender or send_sms
+    # Same pattern as sms_sender, for outgoing email — see app/email.py.
+    app.state.email_sender = email_sender or send_email
+    # Empty client_id/secret (the default) makes is_configured() False; routes must check that
+    # before calling anything else, per app/keycloak_admin.py's own contract.
+    app.state.keycloak_admin = KeycloakAdminClient(
+        base_url=settings.keycloak_admin_base_url, client_id=settings.keycloak_admin_client_id,
+        client_secret=settings.keycloak_admin_client_secret, http_client=http,
+    )
     install_error_handlers(app)
+    app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(audit_router)
     app.include_router(catalog_router)
+    app.include_router(email_router)
     app.include_router(import_router)
+    app.include_router(plan_router)
+    app.include_router(profile_router)
+    app.include_router(task_router)
     app.include_router(workflow_router)
 
     @app.get('/api/v1/health')
@@ -108,6 +157,7 @@ def create_app(settings=None, *, http_client=None):
         record_event(db, request, auth.user, 'launch.create', entity_type='launch', entity_id=record.id,
                      summary=f'Создано взаимодействие «{record.program}» с «{university.name}»',
                      payload={**data.model_dump(mode='json'), 'stage': first_status.position})
+        generate_default_plan_for_launch(db, request, auth, university, record)
         db.commit()
         db.refresh(record)
         return serialize(record)
@@ -135,31 +185,6 @@ def create_app(settings=None, *, http_client=None):
     def history(id: int, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
         launch_in_scope(db, auth.user, id)
         return [serialize(x) for x in db.scalars(select(StageEvent).where(StageEvent.launch_id == id).order_by(StageEvent.id.desc()))]
-
-    @app.get('/api/v1/tasks')
-    def tasks(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-        query = (
-            select(Task).join(Launch, Launch.id == Task.launch_id)
-            .where(university_scope(Launch.university_id, auth.user)).order_by(Task.deadline, Task.id)
-        )
-        return [serialize(x) for x in db.scalars(query)]
-
-    @app.patch('/api/v1/tasks/{id}')
-    def update_task(id: int, data: TaskInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-        record = db.scalar(
-            select(Task).join(Launch, Launch.id == Task.launch_id)
-            .where(Task.id == id, university_scope(Launch.university_id, auth.user))
-        )
-        if record is None:
-            raise AppError(ErrorCode.RECORD_NOT_FOUND)
-        if record.done != data.done:
-            previous = record.done
-            record.done = data.done
-            record_event(db, request, auth.user, 'task.update', entity_type='task', entity_id=id,
-                         summary=f'Задача «{record.title}» {"выполнена" if data.done else "возвращена в работу"}',
-                         payload={'done': {'from': previous, 'to': data.done}})
-            db.commit()
-        return serialize(record)
 
     @app.get('/api/v1/dashboard')
     def dashboard(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):

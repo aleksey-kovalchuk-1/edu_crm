@@ -34,6 +34,27 @@ class Settings:
     cookie_secure: bool = True
     allowed_origins: tuple[str, ...] = ()
     attachments_dir: str = '/data/attachments'
+    # SMS provider for CRM-owned phone verification (D-not-yet-numbered; see docs/design/phone-verification.md).
+    # Unset in local dev/CI on purpose: app/sms.py falls back to a logging-only sender so the code is
+    # visible (API container log) without any real gateway account. Real credentials are supplied only
+    # through deploy/local/api.env, never committed.
+    sms_provider_url: str = ''
+    sms_provider_api_key: str = ''
+    sms_sender: str = 'CRM'
+    # Keycloak Admin API access (Users & Roles, Security's password-policy display). Unset by
+    # default — admin features degrade to "not configured" rather than the app failing to start;
+    # see keycloak_admin.py. Real credentials come only from deploy/local/*.env, never committed.
+    keycloak_admin_client_id: str = ''
+    keycloak_admin_client_secret: str = ''
+    keycloak_admin_base_url: str = ''
+    # Outgoing email for university correspondence (Настройки → Личный профиль). Unset in local
+    # dev/CI on purpose, same as sms_provider_url: app/email.py falls back to a logging-only sender
+    # so the code is visible (API container log) without any real provider account. Real credentials
+    # are supplied only through deploy/local/api.env, never committed.
+    email_provider_url: str = ''
+    email_provider_api_key: str = ''
+    email_sender_name: str = 'UniCRM'
+    email_sender_address: str = ''
 
     @property
     def callback_url(self):
@@ -123,4 +144,14 @@ def load_settings(environ=None):
         cookie_secure=_boolean(environ, 'COOKIE_SECURE', True),
         allowed_origins=allowed_origins,
         attachments_dir=(environ.get('ATTACHMENTS_DIR') or '').strip() or '/data/attachments',
+        sms_provider_url=(environ.get('SMS_PROVIDER_URL') or '').strip(),
+        sms_provider_api_key=(environ.get('SMS_PROVIDER_API_KEY') or '').strip(),
+        sms_sender=(environ.get('SMS_SENDER') or '').strip() or 'CRM',
+        keycloak_admin_client_id=(environ.get('KEYCLOAK_ADMIN_CLIENT_ID') or '').strip(),
+        keycloak_admin_client_secret=(environ.get('KEYCLOAK_ADMIN_CLIENT_SECRET') or '').strip(),
+        keycloak_admin_base_url=environ['OIDC_INTERNAL_BASE_URL'].strip().rstrip('/').rsplit('/realms/', 1)[0],
+        email_provider_url=(environ.get('EMAIL_PROVIDER_URL') or '').strip(),
+        email_provider_api_key=(environ.get('EMAIL_PROVIDER_API_KEY') or '').strip(),
+        email_sender_name=(environ.get('EMAIL_SENDER_NAME') or '').strip() or 'UniCRM',
+        email_sender_address=(environ.get('EMAIL_SENDER_ADDRESS') or '').strip(),
     )

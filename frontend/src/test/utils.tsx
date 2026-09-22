@@ -3,6 +3,8 @@ import { MemoryRouter, useLocation } from "react-router";
 import { vi } from "vitest";
 import type { Session } from "../api/auth";
 import { API_BASE } from "../api/client";
+import type { PlanRun, PlanTemplate } from "../api/planTemplates";
+import type { Task, TaskListItem, TaskPreferences } from "../api/tasks";
 import type {
   Contract,
   CrmUser,
@@ -10,7 +12,6 @@ import type {
   ITDirection,
   ITProduct,
   Launch,
-  Task,
   TransferStatus,
   University,
   UniversityContact,
@@ -156,14 +157,98 @@ export function fixtures() {
       statuses: [{ id: 21, name: "Старт", position: 0, is_final: true, is_active: true }],
     },
   ];
-  const tasks: Task[] = [
+  const tasks: TaskListItem[] = [
     {
       id: 1,
-      launch_id: 1,
       title: "Согласовать договор",
-      owner: "Ирина Петрова",
+      status: "new",
+      priority: "normal",
       deadline: "2026-09-20",
-      done: false,
+      creator: { id: 5, full_name: "Ирина Петрова" },
+      assignees: [{ id: 5, full_name: "Ирина Петрова" }],
+      university: null,
+      created_at: "2026-09-01T10:00:00Z",
+      version: 1,
+    },
+  ];
+  const task: Task = {
+    id: 1,
+    title: "Согласовать договор",
+    description: "",
+    status: "new",
+    priority: "normal",
+    deadline: "2026-09-20",
+    planned_start: null,
+    creator: { id: 5, full_name: "Ирина Петрова" },
+    university: null,
+    interaction: null,
+    contract: null,
+    assignees: [{ id: 5, full_name: "Ирина Петрова" }],
+    participants: [],
+    observers: [],
+    approval_required: false,
+    require_checklist_complete: true,
+    checklist: [],
+    parent: null,
+    subtasks: { total: 0, completed: 0 },
+    created_at: "2026-09-01T10:00:00Z",
+    updated_at: "2026-09-01T10:00:00Z",
+    version: 1,
+  };
+  const planTemplates: PlanTemplate[] = [
+    {
+      id: 1,
+      name: "Адаптация нового вуза",
+      description: "Типовой план запуска сотрудничества",
+      is_active: true,
+      created_at: "2026-01-01T10:00:00Z",
+      steps: [
+        {
+          id: 101,
+          position: 0,
+          title: "Собрать документы",
+          description: "",
+          assignee_rule: "university_manager",
+          assignee_rule_user_id: null,
+          start_offset_days: 0,
+          deadline_offset_days: 3,
+          offset_unit: "business",
+          priority: "normal",
+          approval_required: false,
+          is_optional: false,
+          depends_on_step_id: null,
+          checklist_items: [],
+        },
+        {
+          id: 102,
+          position: 1,
+          title: "Подписать договор",
+          description: "",
+          assignee_rule: "specific_user",
+          assignee_rule_user_id: 5,
+          start_offset_days: 3,
+          deadline_offset_days: 5,
+          offset_unit: "business",
+          priority: "high",
+          approval_required: true,
+          is_optional: false,
+          depends_on_step_id: 101,
+          checklist_items: [],
+        },
+      ],
+    },
+  ];
+  const planRuns: PlanRun[] = [
+    {
+      id: 501,
+      template_id: 1,
+      template_name: "Адаптация нового вуза",
+      university_id: 1,
+      launch_id: null,
+      start_date: "2026-09-01",
+      started_by: { id: 5, full_name: "Анна Демо" },
+      created_at: "2026-09-01T10:00:00Z",
+      progress: { total: 4, completed: 1, awaiting_review: 0, overdue: 0, blocked: 1 },
     },
   ];
   // Same length as backend STAGES (13).
@@ -180,6 +265,7 @@ export function fixtures() {
     launches,
     workflows,
     tasks,
+    task,
     stages,
     dashboard,
     directions,
@@ -188,6 +274,8 @@ export function fixtures() {
     contacts,
     transferStatuses,
     contracts,
+    planTemplates,
+    planRuns,
   };
 }
 
@@ -196,12 +284,15 @@ export const CSRF_TOKEN = "csrf-test-token";
 export const sessionFixture = (
   roles: string[] = ["crm-supervisor"],
   csrfToken = CSRF_TOKEN,
+  user: { phone?: string; phone_verified_at?: string | null } = {},
 ): Session => ({
   user: {
     id: 1,
     email: "anna.petrova@example.test",
     full_name: "Анна Петрова",
     roles,
+    phone: user.phone ?? "",
+    phone_verified_at: user.phone_verified_at ?? null,
   },
   csrf_token: csrfToken,
 });
@@ -245,12 +336,50 @@ export function mockApi(extra: Record<string, Handler> = {}) {
   const calls: Call[] = [];
   const count = (method: string, path: string) =>
     calls.filter((c) => c.method === method && c.path === path).length;
+  // Mirrors the backend's per-field-independent, filters-merged-by-key PUT /tasks/preferences (D-181,
+  // D-192, D-202): each save only touches the fields the request actually sent; `filters` merges by
+  // key, every other field (including the four board-layout dicts) is a plain replace.
+  const storedPreferences: TaskPreferences = {
+    list_columns: null, planner_columns: null, planner_positions: null,
+    planner_custom_columns: null, planner_custom_members: null,
+    deadline_columns: null, deadline_positions: null,
+    deadline_custom_columns: null, deadline_custom_members: null,
+    filters: null,
+  };
   const handlers: Record<string, Handler> = {
     "GET /auth/me": () => sessionFixture(),
     [`GET ${AUDIT_PATH}`]: () => [],
     "GET /universities": () => data.universities,
     "GET /launches": () => data.launches,
-    "GET /tasks": () => data.tasks,
+    "GET /tasks": () => ({
+      items: data.tasks,
+      total: data.tasks.length,
+      limit: 25,
+      offset: 0,
+    }),
+    "GET /tasks/1": () => data.task,
+    "GET /tasks/1/subtasks": () => [],
+    "GET /tasks/1/comments": () => [],
+    "GET /tasks/1/activity": () => [],
+    "GET /tasks/counters": () => ({ open: 0, overdue: 0, due_today: 0, awaiting_review: 0, no_deadline: 0 }),
+    "GET /tasks/preferences": () => storedPreferences,
+    "PUT /tasks/preferences": (call) => {
+      const body = call.body as Partial<TaskPreferences>;
+      for (const key of Object.keys(body) as (keyof TaskPreferences)[]) {
+        if (key === "filters") {
+          storedPreferences.filters = { ...(storedPreferences.filters ?? {}), ...(body.filters ?? {}) };
+        } else {
+          // Every other field (list_columns, the two boards' column/position/custom dicts) is a plain
+          // replace, matching the real endpoint — each field here has its own type, so a generic
+          // assignment needs a cast rather than per-field branches.
+          (storedPreferences as unknown as Record<string, unknown>)[key] = body[key];
+        }
+      }
+      return storedPreferences;
+    },
+    "GET /tasks/assignable-users": () => data.users,
+    "GET /task-plan-templates": () => data.planTemplates,
+    "GET /task-plan-runs": () => data.planRuns,
     "GET /stages": () => data.stages,
     "GET /workflows": () => data.workflows,
     "GET /launches/1/status-changes": () => [],

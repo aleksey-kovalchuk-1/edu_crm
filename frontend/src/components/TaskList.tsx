@@ -1,38 +1,37 @@
-import { useToggleTask } from "../api/queries";
-import type { Launch, Task } from "../api/types";
+import { Link } from "react-router";
+import { TASK_STATUS_LABELS, type TaskListItem, type TaskStatus } from "../api/tasks";
+import { taskPath } from "../app/navigation";
 import { formatDate } from "../lib/format";
-import { ErrorAlert } from "./QueryState";
 
-export function TaskList({
-  rows,
-  launches,
-}: {
-  rows: Task[];
-  launches: Launch[];
-}) {
-  const toggle = useToggleTask();
+const STATUS_BADGE: Record<TaskStatus, string> = {
+  new: "badge-1",
+  in_progress: "badge-2",
+  awaiting_review: "badge-warning",
+  completed: "badge-3",
+  deferred: "badge-4",
+  cancelled: "badge-danger",
+};
+
+/**
+ * Read-only preview list (used on the overview dashboard). Changing status,
+ * assignees or anything else happens on the task's own page — this list only links there.
+ */
+export function TaskList({ items }: { items: TaskListItem[] }) {
   return (
     <div className="task-list">
-      {toggle.isError && <ErrorAlert error={toggle.error} />}
-      {rows.map((t) => (
-        <div className={`task ${t.done ? "done" : ""}`} key={t.id}>
-          <input
-            type="checkbox"
-            checked={t.done}
-            disabled={toggle.isPending && toggle.variables?.id === t.id}
-            aria-label={t.title}
-            onChange={() => toggle.mutate({ id: t.id, done: !t.done })}
-          />
+      {items.map((t) => (
+        <Link className="task" key={t.id} to={taskPath(t.id)}>
+          <span className={`badge ${STATUS_BADGE[t.status]}`}>{TASK_STATUS_LABELS[t.status]}</span>
           <div>
             <strong>{t.title}</strong>
             <small>
-              {launches.find((l) => l.id === t.launch_id)?.program} · {t.owner}
+              {t.assignees.length ? t.assignees.map((a) => a.full_name).join(", ") : "Без исполнителя"}
             </small>
           </div>
-          <span className="task-date">{formatDate(t.deadline)}</span>
-        </div>
+          <span className="task-date">{t.deadline ? formatDate(t.deadline) : "Без срока"}</span>
+        </Link>
       ))}
-      {!rows.length && <p className="empty">Задач пока нет.</p>}
+      {!items.length && <p className="empty">Задач пока нет.</p>}
     </div>
   );
 }

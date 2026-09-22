@@ -17,6 +17,7 @@ import { ErrorAlert, RefreshError, queryFallback } from "../components/QueryStat
 import { ContactForm } from "../components/forms/CatalogForms";
 import { ContractForm } from "../components/forms/ContractForm";
 import { UniversityForm } from "../components/forms/UniversityForm";
+import { TaskPlanSection } from "../components/tasks/TaskPlanSection";
 import { canEditCatalog } from "../lib/user";
 import { WebsiteLink } from "./UniversitiesPage";
 
@@ -140,6 +141,8 @@ function UniversityDetail({ university }: { university: University }) {
         </section>
         <ContactsSection universityId={university.id} />
       </div>
+
+      <TaskPlanSection universityId={university.id} />
 
       <section className="panel" aria-labelledby="contracts-title">
         <div className="section-head">

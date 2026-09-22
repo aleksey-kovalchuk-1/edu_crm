@@ -5,7 +5,7 @@ import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
 
-from app.oidc import MAX_ID_TOKEN_AGE_SECONDS, OIDCClient, OIDCError, OIDCUnavailable
+from app.oidc import CRM_ROLES, MAX_ID_TOKEN_AGE_SECONDS, OIDCClient, OIDCError, OIDCUnavailable
 from fake_keycloak import CLIENT_ID, CLIENT_SECRET, INTERNAL_BASE_URL, ISSUER, FakeKeycloak, s256
 
 
@@ -18,6 +18,12 @@ def make_client(keycloak, **overrides):
     options = dict(issuer=ISSUER, internal_base_url=INTERNAL_BASE_URL, client_id=CLIENT_ID, client_secret=CLIENT_SECRET, http=keycloak.http_client())
     options.update(overrides)
     return OIDCClient(**options)
+
+
+def test_crm_superadmin_role_survives_token_filtering():
+    # Without this, a user granted crm-superadmin in Keycloak would silently lose the role on every
+    # login, with no error anywhere pointing at why (see verify_id_token's CRM_ROLES filter above).
+    assert 'crm-superadmin' in CRM_ROLES
 
 
 def test_authorization_url_uses_public_issuer_and_pkce(keycloak):

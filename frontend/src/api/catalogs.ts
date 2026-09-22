@@ -60,7 +60,7 @@ export const catalogKeys = {
   productList: (p: ProductListParams) => ["it-products", p] as const,
   universities: ["universities"] as const,
   universityList: (p: ListParams) => ["universities", p] as const,
-  users: (role: string) => ["users", role] as const,
+  users: (role?: string) => ["users", role ?? "any"] as const,
   contacts: (universityId: number) => ["university-contacts", universityId] as const,
   contactList: (universityId: number, p: ListParams) =>
     ["university-contacts", universityId, p] as const,
@@ -186,8 +186,8 @@ export function useSetUniversityManagers() {
   });
 }
 
-/** CRM users with a role (supervisors and admins only). */
-export const useCrmUsers = (role: string, enabled = true) =>
+/** CRM users, optionally filtered by role (supervisors and admins only); no role means everyone. */
+export const useCrmUsers = (role?: string, enabled = true) =>
   useQuery({
     queryKey: catalogKeys.users(role),
     queryFn: () => apiRequest<CrmUser[]>(`/users${buildQuery({ role })}`),

@@ -1,12 +1,20 @@
 import {
+  Bell,
   BookMarked,
   Building2,
   ChartNoAxesCombined,
   Columns3,
+  DatabaseBackup,
+  FileLock2,
   FileText,
   LayoutDashboard,
   FileUp,
   ListChecks,
+  ListTree,
+  LogOut,
+  ShieldCheck,
+  UserRound,
+  Users,
   Workflow,
   type LucideIcon,
 } from "lucide-react";
@@ -18,16 +26,28 @@ export const paths = {
   contracts: "/contracts",
   interactions: "/interactions",
   tasks: "/tasks",
+  taskTemplates: "/tasks/templates",
   analytics: "/analytics",
   catalogs: "/catalogs",
   imports: "/imports",
   workflows: "/workflows",
   statusBoard: "/interactions/board",
+  profile: "/profile",
+  settings: "/settings",
+  settingsProfile: "/settings/profile",
+  settingsOrganization: "/settings/organization",
+  settingsNotifications: "/settings/notifications",
+  settingsSecurity: "/settings/security",
+  settingsUsers: "/settings/users",
+  settingsPersonalData: "/settings/personal-data",
+  settingsBackups: "/settings/backups",
+  settingsAccount: "/settings/account",
 } as const;
 
 export const universityPath = (id: number) => `${paths.universities}/${id}`;
 /** Interaction detail with the status timeline (nested under «Взаимодействия»). */
 export const launchPath = (id: number) => `${paths.interactions}/${id}`;
+export const taskPath = (id: number) => `${paths.tasks}/${id}`;
 
 export type CreateKind = "university" | "launch" | "contract";
 
@@ -41,6 +61,8 @@ export interface PageMeta {
   create: CreateKind | null;
   /** Roles that see the page in the sidebar; absent — every CRM role. */
   roles?: string[];
+  /** Reachable by path (e.g. from the profile link) but left out of the sidebar nav list. */
+  hidden?: boolean;
 }
 
 export const pages: PageMeta[] = [
@@ -82,8 +104,9 @@ export const pages: PageMeta[] = [
     name: "Задачи",
     icon: ListChecks,
     heading: "Задачи",
-    subtitle: "Ближайшие действия, сроки и ответственные.",
-    create: "launch",
+    subtitle: "",
+    // The workspace has its own «Создать задачу» action (TasksPage), not the shared header button.
+    create: null,
   },
   {
     path: paths.analytics,
@@ -119,11 +142,107 @@ export const pages: PageMeta[] = [
     create: null,
     roles: [ROLES.supervisor, ROLES.admin],
   },
+  {
+    path: paths.taskTemplates,
+    name: "Шаблоны планов задач",
+    icon: ListTree,
+    heading: "Шаблоны планов задач",
+    subtitle: "Повторно используемые последовательности задач для запуска сотрудничества с вузом.",
+    create: null,
+    hidden: true,
+  },
+];
+
+/** Settings pages, reachable via the «Настройки» submenu (Task 3); never shown in the flat sidebar list. */
+export const settingsPages: PageMeta[] = [
+  {
+    path: paths.settingsProfile,
+    name: "Личный профиль",
+    icon: UserRound,
+    heading: "Личный профиль",
+    subtitle: "Имя, контакты, язык интерфейса и часовой пояс.",
+    create: null,
+    hidden: true,
+  },
+  {
+    path: paths.settingsOrganization,
+    name: "Организация",
+    icon: Building2,
+    heading: "Организация",
+    subtitle: "Реквизиты и контактные данные организации.",
+    create: null,
+    hidden: true,
+  },
+  {
+    path: paths.settingsNotifications,
+    name: "Уведомления",
+    icon: Bell,
+    heading: "Уведомления",
+    subtitle: "Какие события присылают уведомления и когда.",
+    create: null,
+    hidden: true,
+  },
+  {
+    path: paths.settingsSecurity,
+    name: "Безопасность",
+    icon: ShieldCheck,
+    heading: "Безопасность",
+    subtitle: "Активные сеансы и политика паролей.",
+    create: null,
+    hidden: true,
+  },
+  {
+    path: paths.settingsUsers,
+    name: "Пользователи и роли",
+    icon: Users,
+    heading: "Пользователи и роли",
+    subtitle: "Учётные записи, роли и заявки на доступ.",
+    create: null,
+    hidden: true,
+    roles: [ROLES.superadmin],
+  },
+  {
+    path: paths.settingsPersonalData,
+    name: "Персональные данные",
+    icon: FileLock2,
+    heading: "Персональные данные",
+    subtitle: "Обработка персональных данных.",
+    create: null,
+    hidden: true,
+  },
+  {
+    path: paths.settingsBackups,
+    name: "Резервное копирование",
+    icon: DatabaseBackup,
+    heading: "Резервное копирование",
+    subtitle: "Статус резервных копий базы данных и вложений.",
+    create: null,
+    hidden: true,
+    roles: [ROLES.superadmin],
+  },
+  {
+    path: paths.settingsAccount,
+    name: "Аккаунт",
+    icon: LogOut,
+    heading: "Аккаунт",
+    subtitle: "Выход из аккаунта и обзор пользователей CRM.",
+    create: null,
+    hidden: true,
+  },
 ];
 
 /** Pages shown in the sidebar for a user's roles (the server still enforces access). */
 export const visiblePages = (roles: string[]) =>
-  pages.filter((p) => !p.roles || p.roles.some((r) => roles.includes(r)));
+  pages.filter(
+    (p) => !p.hidden && (!p.roles || p.roles.some((r) => roles.includes(r))),
+  );
+
+/**
+ * Every page findPage() can resolve to — the flat sidebar pages plus the settings submenu
+ * pages, which are deliberately excluded from `pages`/`visiblePages()` (they must never
+ * appear in the flat sidebar list) but still need a header/breadcrumb when routed to.
+ */
+const allPages: PageMeta[] = [...pages, ...settingsPages];
 
 export const NOT_FOUND_TITLE = "Страница не найдена";
 
@@ -133,8 +252,8 @@ const normalize = (pathname: string) => pathname.replace(/\/+$/, "") || "/";
 export function findPage(pathname: string): PageMeta | undefined {
   const normalized = normalize(pathname);
   return (
-    pages.find((p) => p.path === normalized) ??
-    pages.find((p) => p.path !== "/" && normalized.startsWith(`${p.path}/`))
+    allPages.find((p) => p.path === normalized) ??
+    allPages.find((p) => p.path !== "/" && normalized.startsWith(`${p.path}/`))
   );
 }
 

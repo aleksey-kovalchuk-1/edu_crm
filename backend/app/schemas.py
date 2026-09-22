@@ -14,6 +14,3 @@ class LaunchInput(BaseModel):
 
 class StageInput(BaseModel):
     stage: int = Field(ge=0, le=12)
-
-class TaskInput(BaseModel):
-    done: bool

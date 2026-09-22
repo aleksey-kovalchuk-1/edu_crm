@@ -120,37 +120,38 @@ describe("session ending mid-use", () => {
     expect(assign()).toHaveBeenCalledWith("/api/v1/auth/login?next=%2Funiversities");
   });
 
-  it("rolls back an optimistic toggle when the session has ended", async () => {
+  it("shows the session-expired dialog when a save's session has ended", async () => {
     const patch = deferred<unknown>();
     const api = mockApi({
       "GET /auth/me": () =>
         api.count("GET", "/auth/me") > 1 ? unauthenticated() : sessionFixture(),
       "PATCH /tasks/1": () => patch.promise,
     });
-    renderApp("/tasks");
-    const checkbox = (await screen.findByRole("checkbox", {
-      name: "Согласовать договор",
-    })) as HTMLInputElement;
-    fireEvent.click(checkbox);
+    renderApp("/tasks/1");
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
+    const form = (await screen.findByRole("textbox", { name: "Название" })).closest("form")!;
+    fireEvent.submit(form);
     await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(1));
-    expect(checkbox.checked).toBe(true);
     patch.resolve(unauthenticated());
     expect(await screen.findByRole("dialog", { name: "Сессия истекла" })).toBeTruthy();
-    await waitFor(() => expect(checkbox.checked).toBe(false));
-    expect(checkbox.isConnected).toBe(true);
     expect(assign()).not.toHaveBeenCalled();
   });
 
   it("does not loop when a data endpoint returns 401 but the session is valid", async () => {
     const api = mockApi({ "GET /tasks": unauthenticated });
     renderApp("/tasks");
+    const tasksCalls = () =>
+      api.calls.filter((c) => c.method === "GET" && c.path.startsWith("/tasks")).length;
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Требуется вход в систему (код UNAUTHENTICATED)",
     );
     await waitFor(() => expect(api.count("GET", "/auth/me")).toBe(2));
+    // The sidebar badge and the page content each fetch /tasks once on mount (distinct queries);
+    // what matters is that a 401 on either does not trigger repeated retries.
+    const settled = tasksCalls();
     await pause(100);
     expect(api.count("GET", "/auth/me")).toBe(2);
-    expect(api.count("GET", "/tasks")).toBe(1);
+    expect(tasksCalls()).toBe(settled);
     expect(screen.queryByRole("dialog", { name: "Сессия истекла" })).toBeNull();
     expect(assign()).not.toHaveBeenCalled();
   });
@@ -169,26 +170,24 @@ describe("csrf and permissions", () => {
         ),
       "PATCH /tasks/1": (call) => {
         if (call.headers["x-csrf-token"] !== "csrf-new") return csrfInvalid();
-        api.data.tasks = api.data.tasks.map((t) => (t.id === 1 ? { ...t, done: true } : t));
-        return api.data.tasks[0];
+        return { ...api.data.task, title: "Обновлено" };
       },
     });
-    renderApp("/tasks");
-    const checkbox = (await screen.findByRole("checkbox", {
-      name: "Согласовать договор",
-    })) as HTMLInputElement;
-    fireEvent.click(checkbox);
+    renderApp("/tasks/1");
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
+    const form = (await screen.findByRole("textbox", { name: "Название" })).closest("form")!;
+    fireEvent.submit(form);
     await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(2));
-    await waitFor(() => expect(checkbox.disabled).toBe(false));
     expect(api.count("GET", "/auth/me")).toBe(2);
-    expect(checkbox.checked).toBe(true);
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows the message when the retry is refused again", async () => {
     const api = mockApi({ "PATCH /tasks/1": csrfInvalid });
-    renderApp("/tasks");
-    fireEvent.click(await screen.findByRole("checkbox", { name: "Согласовать договор" }));
+    renderApp("/tasks/1");
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
+    const form = (await screen.findByRole("textbox", { name: "Название" })).closest("form")!;
+    fireEvent.submit(form);
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Страница устарела: обновите её и повторите действие (код CSRF_INVALID)",
     );
