@@ -163,9 +163,8 @@ export function Layout() {
           <main>
             <div className="page-heading">
               <div>
-                <p className="eyebrow">ОБРАЗОВАТЕЛЬНЫЕ ПАРТНЁРСТВА</p>
                 <h1>{page?.heading ?? NOT_FOUND_TITLE}</h1>
-                {page && <p className="subtitle">{page.subtitle}</p>}
+                {page?.subtitle && <p className="subtitle">{page.subtitle}</p>}
               </div>
               {createKind && canCreate && (
                 <button className="primary" onClick={() => setCreate(createKind)}>
