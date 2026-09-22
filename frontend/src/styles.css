@@ -336,6 +336,15 @@ svg {
   align-items: center;
   gap: 20px;
 }
+.topbar-right .avatar {
+  cursor: pointer;
+  text-decoration: none;
+  transition: box-shadow 120ms ease;
+}
+.topbar-right .avatar:hover,
+.topbar-right .avatar:focus-visible {
+  box-shadow: 0 0 0 3px #f0e9fd;
+}
 .demo-label {
   background: #f3effb;
   color: #8a66ba;
@@ -2106,6 +2115,19 @@ dialog.wide {
   border-radius: 8px;
   background: #eaf6f0;
   color: #2f6d56;
+  font-size: 12px;
+  font-weight: 650;
+}
+.banner-warning {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 13px 15px;
+  margin-bottom: 16px;
+  border: 1px solid #f2ddb0;
+  border-radius: 8px;
+  background: #fdf5e4;
+  color: #8a5e10;
   font-size: 12px;
   font-weight: 650;
 }

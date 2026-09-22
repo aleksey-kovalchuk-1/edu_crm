@@ -240,8 +240,9 @@ describe("Настройки menu", () => {
 
     fireEvent.click(settingsButton);
     fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
-    // Both the page's own <h2> and the Layout's <h1>/breadcrumb now read "Личный профиль"
-    // (see the header/breadcrumb regression test below) — level 1 targets the Layout heading.
+    // The Layout's <h1>/breadcrumb read "Личный профиль" (see the header/breadcrumb regression
+    // test below); the page's own content below it is the real phone-verification panel, whose
+    // own heading is "Телефон" — level 1 targets the Layout heading, not that inner one.
     expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
   });
 
@@ -302,4 +303,20 @@ describe("Настройки menu", () => {
       expect(screen.queryByText(NOT_FOUND_TITLE)).toBeNull();
     },
   );
+});
+
+describe("topbar account avatar", () => {
+  it("has no demo label and links to Личный профиль", async () => {
+    mockApi();
+    renderApp("/");
+    await screen.findByRole("heading", { level: 1 });
+    expect(screen.queryByText("ДЕМО")).toBeNull();
+    const header = document.querySelector(".topbar-right");
+    const link = header?.querySelector("a.avatar");
+    expect(link).toBeTruthy();
+    expect(link?.getAttribute("href")).toBe(paths.settingsProfile);
+
+    fireEvent.click(link!);
+    expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
+  });
 });

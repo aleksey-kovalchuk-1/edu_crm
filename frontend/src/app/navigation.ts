@@ -11,6 +11,7 @@ import {
   FileUp,
   ListChecks,
   ListTree,
+  LogOut,
   ShieldCheck,
   UserRound,
   Users,
@@ -40,6 +41,7 @@ export const paths = {
   settingsUsers: "/settings/users",
   settingsPersonalData: "/settings/personal-data",
   settingsBackups: "/settings/backups",
+  settingsAccount: "/settings/account",
 } as const;
 
 export const universityPath = (id: number) => `${paths.universities}/${id}`;
@@ -149,15 +151,6 @@ export const pages: PageMeta[] = [
     create: null,
     hidden: true,
   },
-  {
-    path: paths.profile,
-    name: "Профиль",
-    icon: UserRound,
-    heading: "Профиль",
-    subtitle: "Данные вашей учётной записи и подтверждение телефона.",
-    create: null,
-    hidden: true,
-  },
 ];
 
 /** Settings pages, reachable via the «Настройки» submenu (Task 3); never shown in the flat sidebar list. */
@@ -226,6 +219,15 @@ export const settingsPages: PageMeta[] = [
     create: null,
     hidden: true,
     roles: [ROLES.superadmin],
+  },
+  {
+    path: paths.settingsAccount,
+    name: "Аккаунт",
+    icon: LogOut,
+    heading: "Аккаунт",
+    subtitle: "Выход из аккаунта и обзор пользователей CRM.",
+    create: null,
+    hidden: true,
   },
 ];
 

@@ -7,7 +7,6 @@ import { InteractionsPage } from "../pages/InteractionsPage";
 import { LaunchPage } from "../pages/LaunchPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { OverviewPage } from "../pages/OverviewPage";
-import { ProfilePage } from "../pages/ProfilePage";
 import { StatusBoardPage } from "../pages/StatusBoardPage";
 import { TaskDetailPage } from "../pages/TaskDetailPage";
 import { TaskTemplatesPage } from "../pages/TaskTemplatesPage";
@@ -15,6 +14,7 @@ import { TasksPage } from "../pages/TasksPage";
 import { UniversitiesPage } from "../pages/UniversitiesPage";
 import { UniversityPage } from "../pages/UniversityPage";
 import { WorkflowsPage } from "../pages/WorkflowsPage";
+import { SettingsAccountPage } from "../pages/settings/SettingsAccountPage";
 import { SettingsBackupsPage } from "../pages/settings/SettingsBackupsPage";
 import { SettingsNotificationsPage } from "../pages/settings/SettingsNotificationsPage";
 import { SettingsOrganizationPage } from "../pages/settings/SettingsOrganizationPage";
@@ -46,7 +46,10 @@ export function AppRoutes() {
           <Route path="tasks/templates" element={<TaskTemplatesPage />} />
           <Route path="tasks/:id" element={<TaskDetailPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
-          <Route path="profile" element={<ProfilePage />} />
+          <Route
+            path="profile"
+            element={<Navigate to={paths.settingsProfile} replace />}
+          />
           <Route
             path="settings"
             element={<Navigate to={paths.settingsProfile} replace />}
@@ -58,6 +61,7 @@ export function AppRoutes() {
           <Route path="settings/users" element={<SettingsUsersPage />} />
           <Route path="settings/personal-data" element={<SettingsPersonalDataPage />} />
           <Route path="settings/backups" element={<SettingsBackupsPage />} />
+          <Route path="settings/account" element={<SettingsAccountPage />} />
           <Route path="*" element={<NotFoundPage />} />
         </Route>
       </Routes>

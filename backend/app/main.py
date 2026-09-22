@@ -6,6 +6,7 @@ from fastapi import Depends, FastAPI, Request
 from sqlalchemy import create_engine, func, select, text
 from sqlalchemy.orm import Session, sessionmaker
 
+from .admin_routes import router as admin_router
 from .audit import record_event
 from .audit_routes import router as audit_router
 from .auth import ALL_ROLES, AuthContext, require_roles, router as auth_router
@@ -14,6 +15,7 @@ from .email_routes import router as email_router
 from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
+from .keycloak_admin import KeycloakAdminClient
 from .models import AnnualMetric, Launch, StageEvent, StatusChange, TaskPlanRun, TaskPlanTemplate, University, WorkflowStatus
 from .plan_routes import resolve_assignee, run_generation, snapshot_template
 from .plan_routes import router as plan_router
@@ -106,7 +108,14 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.state.sms_sender = sms_sender or send_sms
     # Same pattern as sms_sender, for outgoing email — see app/email.py.
     app.state.email_sender = email_sender or send_email
+    # Empty client_id/secret (the default) makes is_configured() False; routes must check that
+    # before calling anything else, per app/keycloak_admin.py's own contract.
+    app.state.keycloak_admin = KeycloakAdminClient(
+        base_url=settings.keycloak_admin_base_url, client_id=settings.keycloak_admin_client_id,
+        client_secret=settings.keycloak_admin_client_secret, http_client=http,
+    )
     install_error_handlers(app)
+    app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(audit_router)
     app.include_router(catalog_router)
