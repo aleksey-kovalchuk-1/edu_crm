@@ -14,13 +14,15 @@ from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_r
 from .db import get_db
 from .email import EmailSendError, send_email
 from .errors import AppError, ErrorCode
-from .models import EmailSenderIdentity
+from .models import EmailSenderIdentity, utcnow
 
 router = APIRouter(prefix='/api/v1/email-senders', tags=['Отправители писем'])
 any_role = require_roles(*ALL_ROLES)
 sender_manager = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
 
 DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+TEST_SEND_COOLDOWN_SECONDS = 60
+TEST_SEND_COOLDOWN_MESSAGE = 'Тестовое письмо уже отправлено, следующее можно запросить не раньше чем через минуту'
 
 
 class SenderIn(BaseModel):
@@ -48,8 +50,16 @@ def list_senders(db: Session = Depends(get_db)):
 @router.post('', response_model=SenderOut, status_code=201, summary='Добавить отправителя')
 def create_sender(data: SenderIn, request: Request, auth: AuthContext = Depends(sender_manager), db: Session = Depends(get_db)):
     existing = db.scalar(select(EmailSenderIdentity).where(EmailSenderIdentity.email_address == data.email_address))
-    if existing is not None:
+    if existing is not None and existing.is_active:
         raise AppError(ErrorCode.VALIDATION_ERROR, details=[{'field': 'email_address', 'message': 'Такой адрес уже добавлен', 'type': 'value_error'}])
+    if existing is not None:
+        existing.is_active = True
+        existing.display_name = data.display_name
+        existing.created_by_user_id = auth.user.id
+        record_event(db, request, auth.user, 'email_sender.reactivate', entity_type='email_sender_identity', entity_id=existing.id,
+                     summary=f'Восстановлен отправитель писем «{existing.display_name}» ({existing.email_address})', payload={'email_address': existing.email_address})
+        db.commit()
+        return sender_out(existing)
     row = EmailSenderIdentity(email_address=data.email_address, display_name=data.display_name, created_by_user_id=auth.user.id)
     db.add(row)
     db.flush()
@@ -77,6 +87,8 @@ class TestSendOut(BaseModel):
 
 @router.post('/test', response_model=TestSendOut, summary='Отправить тестовое письмо на свой адрес')
 def test_send(request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    if not auth.user.email:
+        raise AppError(ErrorCode.CONFLICT, 'В вашем профиле не указан email — отправить тестовое письмо некуда')
     settings = request.app.state.settings
     # Defaults to the real settings-driven sender (see app/email.py); tests substitute a fake here,
     # same pattern as app.state.sms_sender.
@@ -89,14 +101,20 @@ def test_send(request: Request, auth: AuthContext = Depends(any_role), db: Sessi
     configured = bool(settings.email_provider_url) or sender is not send_email
     from_identity = db.get(EmailSenderIdentity, auth.user.email_sender_identity_id) if auth.user.email_sender_identity_id else None
     from_label = from_identity.email_address if from_identity else (settings.email_sender_address or settings.email_sender_name)
+    from_address = from_identity.email_address if from_identity else (settings.email_sender_address or None)
     subject = 'Тестовое письмо UniCRM'
     body = f'Это тестовое письмо, отправленное от имени «{from_label}». Если вы получили его, отправка почты настроена верно.'
+    now = utcnow()
+    if auth.user.email_test_sent_at is not None and (now - auth.user.email_test_sent_at).total_seconds() < TEST_SEND_COOLDOWN_SECONDS:
+        raise AppError(ErrorCode.RATE_LIMITED, TEST_SEND_COOLDOWN_MESSAGE)
     try:
         # Always the caller's own Keycloak-sourced address — never a client-supplied one: an
         # endpoint that could target any address would be an open mail-relay-testing primitive.
-        sender(settings, auth.user.email, subject, body)
+        sender(settings, auth.user.email, subject, body, from_address=from_address)
     except EmailSendError as error:
         raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось отправить письмо, попробуйте ещё раз позже') from error
+    auth.user.email_test_sent_at = now
+    db.commit()
     if configured:
         return TestSendOut(delivered=True, message=f'Письмо отправлено на {auth.user.email}.')
     return TestSendOut(delivered=False, message='Почтовый провайдер не настроен: письмо записано только в журнал сервера, реальная отправка недоступна.')

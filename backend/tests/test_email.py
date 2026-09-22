@@ -2,7 +2,6 @@ import httpx
 import pytest
 
 from app.email import EmailSendError, send_email
-from app.settings import Settings
 
 
 def make_settings(**overrides):
@@ -59,3 +58,16 @@ def test_raises_on_non_2xx_response(monkeypatch):
     settings = make_settings(email_provider_url='https://email.example/send')
     with pytest.raises(EmailSendError):
         send_email(settings, 'user@example.test', 'Тема', 'Текст письма')
+
+
+def test_from_address_overrides_the_settings_sender_address(monkeypatch):
+    calls = []
+
+    def fake_post(url, json, headers, timeout):
+        calls.append(json)
+        return httpx.Response(200, request=httpx.Request('POST', url))
+
+    monkeypatch.setattr('httpx.post', fake_post)
+    settings = make_settings(email_provider_url='https://email.example/send', email_sender_address='noreply@unicrm.tech')
+    send_email(settings, 'user@example.test', 'Тема', 'Текст', from_address='info@unicrm.tech')
+    assert calls[0]['from'] == 'info@unicrm.tech'

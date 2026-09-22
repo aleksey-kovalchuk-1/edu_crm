@@ -9,6 +9,7 @@ RUSSIAN_COLUMNS = {
     ('launches', 'owner'),
     ('tasks', 'title'),
     ('tasks', 'owner'),
+    ('email_sender_identities', 'display_name'),
 }
 
 

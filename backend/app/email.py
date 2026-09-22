@@ -11,7 +11,7 @@ were available). `send_email` picks one of two concrete implementations based on
     POST {email_provider_url}
     Authorization: Bearer {email_provider_api_key}
     Content-Type: application/json
-    {"to": "<address>", "from": "<email_sender_address>", "subject": "<subject>", "text": "<body>"}
+    {"to": "<address>", "from": "<from_address or email_sender_address>", "subject": "<subject>", "text": "<body>"}
   Any non-2xx response (or a network failure) raises EmailSendError so the caller fails closed.
 
   IMPORTANT for whoever wires up a real provider later: this request/response shape is NOT a real
@@ -37,15 +37,15 @@ class EmailSendError(RuntimeError):
     """Raised when an email could not be sent; the caller is expected to fail closed on this."""
 
 
-def _log_sender(settings, to, subject, body):
-    logger.info('Email to %s: %s\n%s', to, subject, body)
+def _log_sender(settings, to, subject, body, *, from_address=None):
+    logger.info('Email to %s from %s: %s\n%s', to, from_address or settings.email_sender_address, subject, body)
 
 
-def _http_sender(settings, to, subject, body):
+def _http_sender(settings, to, subject, body, *, from_address=None):
     try:
         response = httpx.post(
             settings.email_provider_url,
-            json={'to': to, 'from': settings.email_sender_address, 'subject': subject, 'text': body},
+            json={'to': to, 'from': from_address or settings.email_sender_address, 'subject': subject, 'text': body},
             headers={'Authorization': f'Bearer {settings.email_provider_api_key}'},
             timeout=REQUEST_TIMEOUT_SECONDS,
         )
@@ -54,7 +54,7 @@ def _http_sender(settings, to, subject, body):
         raise EmailSendError(f'Email provider request failed: {error}') from error
 
 
-def send_email(settings, to, subject, body) -> None:
+def send_email(settings, to, subject, body, *, from_address: str | None = None) -> None:
     """Sends an email to `to`; raises EmailSendError on failure. See module docstring for the contract."""
     sender = _http_sender if settings.email_provider_url else _log_sender
-    sender(settings, to, subject, body)
+    sender(settings, to, subject, body, from_address=from_address)
