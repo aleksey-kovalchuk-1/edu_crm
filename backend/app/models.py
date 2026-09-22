@@ -385,6 +385,10 @@ class User(Base):
     # Keycloak user attribute, because it is a CRM profile fact, not an identity fact Keycloak needs.
     phone: Mapped[str] = mapped_column(String(20), default='', server_default='')
     phone_verified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # Cooldown timestamp for POST /api/v1/email-senders/test — mirrors PhoneVerificationCode's
+    # cooldown (profile_routes.py's COOLDOWN_SECONDS) but needs no separate table since there is no
+    # per-attempt code to store, just a rate limit.
+    email_test_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     # Selected "from" address for outgoing correspondence (Настройки → Личный профиль); nullable
     # because "no sender selected yet" is the normal default state for every existing/new user.
     email_sender_identity_id: Mapped[int | None] = mapped_column(ForeignKey('email_sender_identities.id'))
