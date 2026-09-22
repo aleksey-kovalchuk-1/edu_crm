@@ -111,7 +111,7 @@ export function Layout() {
             </div>
             <div className="profile">
               <Link
-                to={paths.profile}
+                to={paths.settingsProfile}
                 className="profile-link"
                 onClick={closeMenu}
               >
@@ -150,10 +150,14 @@ export function Layout() {
               <strong>{page?.name ?? NOT_FOUND_TITLE}</strong>
             </div>
             <div className="topbar-right">
-              <span className="demo-label">ДЕМО</span>
-              <span className="avatar tiny" aria-hidden="true">
+              <Link
+                to={paths.settingsProfile}
+                className="avatar"
+                aria-label="Настройки аккаунта"
+                title="Настройки аккаунта"
+              >
                 {initials}
-              </span>
+              </Link>
             </div>
           </header>
           <main>

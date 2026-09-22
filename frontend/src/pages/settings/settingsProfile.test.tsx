@@ -1,6 +1,6 @@
 import { fireEvent, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { apiError, mockApi, renderApp } from "../test/utils";
+import { apiError, mockApi, renderApp } from "../../test/utils";
 
 const PHONE_STEP_TITLE = "Телефон";
 
@@ -8,12 +8,12 @@ function openPhoneStep() {
   fireEvent.click(screen.getByRole("button", { name: "Добавить номер" }));
 }
 
-describe("profile phone verification", () => {
+describe("settings profile phone verification", () => {
   it("requests a code for a validly formatted phone number", async () => {
     const api = mockApi({
       "POST /profile/phone": () => ({ expires_in: 300 }),
     });
-    renderApp("/profile");
+    renderApp("/settings/profile");
     await screen.findByText(PHONE_STEP_TITLE);
 
     openPhoneStep();
@@ -30,7 +30,7 @@ describe("profile phone verification", () => {
 
   it("rejects an implausible phone number locally, without calling the server", async () => {
     const api = mockApi();
-    renderApp("/profile");
+    renderApp("/settings/profile");
     await screen.findByText(PHONE_STEP_TITLE);
 
     openPhoneStep();
@@ -53,7 +53,7 @@ describe("profile phone verification", () => {
         phone_verified_at: "2026-09-16T12:00:00Z",
       }),
     });
-    renderApp("/profile");
+    renderApp("/settings/profile");
     await screen.findByText(PHONE_STEP_TITLE);
 
     openPhoneStep();
@@ -80,7 +80,7 @@ describe("profile phone verification", () => {
           { field: "code", message: "Неверный код, попробуйте ещё раз", type: "value_error" },
         ]),
     });
-    renderApp("/profile");
+    renderApp("/settings/profile");
     await screen.findByText(PHONE_STEP_TITLE);
 
     openPhoneStep();

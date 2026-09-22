@@ -15,7 +15,10 @@ describe("sidebar placement", () => {
 });
 
 describe("settings navigation data", () => {
-  it("lists the seven settings pages in the required order", () => {
+  it("lists the seven originally required settings pages in order, plus Аккаунт last", () => {
+    // The first seven keep the exact order from the original spec; «Аккаунт» (logout + account
+    // overview) was added afterward and deliberately appended rather than inserted, so it never
+    // disturbs that fixed order.
     expect(settingsPages.map((p) => p.name)).toEqual([
       "Личный профиль",
       "Организация",
@@ -24,6 +27,7 @@ describe("settings navigation data", () => {
       "Пользователи и роли",
       "Персональные данные",
       "Резервное копирование",
+      "Аккаунт",
     ]);
   });
 
@@ -38,14 +42,14 @@ describe("settings navigation data", () => {
     expect(backups.roles).toEqual([ROLES.superadmin]);
   });
 
-  it("leaves the other five settings pages open to every role", () => {
+  it("leaves the other settings pages (including Аккаунт) open to every role", () => {
     const open = settingsPages.filter((p) => !["Пользователи и роли", "Резервное копирование"].includes(p.name));
     expect(open.every((p) => p.roles === undefined)).toBe(true);
   });
 
   it("gives every settings page a distinct path under /settings", () => {
     const settingsPaths = settingsPages.map((p) => p.path);
-    expect(new Set(settingsPaths).size).toBe(7);
+    expect(new Set(settingsPaths).size).toBe(8);
     expect(settingsPaths.every((p) => p.startsWith("/settings/"))).toBe(true);
   });
 });
