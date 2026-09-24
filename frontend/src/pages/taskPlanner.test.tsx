@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { mockApi, renderApp } from "../test/utils";
+import { mockApi, renderApp, LIST_ITEM_DEFAULTS } from "../test/utils";
 
 const change = (el: HTMLElement, value: string) => fireEvent.change(el, { target: { value } });
 
@@ -15,6 +15,7 @@ const PLANNER_TASKS = [
     assignees: [{ id: 5, full_name: "Анна Демо" }],
     university: null,
     created_at: "2026-09-01T10:00:00Z",
+    ...LIST_ITEM_DEFAULTS,
     version: 1,
   },
   {
@@ -27,6 +28,7 @@ const PLANNER_TASKS = [
     assignees: [],
     university: null,
     created_at: "2026-09-02T10:00:00Z",
+    ...LIST_ITEM_DEFAULTS,
     version: 1,
   },
   {
@@ -39,6 +41,7 @@ const PLANNER_TASKS = [
     assignees: [],
     university: null,
     created_at: "2026-09-01T10:00:00Z",
+    ...LIST_ITEM_DEFAULTS,
     version: 2,
   },
   {
@@ -51,6 +54,7 @@ const PLANNER_TASKS = [
     assignees: [],
     university: null,
     created_at: "2026-09-01T10:00:00Z",
+    ...LIST_ITEM_DEFAULTS,
     version: 5,
   },
 ];

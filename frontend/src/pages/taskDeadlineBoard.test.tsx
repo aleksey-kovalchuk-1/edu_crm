@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { prefillDateForColumn } from "../components/tasks/deadlineBoard";
-import { mockApi, renderApp } from "../test/utils";
+import { mockApi, renderApp, LIST_ITEM_DEFAULTS } from "../test/utils";
 
 const change = (el: HTMLElement, value: string) => fireEvent.change(el, { target: { value } });
 
@@ -22,6 +22,7 @@ const OVERDUE_TASK = {
   assignees: [{ id: 5, full_name: "Анна Демо" }],
   university: { id: 1, name: "КС" },
   created_at: "2026-09-01T10:00:00Z",
+  ...LIST_ITEM_DEFAULTS,
   version: 1,
 };
 
@@ -35,6 +36,7 @@ const NO_DEADLINE_TASK = {
   assignees: [],
   university: null,
   created_at: "2026-09-01T10:00:00Z",
+  ...LIST_ITEM_DEFAULTS,
   version: 3,
 };
 
