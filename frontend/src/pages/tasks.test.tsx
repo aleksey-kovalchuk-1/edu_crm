@@ -133,57 +133,84 @@ describe("tasks: detail", () => {
     expect(await screen.findByRole("link", { name: "К списку задач" })).toBeTruthy();
   });
 
-  it("saves an edit through the detail page", async () => {
+  it("renames a task in place: pencil, type, Enter", async () => {
     const api = mockApi({
       "PATCH /tasks/1": (call) => {
-        api.data.task = { ...api.data.task, ...(call.body as object) };
+        api.data.task = { ...api.data.task, ...(call.body as object), version: api.data.task.version + 1 };
         return api.data.task;
       },
       "GET /tasks/1": () => api.data.task,
     });
     renderApp("/tasks/1");
-    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить название" }));
     const title = await screen.findByRole("textbox", { name: "Название" });
     fireEvent.change(title, { target: { value: "Согласовать договор (v2)" } });
-    fireEvent.submit(title.closest("form")!);
+    fireEvent.keyDown(title, { key: "Enter" });
 
     await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(1));
-    expect(api.calls.find((c) => c.method === "PATCH")?.body).toMatchObject({
-      version: 1,
-      title: "Согласовать договор (v2)",
-    });
+    expect(api.calls.find((c) => c.method === "PATCH")?.body).toEqual({ version: 1, title: "Согласовать договор (v2)" });
     expect(await screen.findByRole("heading", { level: 2, name: "Согласовать договор (v2)" })).toBeTruthy();
+    expect(api.count("PATCH", "/tasks/1")).toBe(1); // blur after Enter does not save twice
   });
 
-  it("does not show a Contract field in the edit form, and keeps a pre-existing contract association on unrelated edits", async () => {
+  it("Escape cancels a title edit without saving", async () => {
+    const api = mockApi();
+    renderApp("/tasks/1");
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить название" }));
+    const title = await screen.findByRole("textbox", { name: "Название" });
+    fireEvent.change(title, { target: { value: "Черновик" } });
+    fireEvent.keyDown(title, { key: "Escape" });
+
+    expect(await screen.findByRole("heading", { level: 2, name: "Согласовать договор" })).toBeTruthy();
+    expect(api.count("PATCH", "/tasks/1")).toBe(0);
+  });
+
+  it("saves sidebar fields in place, each with the latest version", async () => {
     const api = mockApi({
-      "GET /tasks/1": () => ({
-        ...api.data.task,
-        contract: { id: 9, contract_number: "Д-2026-777" },
-      }),
       "PATCH /tasks/1": (call) => {
-        api.data.task = { ...api.data.task, ...(call.body as object) };
+        api.data.task = { ...api.data.task, ...(call.body as object), version: api.data.task.version + 1 };
         return api.data.task;
       },
+      "GET /tasks/1": () => api.data.task,
+    });
+    renderApp("/tasks/1");
+    fireEvent.change(await screen.findByRole("combobox", { name: "Приоритет" }), { target: { value: "urgent" } });
+    await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(1));
+    await waitFor(() => expect((screen.getByRole("combobox", { name: "Приоритет" }) as HTMLSelectElement).disabled).toBe(false));
+    fireEvent.change(screen.getByLabelText("Срок"), { target: { value: "2026-10-05" } });
+    await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(2));
+
+    const patches = api.calls.filter((c) => c.method === "PATCH").map((c) => c.body);
+    expect(patches).toEqual([
+      { version: 1, priority: "urgent" },
+      { version: 2, deadline: "2026-10-05" },
+    ]);
+  });
+
+  it("reassigns the task from the sidebar", async () => {
+    const api = mockApi({
+      "PATCH /tasks/1/assignees": () => api.data.task,
+    });
+    renderApp("/tasks/1");
+    const sidebar = await screen.findByRole("complementary", { name: "Свойства задачи" });
+    fireEvent.click(within(sidebar).getByRole("button", { name: "Изменить" }));
+    const picker = await within(sidebar).findByRole("form", { name: "Исполнители задачи" });
+    fireEvent.click(await within(picker).findByRole("checkbox", { name: "Олег Кузнецов" }));
+    fireEvent.submit(picker);
+
+    await waitFor(() => expect(api.count("PATCH", "/tasks/1/assignees")).toBe(1));
+    expect(api.calls.find((c) => c.path === "/tasks/1/assignees")?.body).toEqual({ assignee_ids: [5, 6] });
+  });
+
+  it("offers no Contract field to edit, and still shows an existing contract read-only", async () => {
+    const api = mockApi({
+      "GET /tasks/1": () => ({ ...api.data.task, contract: { id: 9, contract_number: "Д-2026-777" } }),
     });
     renderApp("/tasks/1");
     await screen.findByRole("heading", { level: 2, name: "Согласовать договор" });
-    expect(screen.getByText("Д-2026-777")).toBeTruthy();
-
-    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
-    const form = (await screen.findByRole("textbox", { name: "Название" })).closest("form")!;
-    expect(within(form).queryByText("Договор")).toBeNull();
-    expect(within(form).queryByRole("combobox", { name: /Договор/ })).toBeNull();
-
-    fireEvent.change(within(form).getByRole("textbox", { name: "Название" }), {
-      target: { value: "Согласовать договор (v2)" },
-    });
-    fireEvent.submit(form);
-
-    await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(1));
-    const body = api.calls.find((c) => c.method === "PATCH")?.body as Record<string, unknown>;
-    expect(Object.prototype.hasOwnProperty.call(body, "contract_id")).toBe(false);
-    expect(await screen.findByText("Д-2026-777")).toBeTruthy();
+    const sidebar = screen.getByRole("complementary", { name: "Свойства задачи" });
+    expect(within(sidebar).getByText("Д-2026-777")).toBeTruthy();
+    expect(within(sidebar).queryByRole("combobox", { name: /Договор/ })).toBeNull();
   });
 
   it("shows the activity feed before the checklist", async () => {
@@ -207,7 +234,9 @@ describe("tasks: status workflow", () => {
       "GET /tasks/1": () => api.data.task,
     });
     renderApp("/tasks/1");
-    fireEvent.click(await screen.findByRole("button", { name: "Начать" }));
+    const start = await screen.findByRole("button", { name: "Начать" });
+    expect(start.className).toBe("primary"); // the forward move is the one prominent action
+    fireEvent.click(start);
 
     await waitFor(() => expect(api.count("POST", "/tasks/1/status")).toBe(1));
     expect(api.calls.find((c) => c.method === "POST" && c.path === "/tasks/1/status")?.body).toEqual({

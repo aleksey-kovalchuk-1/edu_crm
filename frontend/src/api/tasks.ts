@@ -413,7 +413,12 @@ export function useUpdateTask(id: number) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (data: TaskPatchInput) => apiRequest<Task>(`/tasks/${id}`, "PATCH", data),
-    onSuccess: () => afterTaskChange(client, id),
+    onSuccess: (task) => {
+      // The new version goes straight into the cache, so a second inline edit made before the
+      // refetch lands doesn't send the stale version and trip the optimistic-lock check.
+      client.setQueryData(taskDetailKey(id), task);
+      afterTaskChange(client, id);
+    },
   });
 }
 
@@ -520,7 +525,10 @@ export function useSetTaskAssignees(taskId: number) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: (assignee_ids: number[]) => apiRequest<Task>(`/tasks/${taskId}/assignees`, "PATCH", { assignee_ids }),
-    onSuccess: () => afterTaskChange(client, taskId),
+    onSuccess: (task) => {
+      client.setQueryData(taskDetailKey(taskId), task);
+      afterTaskChange(client, taskId);
+    },
   });
 }
 
