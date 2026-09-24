@@ -59,6 +59,19 @@ export const invalidate = (client: QueryClient, ...keys: (readonly unknown[])[])
     void client.invalidateQueries({ queryKey, exact: true });
 };
 
+/** Links an interaction to a catalog IT product (or clears the link with null). */
+export function useSetLaunchProduct(launchId: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (it_product_id: number | null) =>
+      apiRequest<Launch>(`/launches/${launchId}/it-product`, "PUT", { it_product_id }),
+    onSuccess: () => {
+      invalidate(client, queryKeys.launches);
+      invalidateAudit(client);
+    },
+  });
+}
+
 export function useCreateLaunch() {
   const client = useQueryClient();
   return useMutation({

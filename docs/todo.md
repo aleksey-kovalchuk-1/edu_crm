@@ -46,10 +46,12 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 
 ## 2. Product features
 
-- [ ] **Reports module** (T-050–T-054): filtered report builder (period, universities,
-      directions, products, responsible, status, selectable columns), async jobs on the existing
-      worker, xlsx / pdf (Cyrillic) export, reports screen. Required by the specification; nothing
-      exists yet.
+- [x] **Reports module** (D-221): «Отчёты» page — period, universities, directions, products,
+      responsible, status, selectable columns; preview; xlsx / xls / pdf (Cyrillic) downloads;
+      audited; 10 parallel builds tested. Interactions can link to a catalog IT product.
+- [ ] Link the existing interactions to catalog IT products (the live catalog is empty — fill
+      Справочники or import them first); until then product/direction filters match nothing.
+- [ ] Charts export to PNG / PDF (specification "visualization ... png, pdf"; T-053).
 - [ ] Notifications: in-app centre + email for "assigned to you", "overdue", "new comment",
       "review requested"; Настройки → Уведомления (currently a placeholder) becomes their settings.
 - [ ] Fill the other placeholder settings pages: Организация, Безопасность, Резервное
