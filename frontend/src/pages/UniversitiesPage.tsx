@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router";
-import { ArrowUpRight, Building2, ExternalLink, Pencil } from "lucide-react";
+import { ArrowUpRight, ExternalLink, Pencil } from "lucide-react";
 import { useUniversities } from "../api/catalogs";
 import { useLaunches } from "../api/queries";
 import type { University } from "../api/types";
@@ -10,6 +10,7 @@ import { Modal } from "../components/Modal";
 import { RefreshError, queryFallback } from "../components/QueryState";
 import { SearchToolbar } from "../components/SearchToolbar";
 import { UniversityForm } from "../components/forms/UniversityForm";
+import { PersonAvatars } from "../components/tasks/PersonAvatars";
 import { safeWebsiteUrl } from "../lib/format";
 import { canEditCatalog } from "../lib/user";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
@@ -72,64 +73,68 @@ export function UniversitiesPage() {
       {unassigned ? (
         <p className="empty panel empty-state">{NO_UNIVERSITIES_TEXT}</p>
       ) : (
-        <div className="university-grid">
-          {universityList.map((u) => (
-            <article className="panel university-card" key={u.id}>
-              <div className="university-card-top">
-                <div className="university-icon">
-                  <Building2 size={25} />
-                </div>
-                {canEdit && (
-                  <button
-                    type="button"
-                    className="icon-button"
-                    aria-label={`Изменить ${u.name}`}
-                    title="Изменить"
-                    onClick={() => setEditing(u)}
-                  >
-                    <Pencil size={16} />
-                  </button>
-                )}
-              </div>
-              <span className="muted">
-                {placeLabel(u)}
-                {!u.is_active && <span className="badge badge-4 inline-badge">Неактивно</span>}
-              </span>
-              <h2>
-                <Link className="card-title-link" to={universityPath(u.id)}>
-                  {u.short_name && <span className="short-name">{u.short_name}</span>}
-                  {u.name}
-                </Link>
-              </h2>
-              {u.website && (
-                <p>
-                  <WebsiteLink website={u.website} />
-                </p>
-              )}
-              <p>
-                Ответственные:{" "}
-                {u.managers.length
-                  ? u.managers.map((m) => m.full_name).join(", ")
-                  : "не назначены"}
-              </p>
-              <div className="university-bottom">
-                <span>
-                  {launchList.filter((l) => l.university_id === u.id).length} программ
-                </span>
-                <button
-                  type="button"
-                  className="text-button"
-                  onClick={() =>
-                    navigate(paths.interactions, {
-                      state: { search: u.name } satisfies InteractionsState,
-                    })
-                  }
-                >
-                  Открыть взаимодействия <ArrowUpRight size={16} />
-                </button>
-              </div>
-            </article>
-          ))}
+        <div className="panel table-wrap university-table">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th scope="col">Название</th>
+                <th scope="col">Город, регион</th>
+                <th scope="col">Ответственные</th>
+                <th scope="col">Программ</th>
+                <th scope="col">
+                  <span className="visually-hidden">Действия</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {universityList.map((u) => (
+                <tr key={u.id}>
+                  <td className="university-name-cell">
+                    <Link className="cell-title" to={universityPath(u.id)}>
+                      {u.short_name && <span className="short-name">{u.short_name}</span>}
+                      <span>{u.name}</span>
+                    </Link>
+                    {!u.is_active && <span className="badge badge-4 inline-badge">Неактивно</span>}
+                    {u.website && (
+                      <div className="university-site">
+                        <WebsiteLink website={u.website} />
+                      </div>
+                    )}
+                  </td>
+                  <td>{placeLabel(u) || <span className="muted">—</span>}</td>
+                  <td>
+                    <PersonAvatars people={u.managers} />
+                  </td>
+                  <td>{launchList.filter((l) => l.university_id === u.id).length}</td>
+                  <td className="row-actions">
+                    <button
+                      type="button"
+                      className="text-button"
+                      aria-label={`Взаимодействия: ${u.name}`}
+                      onClick={() =>
+                        navigate(paths.interactions, {
+                          state: { search: u.name } satisfies InteractionsState,
+                        })
+                      }
+                    >
+                      Взаимодействия <ArrowUpRight size={14} />
+                    </button>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        className="icon-button"
+                        aria-label={`Изменить ${u.name}`}
+                        title="Изменить"
+                        onClick={() => setEditing(u)}
+                      >
+                        <Pencil size={15} />
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
           {!universityList.length && <p className="empty">Учебные заведения не найдены.</p>}
         </div>
       )}

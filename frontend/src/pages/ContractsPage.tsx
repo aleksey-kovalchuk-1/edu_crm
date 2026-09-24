@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useSearchParams } from "react-router";
-import { X } from "lucide-react";
+import { Filter, X } from "lucide-react";
 import {
   useCrmUsers,
   useItDirections,
@@ -93,6 +93,10 @@ export function ContractsPage() {
   }
 
   const hasFilters = FILTER_KEYS.some((k) => params.has(k));
+  // Field filters (everything but the search box) sit behind «Фильтры»; a link that already
+  // carries some opens with the panel shown, so what's applied is never hidden.
+  const activeFieldFilters = FILTER_KEYS.filter((k) => k !== "q" && params.has(k)).length;
+  const [filtersOpen, setFiltersOpen] = useState(activeFieldFilters > 0);
   const unassigned = !canEdit && universities.data?.length === 0;
   const value = (key: FilterKey) => params.get(key) ?? "";
 
@@ -103,104 +107,121 @@ export function ContractsPage() {
         onSearch={onSearch}
         placeholder="Поиск по номеру договора, вузу, продукту или вендору"
       >
+        <button
+          type="button"
+          className={filtersOpen ? "secondary filter-toggle selected" : "secondary filter-toggle"}
+          aria-expanded={filtersOpen}
+          aria-controls="contract-filters"
+          onClick={() => setFiltersOpen((open) => !open)}
+        >
+          <Filter size={16} />
+          Фильтры
+          {activeFieldFilters > 0 && (
+            <span className="filter-count-badge" aria-label={`Применено фильтров: ${activeFieldFilters}`}>
+              {activeFieldFilters}
+            </span>
+          )}
+        </button>
         {hasFilters && (
           <button type="button" className="filter" onClick={resetFilters}>
             <X size={16} /> Сбросить фильтры
           </button>
         )}
       </SearchToolbar>
-      <div className="filters" role="group" aria-label="Фильтры договоров">
-        <label>
-          Учебное заведение
-          <select
-            value={value("university_id")}
-            onChange={(e) => setFilter("university_id", e.target.value)}
-          >
-            <option value="">Все</option>
-            {universities.data?.map((u) => (
-              <option value={u.id} key={u.id}>
-                {u.short_name || u.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          ИТ-направление
-          <select
-            value={value("it_direction_id")}
-            onChange={(e) => setFilter("it_direction_id", e.target.value)}
-          >
-            <option value="">Все</option>
-            {directions.data?.map((d) => (
-              <option value={d.id} key={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          ИТ-продукт
-          <select
-            value={value("it_product_id")}
-            onChange={(e) => setFilter("it_product_id", e.target.value)}
-          >
-            <option value="">Все</option>
-            {products.data?.map((p) => (
-              <option value={p.id} key={p.id}>
-                {p.vendor} — {p.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        {canEdit && (
+      {filtersOpen && (
+        <div className="filters" id="contract-filters" role="group" aria-label="Фильтры договоров">
           <label>
-            Менеджер
+            Учебное заведение
             <select
-              value={value("manager_user_id")}
-              onChange={(e) => setFilter("manager_user_id", e.target.value)}
+              value={value("university_id")}
+              onChange={(e) => setFilter("university_id", e.target.value)}
             >
               <option value="">Все</option>
-              {managers.data?.map((m) => (
-                <option value={m.id} key={m.id}>
-                  {m.full_name}
+              {universities.data?.map((u) => (
+                <option value={u.id} key={u.id}>
+                  {u.short_name || u.name}
                 </option>
               ))}
             </select>
           </label>
-        )}
-        <label>
-          Статус передачи
-          <select
-            value={value("transfer_status")}
-            onChange={(e) => setFilter("transfer_status", e.target.value)}
-          >
-            <option value="">Все</option>
-            {statuses.data?.map((s) => (
-              <option value={s.value} key={s.value}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          Подписан с
-          <input
-            type="date"
-            value={value("signed_from")}
-            max={value("signed_to") || undefined}
-            onChange={(e) => setFilter("signed_from", e.target.value)}
-          />
-        </label>
-        <label>
-          Подписан по
-          <input
-            type="date"
-            value={value("signed_to")}
-            min={value("signed_from") || undefined}
-            onChange={(e) => setFilter("signed_to", e.target.value)}
-          />
-        </label>
-      </div>
+          <label>
+            ИТ-направление
+            <select
+              value={value("it_direction_id")}
+              onChange={(e) => setFilter("it_direction_id", e.target.value)}
+            >
+              <option value="">Все</option>
+              {directions.data?.map((d) => (
+                <option value={d.id} key={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            ИТ-продукт
+            <select
+              value={value("it_product_id")}
+              onChange={(e) => setFilter("it_product_id", e.target.value)}
+            >
+              <option value="">Все</option>
+              {products.data?.map((p) => (
+                <option value={p.id} key={p.id}>
+                  {p.vendor} — {p.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          {canEdit && (
+            <label>
+              Менеджер
+              <select
+                value={value("manager_user_id")}
+                onChange={(e) => setFilter("manager_user_id", e.target.value)}
+              >
+                <option value="">Все</option>
+                {managers.data?.map((m) => (
+                  <option value={m.id} key={m.id}>
+                    {m.full_name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          <label>
+            Статус передачи
+            <select
+              value={value("transfer_status")}
+              onChange={(e) => setFilter("transfer_status", e.target.value)}
+            >
+              <option value="">Все</option>
+              {statuses.data?.map((s) => (
+                <option value={s.value} key={s.value}>
+                  {s.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Подписан с
+            <input
+              type="date"
+              value={value("signed_from")}
+              max={value("signed_to") || undefined}
+              onChange={(e) => setFilter("signed_from", e.target.value)}
+            />
+          </label>
+          <label>
+            Подписан по
+            <input
+              type="date"
+              value={value("signed_to")}
+              min={value("signed_from") || undefined}
+              onChange={(e) => setFilter("signed_to", e.target.value)}
+            />
+          </label>
+        </div>
+      )}
       <section className="panel">
         {unassigned ? (
           <p className="empty">{NO_UNIVERSITIES_TEXT}</p>

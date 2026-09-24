@@ -34,13 +34,13 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [x] Boards («Сроки», «Мой план») (D-219): compact cards — title, deadline pill, avatars, institution tag,
       progress; move ↑/↓ and «Переместить» into a "⋯" menu (keyboard access stays).
 - [ ] Calendar view for tasks (`planned_start` / `deadline` already exist).
-- [ ] Page headings: drop the marketing slogans («Всё важное — в одном месте»), one compact heading
+- [x] Page headings (D-220): drop the marketing slogans («Всё важное — в одном месте»), one compact heading
       row with actions; remove the duplicate breadcrumb.
 - [ ] Top bar: global search, notification bell, global «+ Создать».
-- [ ] Sidebar: remove the dead workspace switcher and the «Демонстрационный контур» note outside
-      demo mode.
-- [ ] Same density pass on Договоры, Взаимодействия, Учебные заведения, Справочники, Аналитика,
-      Настройки.
+- [x] Sidebar: dead workspace switcher removed (D-220).
+- [ ] Sidebar: show the «Демонстрационный контур» note only in demo mode (needs a demo flag).
+- [x] Density pass (D-220): Учебные заведения as a table, Договоры filters behind «Фильтры»,
+      no page scrolls sideways on phones.
 - [ ] Dark theme (a second set of token values).
 - [ ] Mobile and accessibility audit (T-076): keyboard paths, focus order, screen-reader labels.
 

@@ -56,6 +56,7 @@ export interface PageMeta {
   name: string;
   icon: LucideIcon;
   heading: string;
+  /** One-line description; shown on placeholder pages, not in the page heading (D-220). */
   subtitle: string;
   /** What the page heading button creates; null when the page has its own actions. */
   create: CreateKind | null;
@@ -70,7 +71,7 @@ export const pages: PageMeta[] = [
     path: paths.overview,
     name: "Обзор",
     icon: LayoutDashboard,
-    heading: "Всё важное — в одном месте",
+    heading: "Обзор",
     subtitle: "Контролируйте взаимодействия и помогайте программам расти.",
     create: "launch",
   },

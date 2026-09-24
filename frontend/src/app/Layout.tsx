@@ -40,6 +40,7 @@ export function Layout() {
   // Open tasks in «Мои задачи»; the badge turns red while any of them is overdue.
   const taskCounters = useTaskCounters("mine");
   const page = findPage(location.pathname);
+  const inSettings = !!page && settingsPages.includes(page);
   const openTasks = taskCounters.data?.open;
   const overdueTasks = taskCounters.data?.overdue ?? 0;
   const closeMenu = () => setMenu(false);
@@ -61,14 +62,6 @@ export function Layout() {
             </span>
             <span>UniCRM</span>
           </Link>
-          <div className="workspace">
-            <span className="workspace-icon">ИТ</span>
-            <div>
-              <strong>ИТ Школа</strong>
-              <small>Рабочее пространство</small>
-            </div>
-            <ChevronRight size={16} />
-          </div>
           <p className="nav-label">УПРАВЛЕНИЕ</p>
           <nav>
             {visiblePages(user.roles).map((p) => (
@@ -151,9 +144,14 @@ export function Layout() {
               >
                 <PanelLeftClose size={19} />
               </button>
-              <span>Рабочее пространство</span>
-              <ChevronRight size={15} />
-              <strong>{page?.name ?? NOT_FOUND_TITLE}</strong>
+              {/* Only inside Настройки does a trail add context; elsewhere the heading says it all. */}
+              {inSettings && (
+                <>
+                  <span>Настройки</span>
+                  <ChevronRight size={15} />
+                  <strong>{page?.name ?? NOT_FOUND_TITLE}</strong>
+                </>
+              )}
             </div>
             <div className="topbar-right">
               <Link
@@ -170,7 +168,6 @@ export function Layout() {
             <div className="page-heading">
               <div>
                 <h1>{page?.heading ?? NOT_FOUND_TITLE}</h1>
-                {page?.subtitle && <p className="subtitle">{page.subtitle}</p>}
               </div>
               {createKind && canCreate && (
                 <button className="primary" onClick={() => setCreate(createKind)}>

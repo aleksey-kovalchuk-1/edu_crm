@@ -109,7 +109,7 @@ describe("universities", () => {
   it("shows short name, place, a safe website link and managers", async () => {
     mockApi();
     renderApp("/universities");
-    const card = (await screen.findByText("Колледж связи")).closest("article") as HTMLElement;
+    const card = (await screen.findByText("Колледж связи")).closest("tr") as HTMLElement;
     expect(within(card).getByText("КС")).toBeTruthy();
     expect(within(card).getByText(/Казань, Республика Татарстан/)).toBeTruthy();
     const link = within(card).getByRole("link", { name: /ks\.example/ });
@@ -127,7 +127,7 @@ describe("universities", () => {
       "GET /universities": () => [{ ...api.data.universities[0], website: "javascript:alert(1)" }],
     });
     renderApp("/universities");
-    const card = (await screen.findByText("Колледж связи")).closest("article") as HTMLElement;
+    const card = (await screen.findByText("Колледж связи")).closest("tr") as HTMLElement;
     expect(within(card).queryAllByRole("link").map((a) => a.getAttribute("href"))).toEqual([
       "/universities/1",
     ]);
@@ -218,6 +218,19 @@ describe("contracts page", () => {
     expect(within(row).getByText("Идёт передача")).toBeTruthy();
     expect(within(row).getByText("Иван Демо")).toBeTruthy();
     expect(within(row).getByText("01.10.2026")).toBeTruthy();
+  });
+
+  it("keeps the field filters behind «Фильтры» until asked, and counts the applied ones", async () => {
+    mockApi();
+    renderApp("/contracts");
+    const toggle = await screen.findByRole("button", { name: /Фильтры/ });
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("group", { name: "Фильтры договоров" })).toBeNull();
+
+    fireEvent.click(toggle);
+    const filters = await screen.findByRole("group", { name: "Фильтры договоров" });
+    change(within(filters).getByLabelText("Подписан с"), "2026-01-01");
+    expect(await screen.findByLabelText("Применено фильтров: 1")).toBeTruthy();
   });
 
   it("reads filters from the URL and writes changes to the URL and the request", async () => {
