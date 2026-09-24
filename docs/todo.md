@@ -9,8 +9,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 
 ## 0. Housekeeping (do first)
 
-- [ ] Push `ai/design-tokens` and open a PR into `main` — unicrm.tech now runs commits that exist
-      only on this laptop.
+- [x] Push `ai/design-tokens` (pushed 2026-09-24).
+- [ ] Open a PR into `main` once `ai/phone-verification` (its base) is merged.
 - [ ] Reconcile the branch history: `ai/phone-verification`, `ai/auth-registration`,
       `ai/registration-polish`, `ai/integration-candidate` all diverge from `main` (D-158). Decide
       the merge order, merge, delete stale branches/worktrees.
@@ -31,7 +31,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
       a separate panel right after the title block (owner decision D-198).
 - [ ] Edit co-executors and observers from the task sidebar (read-only today).
 - [ ] Open a task in a slide-over panel from the list (keeps the list context, Bitrix24 "slider").
-- [ ] Boards («Сроки», «Мой план»): compact cards — title, deadline pill, avatars, institution tag,
+- [x] Boards («Сроки», «Мой план») (D-219): compact cards — title, deadline pill, avatars, institution tag,
       progress; move ↑/↓ and «Переместить» into a "⋯" menu (keyboard access stays).
 - [ ] Calendar view for tasks (`planned_start` / `deadline` already exist).
 - [ ] Page headings: drop the marketing slogans («Всё важное — в одном месте»), one compact heading

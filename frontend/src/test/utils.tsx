@@ -21,6 +21,15 @@ import { AppProviders } from "../app/AppProviders";
 import { AppRoutes } from "../app/App";
 import { createQueryClient } from "../app/queryClient";
 
+/** The computed context fields every `/tasks` list row carries (D-217), for hand-built row fixtures. */
+export const LIST_ITEM_DEFAULTS = {
+  interaction: null,
+  checklist_progress: { total: 0, completed: 0 },
+  subtasks: { total: 0, completed: 0 },
+  comment_count: 0,
+  updated_at: "2026-09-01T10:00:00Z",
+};
+
 export function fixtures() {
   const universities: University[] = [
     {
