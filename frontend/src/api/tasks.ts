@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
+import { keepPreviousData, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { apiRequest } from "./client";
 import { invalidateAudit } from "./queries";
 import type { NamedRef, Page, PersonRef } from "./types";
@@ -65,6 +65,11 @@ export interface TaskContractRef {
   contract_number: string;
 }
 
+export interface Progress {
+  total: number;
+  completed: number;
+}
+
 export interface TaskListItem {
   id: number;
   title: string;
@@ -74,7 +79,12 @@ export interface TaskListItem {
   creator: PersonRef | null;
   assignees: PersonRef[];
   university: NamedRef | null;
+  interaction: TaskLaunchRef | null;
+  checklist_progress: Progress;
+  subtasks: Progress;
+  comment_count: number;
   created_at: string;
+  updated_at: string;
   version: number;
 }
 
@@ -114,7 +124,7 @@ export interface Task {
   require_checklist_complete: boolean;
   checklist: ChecklistItem[];
   parent: TaskRef | null;
-  subtasks: { total: number; completed: number };
+  subtasks: Progress;
   created_at: string;
   updated_at: string;
   version: number;
@@ -236,6 +246,8 @@ export const useTaskList = (params: TaskListParams = {}, enabled = true) =>
     queryKey: taskListKey(params),
     queryFn: () => apiRequest<Page<TaskListItem>>(taskListQuery(params)),
     enabled,
+    // Keeps the current rows on screen while a new search/filter/page loads, instead of blanking the list.
+    placeholderData: keepPreviousData,
   });
 
 export interface TaskCounters {
@@ -256,7 +268,7 @@ export const useTaskCounters = (scope: TaskScope = "mine") =>
  * `SavedFilterIn` field-for-field (task_routes.py). */
 export type SavedFilterSet = Pick<
   TaskFilterParams,
-  "status" | "priority" | "university_id" | "deadline_preset" | "active" | "has_checklist"
+  "status" | "priority" | "university_id" | "assignee_id" | "creator_id" | "deadline_preset" | "active" | "has_checklist"
 >;
 
 export type FilterView = "list" | "deadlines";
@@ -346,6 +358,7 @@ export const useTask = (id: number) =>
  */
 function afterTaskChange(client: QueryClient, id?: number) {
   void client.invalidateQueries({ queryKey: ["tasks", "list"] });
+  void client.invalidateQueries({ queryKey: ["tasks", "counters"] });
   if (id !== undefined) void client.invalidateQueries({ queryKey: taskDetailKey(id), exact: true });
   invalidateAudit(client);
 }

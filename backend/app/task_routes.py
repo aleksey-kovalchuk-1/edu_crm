@@ -9,7 +9,7 @@ from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, File, Form, Query, Request, UploadFile
 from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
-from sqlalchemy import delete, exists, func, or_, select
+from sqlalchemy import case, delete, exists, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 from sqlalchemy.orm.exc import StaleDataError
 
@@ -19,7 +19,7 @@ from .catalog_routes import PersonOut, like_pattern, not_found, sees_all, univer
 from .db import get_db
 from .errors import AppError, ErrorCode
 from .models import (
-    Contract, Launch, Task, TaskAttachment, TaskChecklistItem, TaskComment, TaskEvent, TaskMember,
+    TASK_PRIORITIES, Contract, Launch, Task, TaskAttachment, TaskChecklistItem, TaskComment, TaskEvent, TaskMember,
     TaskUserPreferences, University, User, utcnow,
 )
 from .task_policy import TaskAction, can, visible_tasks_query
@@ -31,7 +31,12 @@ any_role = require_roles(*ALL_ROLES)
 MAX_PAGE_SIZE = 100
 MAX_COMMENT_LENGTH = 2000
 MEMBER_FIELD_ROLE = {'assignee_ids': 'assignee', 'participant_ids': 'participant', 'observer_ids': 'observer'}
-SORT_COLUMNS = {'deadline': Task.deadline, 'created_at': Task.created_at, 'priority': Task.priority, 'title': Task.title, 'status': Task.status}
+# Priority sorts by severity (low < normal < high < urgent), not alphabetically.
+PRIORITY_RANK = case({p: rank for rank, p in enumerate(TASK_PRIORITIES)}, value=Task.priority)
+SORT_COLUMNS = {
+    'deadline': Task.deadline, 'created_at': Task.created_at, 'updated_at': Task.updated_at,
+    'priority': PRIORITY_RANK, 'title': Task.title, 'status': Task.status,
+}
 SCOPE_MEMBER_ROLE = {'assigned': 'assignee', 'participating': 'participant', 'observing': 'observer'}
 
 Title = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
@@ -176,7 +181,12 @@ class TaskListItemOut(BaseModel):
     creator: PersonOut | None
     assignees: list[PersonOut]
     university: UniversityRef | None
+    interaction: LaunchRef | None
+    checklist_progress: SubtaskSummary
+    subtasks: SubtaskSummary
+    comment_count: int
     created_at: datetime
+    updated_at: datetime
     version: int
 
 
@@ -275,20 +285,38 @@ def task_out(db, task_id):
     )
 
 
+def _progress_by_task(db, done_column, task_column, task_ids):
+    """{task_id: SubtaskSummary} from one grouped query; `done_column` is a boolean SQL expression."""
+    rows = db.execute(
+        select(task_column, func.count(), func.count().filter(done_column)).where(task_column.in_(task_ids)).group_by(task_column)
+    ).all()
+    return {task_id: SubtaskSummary(total=total, completed=done) for task_id, total, done in rows}
+
+
 def task_list_items(db, tasks):
-    """Batch-loads creators/assignees/universities for a page of tasks instead of querying per row."""
+    """Batch-loads a page's people, links and progress counts with a fixed number of queries, not per row."""
     task_ids = [t.id for t in tasks]
+    if not task_ids:
+        return []
     creator_ids = {t.creator_id for t in tasks if t.creator_id}
     university_ids = {t.university_id for t in tasks if t.university_id}
+    launch_ids = {t.launch_id for t in tasks if t.launch_id}
     members = db.execute(
         select(TaskMember.task_id, TaskMember.user_id).where(TaskMember.task_id.in_(task_ids), TaskMember.role == 'assignee')
-    ).all() if task_ids else []
+    ).all()
     member_user_ids = {m.user_id for m in members}
     users = {u.id: u for u in db.scalars(select(User).where(User.id.in_(creator_ids | member_user_ids)))} if (creator_ids or member_user_ids) else {}
     universities = {u.id: u for u in db.scalars(select(University).where(University.id.in_(university_ids)))} if university_ids else {}
+    launches = {launch.id: launch for launch in db.scalars(select(Launch).where(Launch.id.in_(launch_ids)))} if launch_ids else {}
     assignees_by_task = {}
     for task_id, user_id in members:
         assignees_by_task.setdefault(task_id, []).append(user_id)
+    checklists = _progress_by_task(db, TaskChecklistItem.is_done, TaskChecklistItem.task_id, task_ids)
+    subtasks = _progress_by_task(db, Task.status == 'completed', Task.parent_task_id, task_ids)
+    comment_counts = dict(db.execute(
+        select(TaskComment.task_id, func.count()).where(TaskComment.task_id.in_(task_ids)).group_by(TaskComment.task_id)
+    ).all())
+    empty = SubtaskSummary(total=0, completed=0)
 
     return [
         TaskListItemOut(
@@ -296,7 +324,12 @@ def task_list_items(db, tasks):
             creator=PersonOut.model_validate(users[t.creator_id]) if t.creator_id in users else None,
             assignees=[PersonOut.model_validate(users[uid]) for uid in assignees_by_task.get(t.id, []) if uid in users],
             university=UniversityRef.model_validate(universities[t.university_id]) if t.university_id in universities else None,
+            interaction=LaunchRef.model_validate(launches[t.launch_id]) if t.launch_id in launches else None,
+            checklist_progress=checklists.get(t.id, empty),
+            subtasks=subtasks.get(t.id, empty),
+            comment_count=comment_counts.get(t.id, 0),
             created_at=t.created_at,
+            updated_at=t.updated_at,
             version=t.version,
         )
         for t in tasks
@@ -957,12 +990,15 @@ KNOWN_FILTER_KEYS = frozenset(f'{v}:{s}' for v in ('list', 'deadlines') for s in
 
 
 class SavedFilterIn(BaseModel):
-    """One saved filter set — the same 6 dimensions the filter dialog exposes. `extra='forbid'` plus
+    """One saved filter set — the dimensions the filter panel exposes (plus the two it no longer offers,
+    `active`/`has_checklist`, so presets saved before the redesign still load). `extra='forbid'` plus
     every field's own Literal/type keeps this endpoint from ever persisting an arbitrary payload."""
     model_config = ConfigDict(extra='forbid')
     status: list[TaskStatus] = Field(default_factory=list, max_length=10)
     priority: list[Priority] = Field(default_factory=list, max_length=10)
     university_id: int | None = None
+    assignee_id: int | None = Field(default=None, gt=0)
+    creator_id: int | None = Field(default=None, gt=0)
     deadline_preset: DeadlinePreset | None = None
     active: bool | None = None
     has_checklist: bool | None = None

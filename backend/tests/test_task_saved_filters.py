@@ -9,7 +9,7 @@ def test_saves_filters_per_view_scope_without_clobbering_others(client, keycloak
     })
     assert saved_list_mine.status_code == 200, saved_list_mine.text
     assert saved_list_mine.json()['filters'] == {
-        'list:mine': {'status': ['new', 'in_progress'], 'priority': ['high'], 'university_id': None, 'deadline_preset': None, 'active': True, 'has_checklist': None},
+        'list:mine': {'status': ['new', 'in_progress'], 'priority': ['high'], 'university_id': None, 'assignee_id': None, 'creator_id': None, 'deadline_preset': None, 'active': True, 'has_checklist': None},
     }
 
     saved_deadlines_mine = client.put('/api/v1/tasks/preferences', json={
@@ -64,7 +64,7 @@ def test_saved_filters_survive_alongside_list_and_planner_preferences(client, ke
     final = client.put('/api/v1/tasks/preferences', json={'planner_columns': ['new', 'completed']}).json()
 
     assert final['list_columns'] == ['title', 'deadline']
-    assert final['filters'] == {'list:mine': {'status': ['new'], 'priority': [], 'university_id': None, 'deadline_preset': None, 'active': None, 'has_checklist': None}}
+    assert final['filters'] == {'list:mine': {'status': ['new'], 'priority': [], 'university_id': None, 'assignee_id': None, 'creator_id': None, 'deadline_preset': None, 'active': None, 'has_checklist': None}}
     assert final['planner_columns'] == ['new', 'completed']
 
 
@@ -80,3 +80,15 @@ def test_ignores_unknown_saved_filter_keys_on_read(client, keycloak, database_ur
 
     response = client.get('/api/v1/tasks/preferences').json()
     assert response['filters'] == {'list:mine': {'status': ['new']}}
+
+
+def test_saves_assignee_and_creator_filters(client, keycloak, database_url):
+    """The Задачи filter panel offers «Исполнитель» and «Постановщик»; a saved preset keeps them."""
+    login(client, keycloak, roles=('crm-user',))
+    saved = client.put('/api/v1/tasks/preferences', json={'filters': {'list:team': {'assignee_id': 7, 'creator_id': 3}}})
+    assert saved.status_code == 200, saved.text
+    assert saved.json()['filters']['list:team']['assignee_id'] == 7
+    assert saved.json()['filters']['list:team']['creator_id'] == 3
+
+    rejected = client.put('/api/v1/tasks/preferences', json={'filters': {'list:team': {'assignee_id': 0}}})
+    assert rejected.status_code == 422

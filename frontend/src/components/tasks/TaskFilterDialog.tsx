@@ -3,6 +3,7 @@ import { useUniversities } from "../../api/catalogs";
 import {
   TASK_PRIORITY_LABELS,
   TASK_STATUS_LABELS,
+  useAssignableUsers,
   type DeadlinePreset,
   type SavedFilterSet,
   type TaskPriority,
@@ -10,14 +11,14 @@ import {
 } from "../../api/tasks";
 import { Modal } from "../Modal";
 
-const DEADLINE_PRESETS: { value: DeadlinePreset; label: string }[] = [
-  { value: "overdue", label: "Просрочено" },
-  { value: "today", label: "Срок сегодня" },
-  { value: "this_week", label: "На этой неделе" },
-  { value: "next_week", label: "На следующей неделе" },
-  { value: "later", label: "Позже" },
-  { value: "no_deadline", label: "Без срока" },
-];
+export const DEADLINE_PRESET_LABELS: Record<DeadlinePreset, string> = {
+  overdue: "Просрочено",
+  today: "Сегодня",
+  this_week: "На этой неделе",
+  next_week: "На следующей неделе",
+  later: "Позже",
+  no_deadline: "Без срока",
+};
 
 const ALL_STATUSES = Object.keys(TASK_STATUS_LABELS) as TaskStatus[];
 const ALL_PRIORITIES = Object.keys(TASK_PRIORITY_LABELS) as TaskPriority[];
@@ -26,15 +27,22 @@ const EMPTY_DRAFT: SavedFilterSet = {
   status: [],
   priority: [],
   university_id: undefined,
+  assignee_id: undefined,
+  creator_id: undefined,
   deadline_preset: undefined,
   active: undefined,
   has_checklist: undefined,
 };
 
+type IdField = "university_id" | "assignee_id" | "creator_id";
+
 /**
- * Filters draft editor, opened from the "Фильтры" toolbar button. Editing here never touches the
- * applied filters, the URL or saved preferences until "Сохранить" is pressed — Cancel (the close icon,
- * Escape, and the backdrop, all wired through Modal's native <dialog>) simply discards the draft.
+ * Filters draft editor, opened from the "Фильтры" button in the search bar. Only the dimensions
+ * people actually filter a CRM task list by: status, priority, who does it, who set it, which
+ * institution and when it is due. Editing never touches the applied filters, the URL or saved
+ * preferences until "Сохранить" — Cancel (the close icon, Escape, the backdrop) discards the draft.
+ * `active`/`has_checklist` from older saved presets are carried through untouched (and removable as
+ * chips), just no longer offered here.
  */
 export function TaskFilterDialog({
   initial,
@@ -49,6 +57,7 @@ export function TaskFilterDialog({
 }) {
   const [draft, setDraft] = useState<SavedFilterSet>(initial);
   const universities = useUniversities();
+  const people = useAssignableUsers();
   const status = draft.status ?? [];
   const priority = draft.priority ?? [];
 
@@ -56,8 +65,29 @@ export function TaskFilterDialog({
     setDraft((prev) => ({ ...prev, [key]: current.includes(value) ? current.filter((v) => v !== value) : [...current, value] }));
   }
 
+  function idSelect(field: IdField, label: string, options: { id: number; name: string }[] | undefined) {
+    return (
+      <label className="filter-field">
+        {label}
+        <select
+          value={draft[field] ?? ""}
+          onChange={(e) => setDraft((prev) => ({ ...prev, [field]: e.target.value ? Number(e.target.value) : undefined }))}
+        >
+          <option value="">Любой</option>
+          {options?.map((o) => (
+            <option value={o.id} key={o.id}>
+              {o.name}
+            </option>
+          ))}
+        </select>
+      </label>
+    );
+  }
+
+  const personOptions = people.data?.map((p) => ({ id: p.id, name: p.full_name }));
+
   return (
-    <Modal title="Фильтры задач" close={onCancel} wide>
+    <Modal title="Фильтры задач" close={onCancel}>
       <p className="modal-subtitle muted">Область: {scopeLabel}</p>
       <form
         onSubmit={(e) => {
@@ -65,75 +95,46 @@ export function TaskFilterDialog({
           onSave(draft);
         }}
       >
-        <div className="filter-dialog-presets">
-          {DEADLINE_PRESETS.map((p) => (
-            <button
-              key={p.value}
-              type="button"
-              className={draft.deadline_preset === p.value ? "secondary selected" : "secondary"}
-              onClick={() => setDraft((prev) => ({ ...prev, deadline_preset: prev.deadline_preset === p.value ? undefined : p.value }))}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <div className="filter-dialog-fields">
-          <fieldset className="filter-fieldset">
-            <legend>Статус</legend>
-            <div className="filter-checkbox-grid">
-              {ALL_STATUSES.map((s) => (
-                <label key={s} className="toggle">
-                  <input type="checkbox" checked={status.includes(s)} onChange={() => toggle("status", s, status)} />
-                  {TASK_STATUS_LABELS[s]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <fieldset className="filter-fieldset">
-            <legend>Приоритет</legend>
-            <div className="filter-checkbox-grid">
-              {ALL_PRIORITIES.map((p) => (
-                <label key={p} className="toggle">
-                  <input type="checkbox" checked={priority.includes(p)} onChange={() => toggle("priority", p, priority)} />
-                  {TASK_PRIORITY_LABELS[p]}
-                </label>
-              ))}
-            </div>
-          </fieldset>
-          <label className="inline-select">
-            Вуз
+        <fieldset className="filter-fieldset">
+          <legend>Статус</legend>
+          <div className="filter-toggle-row">
+            {ALL_STATUSES.map((s) => (
+              <label key={s} className="filter-pill">
+                <input type="checkbox" checked={status.includes(s)} onChange={() => toggle("status", s, status)} />
+                {TASK_STATUS_LABELS[s]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <fieldset className="filter-fieldset">
+          <legend>Приоритет</legend>
+          <div className="filter-toggle-row">
+            {ALL_PRIORITIES.map((p) => (
+              <label key={p} className="filter-pill">
+                <input type="checkbox" checked={priority.includes(p)} onChange={() => toggle("priority", p, priority)} />
+                {TASK_PRIORITY_LABELS[p]}
+              </label>
+            ))}
+          </div>
+        </fieldset>
+        <div className="filter-grid">
+          {idSelect("assignee_id", "Исполнитель", personOptions)}
+          {idSelect("creator_id", "Постановщик", personOptions)}
+          {idSelect("university_id", "Учебное заведение", universities.data)}
+          <label className="filter-field">
+            Срок
             <select
-              value={draft.university_id ?? ""}
-              onChange={(e) => setDraft((prev) => ({ ...prev, university_id: e.target.value ? Number(e.target.value) : undefined }))}
+              value={draft.deadline_preset ?? ""}
+              onChange={(e) =>
+                setDraft((prev) => ({ ...prev, deadline_preset: (e.target.value || undefined) as DeadlinePreset | undefined }))
+              }
             >
               <option value="">Любой</option>
-              {universities.data?.map((u) => (
-                <option value={u.id} key={u.id}>
-                  {u.name}
+              {(Object.entries(DEADLINE_PRESET_LABELS) as [DeadlinePreset, string][]).map(([value, label]) => (
+                <option value={value} key={value}>
+                  {label}
                 </option>
               ))}
-            </select>
-          </label>
-          <label className="inline-select">
-            Активность
-            <select
-              value={draft.active === undefined ? "" : String(draft.active)}
-              onChange={(e) => setDraft((prev) => ({ ...prev, active: e.target.value ? e.target.value === "true" : undefined }))}
-            >
-              <option value="">Все</option>
-              <option value="true">Только активные</option>
-              <option value="false">Только завершённые</option>
-            </select>
-          </label>
-          <label className="inline-select">
-            Чек-лист
-            <select
-              value={draft.has_checklist === undefined ? "" : String(draft.has_checklist)}
-              onChange={(e) => setDraft((prev) => ({ ...prev, has_checklist: e.target.value ? e.target.value === "true" : undefined }))}
-            >
-              <option value="">Не важно</option>
-              <option value="true">С чек-листом</option>
-              <option value="false">Без чек-листа</option>
             </select>
           </label>
         </div>

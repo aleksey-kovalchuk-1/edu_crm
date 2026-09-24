@@ -3,34 +3,34 @@ import { describe, expect, it } from "vitest";
 import { mockApi, renderApp, sessionFixture } from "../test/utils";
 
 const location = () => screen.getByTestId("location").textContent ?? "";
+const scopeSelect = () => screen.getByRole("combobox", { name: "Область видимости" }) as HTMLSelectElement;
 const openDialog = async () => {
   fireEvent.click(await screen.findByRole("button", { name: /Фильтры/ }));
   return screen.findByRole("dialog", { name: "Фильтры задач" });
 };
 
-describe("tasks: visible scope tabs", () => {
-  it("shows only the five required scope tabs, in order, and hides the other two", async () => {
+describe("tasks: visible scopes", () => {
+  it("offers only the five required scopes, in order, and hides the other two", async () => {
     mockApi();
     renderApp("/tasks");
     await screen.findByRole("link", { name: "Согласовать договор" });
 
-    const scopeTablist = screen.getByRole("tablist", { name: "Область видимости" });
-    const tabs = within(scopeTablist).getAllByRole("tab").map((t) => t.textContent);
-    expect(tabs).toEqual(["Мои задачи", "Назначено мне", "Я участвую", "Задачи команды", "Все задачи"]);
-    expect(screen.queryByRole("tab", { name: "Созданные мной" })).toBeNull();
-    expect(screen.queryByRole("tab", { name: "Я наблюдаю" })).toBeNull();
+    const options = within(scopeSelect()).getAllByRole("option").map((o) => o.textContent);
+    expect(options).toEqual(["Мои задачи", "Назначено мне", "Я участвую", "Задачи команды", "Все задачи"]);
+    expect(screen.queryByRole("tablist", { name: "Область видимости" })).toBeNull();
   });
 
   it("falls back to 'mine' for an old scope=created or scope=observing URL instead of crashing", async () => {
     const api = mockApi();
     renderApp("/tasks?scope=created");
     expect(await screen.findByRole("link", { name: "Согласовать договор" })).toBeTruthy();
-    expect((await screen.findByRole("tab", { name: "Мои задачи" })).getAttribute("aria-selected")).toBe("true");
+    expect(scopeSelect().value).toBe("mine");
     await waitFor(() => expect(api.calls.some((c) => c.method === "GET" && c.path.includes("scope=mine"))).toBe(true));
     expect(api.calls.some((c) => c.method === "GET" && c.path.includes("scope=created"))).toBe(false);
 
     renderApp("/tasks?scope=observing");
-    expect((await screen.findAllByRole("tab", { name: "Мои задачи" })).at(-1)?.getAttribute("aria-selected")).toBe("true");
+    const selects = await screen.findAllByRole("combobox", { name: "Область видимости" });
+    expect((selects.at(-1) as HTMLSelectElement).value).toBe("mine");
   });
 });
 
@@ -122,7 +122,12 @@ describe("tasks: save applies and persists", () => {
     await waitFor(() => expect(api.calls.some((c) => c.method === "GET" && c.path.includes("status=completed"))).toBe(true));
     await waitFor(() => expect(api.count("PUT", "/tasks/preferences")).toBe(1));
     expect(api.calls.find((c) => c.method === "PUT" && c.path === "/tasks/preferences")?.body).toEqual({
-      filters: { "list:mine": { status: ["completed"], priority: [], university_id: undefined, deadline_preset: undefined, active: undefined, has_checklist: undefined } },
+      filters: {
+        "list:mine": {
+          status: ["completed"], priority: [], university_id: undefined, assignee_id: undefined, creator_id: undefined,
+          deadline_preset: undefined, active: undefined, has_checklist: undefined,
+        },
+      },
     });
   });
 
@@ -169,7 +174,7 @@ describe("tasks: saved filters restore per view/scope, without leaking", () => {
     expect(location()).not.toContain("status=completed");
 
     fireEvent.click(await screen.findByRole("tab", { name: "Список" }));
-    fireEvent.click(await screen.findByRole("tab", { name: "Все задачи" }));
+    fireEvent.change(scopeSelect(), { target: { value: "all" } });
     await waitFor(() => expect(location()).toContain("priority=high"));
     expect(location()).not.toContain("status=completed");
   });
@@ -191,12 +196,42 @@ describe("tasks: saved filters restore per view/scope, without leaking", () => {
 });
 
 describe("tasks: permissions unaffected", () => {
-  it("a plain crm-user can still open every visible scope tab", async () => {
+  it("a plain crm-user can still pick every visible scope", async () => {
     mockApi({ "GET /auth/me": () => sessionFixture(["crm-user"]) });
     renderApp("/tasks");
     await screen.findByRole("link", { name: "Согласовать договор" });
     for (const name of ["Назначено мне", "Я участвую", "Задачи команды", "Все задачи", "Мои задачи"]) {
-      expect(screen.getByRole("tab", { name })).toBeTruthy();
+      expect(within(scopeSelect()).getByRole("option", { name })).toBeTruthy();
     }
+  });
+});
+
+describe("tasks: filter panel fields", () => {
+  it("offers who does / who set the task, and no longer the checklist or activity filters", async () => {
+    mockApi();
+    renderApp("/tasks");
+    const dialog = await openDialog();
+    expect(within(dialog).getByRole("combobox", { name: "Исполнитель" })).toBeTruthy();
+    expect(within(dialog).getByRole("combobox", { name: "Постановщик" })).toBeTruthy();
+    expect(within(dialog).getByRole("combobox", { name: "Срок" })).toBeTruthy();
+    expect(within(dialog).queryByRole("combobox", { name: "Чек-лист" })).toBeNull();
+    expect(within(dialog).queryByRole("combobox", { name: "Активность" })).toBeNull();
+  });
+
+  it("filters by assignee, shows it as a named chip and saves it with the preset", async () => {
+    const api = mockApi();
+    renderApp("/tasks");
+    await screen.findByRole("link", { name: "Согласовать договор" });
+
+    const dialog = await openDialog();
+    const assignee = within(dialog).getByRole("combobox", { name: "Исполнитель" });
+    await within(assignee).findByRole("option", { name: "Олег Кузнецов" });
+    fireEvent.change(assignee, { target: { value: "6" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Сохранить" }));
+
+    await waitFor(() => expect(api.calls.some((c) => c.method === "GET" && c.path.includes("assignee_id=6"))).toBe(true));
+    expect(await screen.findByRole("button", { name: /Исполнитель: Олег Кузнецов/ })).toBeTruthy();
+    await waitFor(() => expect(api.count("PUT", "/tasks/preferences")).toBe(1));
+    expect(api.calls.find((c) => c.method === "PUT")?.body).toMatchObject({ filters: { "list:mine": { assignee_id: 6 } } });
   });
 });

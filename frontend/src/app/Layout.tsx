@@ -7,7 +7,7 @@ import {
   PanelLeftClose,
   Plus,
 } from "lucide-react";
-import { useTaskList } from "../api/tasks";
+import { useTaskCounters } from "../api/tasks";
 import { CreateModal } from "../components/forms/CreateModal";
 import { ErrorAlert } from "../components/QueryState";
 import { canEditCatalog, roleLabel, userInitials } from "../lib/user";
@@ -37,10 +37,11 @@ export function Layout() {
   const [create, setCreate] = useState<CreateKind | null>(null);
   // Bumped by a sidebar click so re-opening the current page resets its local state.
   const [navResets, setNavResets] = useState(0);
-  // Total tasks in "Мои задачи" scope; not filtered to open-only yet (counters land with T-104's filters).
-  const tasks = useTaskList({ scope: "mine", limit: 1 });
+  // Open tasks in «Мои задачи»; the badge turns red while any of them is overdue.
+  const taskCounters = useTaskCounters("mine");
   const page = findPage(location.pathname);
-  const openTasks = tasks.data?.total;
+  const openTasks = taskCounters.data?.open;
+  const overdueTasks = taskCounters.data?.overdue ?? 0;
   const closeMenu = () => setMenu(false);
   const initials = userInitials(user);
   // The server enforces roles; the interface only hides actions that would be refused.
@@ -86,7 +87,12 @@ export function Layout() {
                 <p.icon size={19} />
                 {p.name}
                 {p.path === paths.tasks && openTasks !== undefined && (
-                  <span className="nav-count">{openTasks}</span>
+                  <span
+                    className={overdueTasks > 0 ? "nav-count nav-count-alert" : "nav-count"}
+                    title={overdueTasks > 0 ? `Открытых: ${openTasks}, просрочено: ${overdueTasks}` : `Открытых: ${openTasks}`}
+                  >
+                    {openTasks}
+                  </span>
                 )}
               </NavLink>
             ))}
