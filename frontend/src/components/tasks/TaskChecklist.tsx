@@ -8,6 +8,7 @@ import {
   useUpdateChecklistItem,
   type ChecklistItem,
 } from "../../api/tasks";
+import { formatDate } from "../../lib/format";
 
 /**
  * Move-up/move-down buttons rather than pointer drag-and-drop: fully keyboard-operable without a
@@ -63,7 +64,7 @@ export function TaskChecklist({ taskId, items }: { taskId: number; items: Checkl
               <small className="muted">
                 {item.assignee?.full_name}
                 {item.assignee && item.deadline ? " · " : ""}
-                {item.deadline}
+                {item.deadline && formatDate(item.deadline)}
               </small>
             )}
             <div className="checklist-item-actions">

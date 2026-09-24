@@ -17,6 +17,14 @@ const assign = () => vi.mocked(browser.assign);
 const location = () => screen.getByTestId("location").textContent;
 const pause = (ms = 50) => new Promise((r) => setTimeout(r, ms));
 
+/** Triggers a task save (PATCH /tasks/1) the way a user does: rename inline and press Enter. */
+async function renameTask() {
+  fireEvent.click(await screen.findByRole("button", { name: "Изменить название" }));
+  const title = await screen.findByRole("textbox", { name: "Название" });
+  fireEvent.change(title, { target: { value: "Переименованная задача" } });
+  fireEvent.keyDown(title, { key: "Enter" });
+}
+
 describe("auth gate", () => {
   it("redirects to login with the current path on a first visit without a session", async () => {
     const api = mockApi({ "GET /auth/me": unauthenticated });
@@ -128,9 +136,7 @@ describe("session ending mid-use", () => {
       "PATCH /tasks/1": () => patch.promise,
     });
     renderApp("/tasks/1");
-    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
-    const form = (await screen.findByRole("textbox", { name: "Название" })).closest("form")!;
-    fireEvent.submit(form);
+    await renameTask();
     await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(1));
     patch.resolve(unauthenticated());
     expect(await screen.findByRole("dialog", { name: "Сессия истекла" })).toBeTruthy();
@@ -174,9 +180,7 @@ describe("csrf and permissions", () => {
       },
     });
     renderApp("/tasks/1");
-    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
-    const form = (await screen.findByRole("textbox", { name: "Название" })).closest("form")!;
-    fireEvent.submit(form);
+    await renameTask();
     await waitFor(() => expect(api.count("PATCH", "/tasks/1")).toBe(2));
     expect(api.count("GET", "/auth/me")).toBe(2);
     expect(screen.queryByRole("alert")).toBeNull();
@@ -185,9 +189,7 @@ describe("csrf and permissions", () => {
   it("shows the message when the retry is refused again", async () => {
     const api = mockApi({ "PATCH /tasks/1": csrfInvalid });
     renderApp("/tasks/1");
-    fireEvent.click(await screen.findByRole("button", { name: "Изменить" }));
-    const form = (await screen.findByRole("textbox", { name: "Название" })).closest("form")!;
-    fireEvent.submit(form);
+    await renameTask();
     expect((await screen.findByRole("alert")).textContent).toContain(
       "Страница устарела: обновите её и повторите действие (код CSRF_INVALID)",
     );
