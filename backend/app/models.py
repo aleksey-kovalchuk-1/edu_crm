@@ -60,6 +60,8 @@ class Launch(Base):
     deadline: Mapped[date] = mapped_column(Date)
     workflow_template_id: Mapped[int] = mapped_column(ForeignKey('workflow_templates.id'))
     status_id: Mapped[int] = mapped_column(ForeignKey('workflow_statuses.id'))
+    # Catalog link used by reports (D-221); `product` above stays the free-text description.
+    it_product_id: Mapped[int | None] = mapped_column(ForeignKey('it_products.id'), index=True)
 
 TASK_STATUSES = ('new', 'in_progress', 'awaiting_review', 'completed', 'deferred', 'cancelled')
 TASK_PRIORITIES = ('low', 'normal', 'high', 'urgent')

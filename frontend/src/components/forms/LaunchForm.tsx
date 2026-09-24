@@ -1,10 +1,11 @@
 import type { FormEvent } from "react";
-import { useUniversities } from "../../api/catalogs";
+import { useItProducts, useUniversities } from "../../api/catalogs";
 import { useCreateLaunch } from "../../api/queries";
 import { FieldError, FormFooter, formText } from "./FormParts";
 
 export function LaunchForm({ onDone }: { onDone: () => void }) {
   const universities = useUniversities();
+  const products = useItProducts();
   const create = useCreateLaunch();
   function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -17,6 +18,8 @@ export function LaunchForm({ onDone }: { onDone: () => void }) {
         owner: formText(f, "owner"),
         students: Number(f.get("students")),
         deadline: formText(f, "deadline"),
+        // Sent only when chosen: the catalog link is optional (D-221).
+        ...(f.get("it_product_id") ? { it_product_id: Number(f.get("it_product_id")) } : {}),
       },
       { onSuccess: onDone },
     );
@@ -53,7 +56,19 @@ export function LaunchForm({ onDone }: { onDone: () => void }) {
         <FieldError error={error} field="program" />
       </label>
       <label>
-        ИТ-продукт
+        ИТ-продукт из справочника
+        <select name="it_product_id" defaultValue="">
+          <option value="">Не выбран</option>
+          {products.data?.map((p) => (
+            <option value={p.id} key={p.id}>
+              {p.vendor} — {p.name}
+            </option>
+          ))}
+        </select>
+        <FieldError error={error} field="it_product_id" />
+      </label>
+      <label>
+        Продукт / технологии
         <input
           name="product"
           required

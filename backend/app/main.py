@@ -16,15 +16,16 @@ from .import_routes import router as import_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
 from .keycloak_admin import KeycloakAdminClient
-from .models import AnnualMetric, Launch, StageEvent, StatusChange, TaskPlanRun, TaskPlanTemplate, University, WorkflowStatus
+from .models import AnnualMetric, ITProduct, Launch, StageEvent, StatusChange, TaskPlanRun, TaskPlanTemplate, University, WorkflowStatus
 from .plan_routes import resolve_assignee, run_generation, snapshot_template
 from .plan_routes import router as plan_router
 from .profile_routes import router as profile_router
+from .report_routes import router as report_router
 from .task_routes import router as task_router
 from .workflow_routes import router as workflow_router
 from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
-from .schemas import LaunchInput, StageInput
+from .schemas import LaunchInput, LaunchProductInput, StageInput
 from .security import TokenCipher
 from .email import send_email
 from .settings import load_settings, validate_database_url
@@ -123,6 +124,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.include_router(import_router)
     app.include_router(plan_router)
     app.include_router(profile_router)
+    app.include_router(report_router)
     app.include_router(task_router)
     app.include_router(workflow_router)
 
@@ -144,9 +146,19 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
         )
         return [{**serialize(l), 'university': u.name, 'city': u.city, 'overdue': is_overdue(l)} for l, u in rows]
 
+    def check_it_product(db, it_product_id):
+        """A catalog link must point at an existing, active IT product (D-221)."""
+        if it_product_id is None:
+            return
+        product = db.get(ITProduct, it_product_id)
+        if product is None or not product.is_active:
+            raise AppError(ErrorCode.VALIDATION_ERROR, details=[
+                {'field': 'it_product_id', 'message': 'ИТ-продукт не найден или отключён', 'type': 'value_error'}])
+
     @app.post('/api/v1/launches', status_code=201)
     def add_launch(data: LaunchInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
         university = active_university_in_scope(db, auth.user, data.university_id)
+        check_it_product(db, data.it_product_id)
         template = default_template(db)
         first_status = active_statuses(db, template.id)[0]
         record = Launch(**data.model_dump(), stage=first_status.position, workflow_template_id=template.id, status_id=first_status.id)
@@ -179,6 +191,19 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
                          summary=f'«{record.program}»: этап «{previous_status.name}» → «{status.name}»',
                          payload={'from': previous, 'to': data.stage})
             db.commit()
+        return serialize(record)
+
+    @app.put('/api/v1/launches/{id}/it-product', summary='Связать взаимодействие с ИТ-продуктом из справочника')
+    def set_launch_product(id: int, data: LaunchProductInput, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+        record = launch_in_scope(db, auth.user, id)
+        check_it_product(db, data.it_product_id)
+        if record.it_product_id != data.it_product_id:
+            previous = record.it_product_id
+            record.it_product_id = data.it_product_id
+            record_event(db, request, auth.user, 'launch.it_product', entity_type='launch', entity_id=id,
+                         summary=f'«{record.program}»: изменён ИТ-продукт', payload={'from': previous, 'to': data.it_product_id})
+            db.commit()
+            db.refresh(record)
         return serialize(record)
 
     @app.get('/api/v1/launches/{id}/history')

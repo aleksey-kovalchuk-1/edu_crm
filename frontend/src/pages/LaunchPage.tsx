@@ -2,7 +2,9 @@ import { useState } from "react";
 import { Link, useParams } from "react-router";
 import { ArrowLeft, Columns3, Plus, RefreshCw } from "lucide-react";
 import { useLaunchTasks, type LaunchTask } from "../api/launchTasks";
-import { useLaunches } from "../api/queries";
+import { useItProducts } from "../api/catalogs";
+import { useLaunches, useSetLaunchProduct } from "../api/queries";
+import { errorText } from "../api/client";
 import { TASK_STATUS_LABELS } from "../api/tasks";
 import {
   currentStatus,
@@ -26,6 +28,35 @@ function LaunchTaskItem({ task }: { task: LaunchTask }) {
       {task.assignee && ` · ${task.assignee.full_name}`}
       {task.deadline && ` · ${formatDate(task.deadline)}`}
     </li>
+  );
+}
+
+/** The catalog IT product this interaction is reported under; changing it saves immediately. */
+function LaunchProductField({ launchId, value }: { launchId: number; value: number | null }) {
+  const products = useItProducts();
+  const save = useSetLaunchProduct(launchId);
+  return (
+    <>
+      <select
+        className="inline-field"
+        aria-label="ИТ-продукт из справочника"
+        value={value ?? ""}
+        disabled={save.isPending}
+        onChange={(e) => save.mutate(e.target.value ? Number(e.target.value) : null)}
+      >
+        <option value="">Не выбран</option>
+        {products.data?.map((p) => (
+          <option value={p.id} key={p.id}>
+            {p.vendor} — {p.name}
+          </option>
+        ))}
+      </select>
+      {save.error && (
+        <p className="danger inline-error" role="alert">
+          {errorText(save.error)}
+        </p>
+      )}
+    </>
   );
 }
 
@@ -108,6 +139,12 @@ export function LaunchPage() {
           </div>
           <div>
             <dt>ИТ-продукт</dt>
+            <dd>
+              <LaunchProductField launchId={launch.id} value={launch.it_product_id ?? null} />
+            </dd>
+          </div>
+          <div>
+            <dt>Продукт / технологии</dt>
             <dd>{launch.product}</dd>
           </div>
           <div>

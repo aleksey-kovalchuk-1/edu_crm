@@ -157,6 +157,8 @@ export interface Launch {
   /** Workflow template and current status (T-040); may be absent in older responses. */
   workflow_template_id?: number | null;
   status_id?: number | null;
+  /** Catalog IT product used by reports (D-221); `product` stays the free-text description. */
+  it_product_id?: number | null;
 }
 export interface StageEvent {
   id: number;
@@ -193,4 +195,5 @@ export interface LaunchInput {
   owner: string;
   students: number;
   deadline: string;
+  it_product_id?: number;
 }

@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Route, Routes } from "react-router";
 import { AnalyticsPage } from "../pages/AnalyticsPage";
+import { ReportsPage } from "../pages/ReportsPage";
 import { CatalogsPage } from "../pages/CatalogsPage";
 import { ContractsPage } from "../pages/ContractsPage";
 import { ImportsPage } from "../pages/ImportsPage";
@@ -46,6 +47,7 @@ export function AppRoutes() {
           <Route path="tasks/templates" element={<TaskTemplatesPage />} />
           <Route path="tasks/:id" element={<TaskDetailPage />} />
           <Route path="analytics" element={<AnalyticsPage />} />
+          <Route path="reports" element={<ReportsPage />} />
           <Route
             path="profile"
             element={<Navigate to={paths.settingsProfile} replace />}

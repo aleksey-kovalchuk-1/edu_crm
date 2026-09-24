@@ -11,6 +11,10 @@ class LaunchInput(BaseModel):
     owner: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
     students: int = Field(ge=0, le=100000)
     deadline: date
+    it_product_id: int | None = Field(default=None, gt=0)
+
+class LaunchProductInput(BaseModel):
+    it_product_id: int | None = Field(default=None, gt=0)
 
 class StageInput(BaseModel):
     stage: int = Field(ge=0, le=12)
