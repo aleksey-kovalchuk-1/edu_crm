@@ -12,7 +12,7 @@ const columnOf = (code: string) =>
 
 describe("routing", () => {
   it.each([
-    ["/", "Всё важное — в одном месте", "Аналитика данных"],
+    ["/", "Обзор", "Аналитика данных"],
     ["/universities", "Учебные заведения", "Колледж связи"],
     ["/interactions", "Взаимодействия", "ВЗ-0001"],
     ["/tasks", "Задачи", "Согласовать договор"],
@@ -69,11 +69,11 @@ describe("interactions page", () => {
     expect(screen.getByText("1 записей")).toBeTruthy();
   });
 
-  it("opens interactions filtered by the university from its card", async () => {
+  it("opens interactions filtered by the university from its row", async () => {
     mockApi();
     renderApp("/universities");
-    const card = (await screen.findByText("Колледж связи")).closest("article")!;
-    fireEvent.click(within(card as HTMLElement).getByRole("button", { name: /Открыть/ }));
+    const row = (await screen.findByText("Колледж связи")).closest("tr")!;
+    fireEvent.click(within(row as HTMLElement).getByRole("button", { name: "Взаимодействия: Колледж связи" }));
     expect(
       await screen.findByRole("heading", { level: 1, name: "Взаимодействия" }),
     ).toBeTruthy();
@@ -303,6 +303,17 @@ describe("Настройки menu", () => {
       expect(screen.queryByText(NOT_FOUND_TITLE)).toBeNull();
     },
   );
+});
+
+describe("compact page heading", () => {
+  it("shows only the page name — no slogan subtitle, no top-bar breadcrumb outside Настройки", async () => {
+    mockApi();
+    renderApp("/contracts");
+    expect(await screen.findByRole("heading", { level: 1, name: "Договоры" })).toBeTruthy();
+    expect(document.querySelector(".page-heading .subtitle")).toBeNull();
+    expect(document.querySelector(".breadcrumbs strong")).toBeNull();
+    expect(screen.queryByText("Рабочее пространство")).toBeNull();
+  });
 });
 
 describe("topbar account avatar", () => {

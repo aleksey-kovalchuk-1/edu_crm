@@ -223,33 +223,6 @@ svg {
   margin-top: var(--space-1);
   color: var(--sidebar-text-muted);
 }
-.workspace {
-  border: 1px solid var(--sidebar-border);
-  border-radius: var(--radius-md);
-  display: flex;
-  gap: var(--space-2);
-  align-items: center;
-  padding: var(--space-3);
-  margin-bottom: var(--space-8);
-}
-.workspace strong {
-  color: var(--sidebar-text-strong);
-  font-size: var(--text-base);
-}
-.workspace small {
-  font-size: var(--text-xs);
-  color: var(--sidebar-text-muted);
-}
-.workspace > svg {
-  margin-left: auto;
-}
-.workspace-icon {
-  background: var(--sidebar-hover);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2);
-  font-size: var(--text-sm);
-  color: var(--sidebar-text-strong);
-}
 .nav-label {
   font-size: var(--text-2xs);
   font-weight: var(--weight-bold);
@@ -416,7 +389,7 @@ svg {
   width: calc(100% - 238px);
 }
 .topbar {
-  height: 69px;
+  height: 56px;
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);
   display: flex;
@@ -462,7 +435,7 @@ svg {
   padding: var(--space-1) var(--space-2);
 }
 main {
-  padding: var(--space-8) var(--space-8) 0;
+  padding: var(--space-6) var(--space-8) 0;
   max-width: 1800px;
   margin: auto;
 }
@@ -471,7 +444,15 @@ main {
   justify-content: space-between;
   align-items: center;
   gap: var(--space-5);
-  margin-bottom: var(--space-6);
+  min-height: 40px;
+  margin-bottom: var(--space-4);
+}
+.page-heading h1 {
+  font-size: var(--text-2xl);
+  letter-spacing: -0.6px;
+}
+.page-heading .primary {
+  padding-block: var(--space-2);
 }
 .eyebrow {
   font-size: var(--text-2xs);
@@ -794,6 +775,9 @@ main {
 }
 .table-wrap {
   overflow: auto;
+  /* Containing block for absolutely positioned descendants (.visually-hidden labels), so they
+     scroll with the table instead of widening the whole page on narrow screens. */
+  position: relative;
 }
 table {
   width: 100%;
@@ -956,15 +940,6 @@ td small {
   color: var(--color-warning);
   border-color: var(--color-warning-border);
 }
-.university-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: var(--space-5);
-}
-.university-card {
-  padding: var(--space-6);
-  margin: 0;
-}
 .university-icon {
   width: 45px;
   height: 45px;
@@ -974,28 +949,6 @@ td small {
   place-items: center;
   border-radius: var(--radius-lg);
   margin-bottom: var(--space-5);
-}
-.university-card > .muted {
-  font-size: var(--text-xs);
-}
-.university-card h2 {
-  margin: var(--space-2) 0;
-  line-height: 1.65;
-  min-height: 48px;
-}
-.university-card p {
-  font-size: var(--text-xs);
-  color: var(--color-text-subtle);
-}
-.university-bottom {
-  margin-top: var(--space-6);
-  border-top: 1px solid var(--color-border-subtle);
-  padding-top: var(--space-4);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: var(--text-xs);
-  color: var(--color-text-subtle);
 }
 .board {
   display: grid;
@@ -1444,9 +1397,6 @@ dialog::backdrop {
   .page-heading h1 {
     font-size: var(--text-2xl);
   }
-  .university-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
 }
 @media (max-width: 800px) {
   .sidebar {
@@ -1544,7 +1494,6 @@ dialog::backdrop {
   .task small {
     font-size: var(--text-2xs);
   }
-  .university-grid,
   .analytics-grid {
     grid-template-columns: 1fr;
   }
@@ -1766,18 +1715,12 @@ textarea {
   color: var(--color-text-muted);
   font-size: var(--text-base);
 }
-.university-card-top {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-.card-title-link:hover {
-  color: var(--color-accent-strong);
-  text-decoration: underline;
-}
 .short-name {
-  display: block;
-  font-size: var(--text-sm);
+  display: inline-block;
+  padding: 0 var(--space-1_5);
+  border-radius: var(--radius-xs);
+  background: var(--color-accent-soft);
+  font-size: var(--text-2xs);
   color: var(--color-accent-strong);
   font-weight: var(--weight-bold);
 }
@@ -1788,9 +1731,6 @@ textarea {
   color: var(--color-accent-strong);
   text-decoration: underline;
   overflow-wrap: anywhere;
-}
-.university-card p + p {
-  margin-top: var(--space-1_5);
 }
 .back-link {
   font-size: var(--text-sm);
@@ -3902,4 +3842,39 @@ dialog.wide {
   outline: none;
   border-color: var(--color-accent);
   box-shadow: var(--focus-ring);
+}
+
+/* ——— Учебные заведения: compact table (D-220) ——— */
+.university-table {
+  margin-bottom: var(--space-4);
+}
+.university-name-cell {
+  white-space: normal;
+  min-width: 240px;
+}
+.university-name-cell .cell-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  color: var(--color-text);
+}
+.university-name-cell .cell-title:hover {
+  color: var(--color-accent-strong);
+}
+.university-site {
+  margin-top: var(--space-0_5);
+  font-size: var(--text-xs);
+}
+.university-table .row-actions {
+  text-align: right;
+}
+.university-table .row-actions .text-button {
+  margin-right: var(--space-3);
+}
+/* Toolbar buttons match the 38px search field next to them. */
+.toolbar .primary,
+.toolbar .secondary,
+.toolbar .filter {
+  padding-block: var(--space-2);
+  min-height: 38px;
 }
