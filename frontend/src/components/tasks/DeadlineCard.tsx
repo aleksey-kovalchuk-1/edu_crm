@@ -2,19 +2,12 @@ import { Link } from "react-router";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { ArrowDown, ArrowUp, GripVertical } from "lucide-react";
-import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, type CustomColumn, type TaskListItem, type TaskStatus } from "../../api/tasks";
+import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, type CustomColumn, type TaskListItem } from "../../api/tasks";
 import { taskPath } from "../../app/navigation";
 import { formatDate } from "../../lib/format";
 import { DEADLINE_SYSTEM_COLUMNS } from "./deadlineBoard";
+import { STATUS_BADGE } from "./taskDisplay";
 
-const STATUS_BADGE: Record<TaskStatus, string> = {
-  new: "badge-1",
-  in_progress: "badge-2",
-  awaiting_review: "badge-warning",
-  completed: "badge-3",
-  deferred: "badge-4",
-  cancelled: "badge-danger",
-};
 
 /**
  * One card on the "Сроки" board. Draggable with the pointer (@dnd-kit) and, for keyboard/screen-reader
@@ -64,7 +57,7 @@ export function DeadlineCard({
         </Link>
       </div>
       <div className="planner-card-meta muted">
-        <span className={`badge ${STATUS_BADGE[task.status]}`}>{TASK_STATUS_LABELS[task.status]}</span>
+        <span className={STATUS_BADGE[task.status]}>{TASK_STATUS_LABELS[task.status]}</span>
         {" · "}
         {TASK_PRIORITY_LABELS[task.priority]}
         {task.deadline ? ` · ${formatDate(task.deadline)}` : " · Без срока"}

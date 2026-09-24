@@ -1,22 +1,12 @@
-import { useEffect, useState } from "react";
 import { History } from "lucide-react";
 import { useRecentActions } from "../api/queries";
 import { useSession } from "../app/AuthGate";
 import { formatDateTime, formatRelativeTime } from "../lib/format";
 import { seesAllActions } from "../lib/user";
+import { useNow } from "../lib/useNow";
 import { queryFallback } from "./QueryState";
 
 const LIMIT = 10;
-
-/** Current time, refreshed every minute so relative times stay correct. */
-function useNow(intervalMs = 60_000) {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), intervalMs);
-    return () => clearInterval(timer);
-  }, [intervalMs]);
-  return now;
-}
 
 export function RecentActions() {
   const { user } = useSession();

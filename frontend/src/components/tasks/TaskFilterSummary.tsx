@@ -1,20 +1,12 @@
 import { X } from "lucide-react";
 import { useUniversities } from "../../api/catalogs";
-import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, type DeadlinePreset, type TaskPriority, type TaskStatus } from "../../api/tasks";
-import type { FilterPatch } from "./taskFilterState";
-
-const DEADLINE_PRESET_LABELS: Record<DeadlinePreset, string> = {
-  overdue: "Просрочено",
-  today: "Сегодня",
-  this_week: "На этой неделе",
-  next_week: "На следующей неделе",
-  later: "Позже",
-  no_deadline: "Без срока",
-};
+import { TASK_PRIORITY_LABELS, TASK_STATUS_LABELS, useAssignableUsers, type DeadlinePreset, type TaskPriority, type TaskStatus } from "../../api/tasks";
+import { DEADLINE_PRESET_LABELS } from "./TaskFilterDialog";
+import { CLEAR_FILTERS, type FilterPatch } from "./taskFilterState";
 
 /**
- * Compact, removable summary of the filters currently applied to the URL — replaces the old permanent
- * inline panel (docs/decisions.md). Editing filters happens in TaskFilterDialog; this only ever removes.
+ * The applied filters as removable chips, shown inside the search bar. Editing happens in
+ * TaskFilterDialog; this only ever removes.
  */
 export function TaskFilterSummary({
   params,
@@ -24,45 +16,47 @@ export function TaskFilterSummary({
   onUpdate: (patch: FilterPatch) => void;
 }) {
   const universities = useUniversities();
+  const people = useAssignableUsers();
   const status = params.getAll("status");
   const priority = params.getAll("priority");
-  const universityId = params.get("university_id") ?? "";
-  const deadlinePreset = params.get("deadline_preset") ?? "";
-  const active = params.get("active") ?? "";
-  const hasChecklist = params.get("has_checklist") ?? "";
+  const personName = (id: string) => people.data?.find((p) => String(p.id) === id)?.full_name ?? id;
+  const single = (key: string, label: (value: string) => string) => {
+    const value = params.get(key);
+    return value ? [{ label: label(value), clear: { [key]: null } as FilterPatch }] : [];
+  };
 
   const chips: { label: string; clear: FilterPatch }[] = [
     ...status.map((s) => ({ label: `Статус: ${TASK_STATUS_LABELS[s as TaskStatus] ?? s}`, clear: { status: status.filter((v) => v !== s) } })),
     ...priority.map((p) => ({ label: `Приоритет: ${TASK_PRIORITY_LABELS[p as TaskPriority] ?? p}`, clear: { priority: priority.filter((v) => v !== p) } })),
-    ...(universityId
-      ? [{ label: `Вуз: ${universities.data?.find((u) => String(u.id) === universityId)?.name ?? universityId}`, clear: { university_id: null } }]
-      : []),
-    ...(deadlinePreset ? [{ label: DEADLINE_PRESET_LABELS[deadlinePreset as DeadlinePreset] ?? deadlinePreset, clear: { deadline_preset: null } }] : []),
-    ...(active ? [{ label: active === "true" ? "Только активные" : "Только завершённые", clear: { active: null } }] : []),
-    ...(hasChecklist ? [{ label: hasChecklist === "true" ? "С чек-листом" : "Без чек-листа", clear: { has_checklist: null } }] : []),
+    ...single("assignee_id", (id) => `Исполнитель: ${personName(id)}`),
+    ...single("creator_id", (id) => `Постановщик: ${personName(id)}`),
+    ...single("university_id", (id) => `Вуз: ${universities.data?.find((u) => String(u.id) === id)?.name ?? id}`),
+    ...single("deadline_preset", (v) => DEADLINE_PRESET_LABELS[v as DeadlinePreset] ?? v),
+    ...single("active", (v) => (v === "true" ? "Только открытые" : "Только завершённые")),
+    ...single("has_checklist", (v) => (v === "true" ? "С чек-листом" : "Без чек-листа")),
   ];
 
   if (!chips.length) return null;
 
   return (
-    <div className="filter-summary">
+    <>
       {chips.map((c) => (
-        <button key={c.label} type="button" className="filter-chip" onClick={() => onUpdate(c.clear)}>
+        <button
+          key={c.label}
+          type="button"
+          className="filter-chip"
+          aria-label={`${c.label} — убрать фильтр`}
+          onClick={() => onUpdate(c.clear)}
+        >
           {c.label}
-          <X size={12} />
+          <X size={12} aria-hidden="true" />
         </button>
       ))}
       {chips.length > 1 && (
-        <button
-          type="button"
-          className="text-button"
-          onClick={() =>
-            onUpdate({ status: [], priority: [], university_id: null, deadline_preset: null, active: null, has_checklist: null })
-          }
-        >
+        <button type="button" className="text-button filter-clear" onClick={() => onUpdate(CLEAR_FILTERS)}>
           Сбросить все
         </button>
       )}
-    </div>
+    </>
   );
 }

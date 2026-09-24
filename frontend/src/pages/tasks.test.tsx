@@ -7,9 +7,8 @@ describe("tasks: list", () => {
   it("shows the default 'mine' scope selected and lists the fixture task", async () => {
     mockApi();
     renderApp("/tasks");
-    const tab = await screen.findByRole("tab", { name: "Мои задачи" });
-    expect(tab.getAttribute("aria-selected")).toBe("true");
     expect(await screen.findByRole("link", { name: "Согласовать договор" })).toBeTruthy();
+    expect((screen.getByRole("combobox", { name: "Область видимости" }) as HTMLSelectElement).value).toBe("mine");
   });
 
   it("switches scope, updates the URL and requests the new scope", async () => {
@@ -17,14 +16,12 @@ describe("tasks: list", () => {
     renderApp("/tasks");
     await screen.findByRole("link", { name: "Согласовать договор" });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Все задачи" }));
+    fireEvent.change(screen.getByRole("combobox", { name: "Область видимости" }), { target: { value: "all" } });
 
     await waitFor(() =>
       expect(api.calls.some((c) => c.method === "GET" && c.path.includes("scope=all"))).toBe(true),
     );
-    expect(
-      (await screen.findByRole("tab", { name: "Все задачи" })).getAttribute("aria-selected"),
-    ).toBe("true");
+    expect((screen.getByRole("combobox", { name: "Область видимости" }) as HTMLSelectElement).value).toBe("all");
   });
 
   it("sends the search term as a query parameter", async () => {
@@ -383,5 +380,80 @@ describe("tasks: configurable columns", () => {
     expect(api.calls.find((c) => c.method === "PUT")?.body).toMatchObject({
       list_columns: expect.arrayContaining(["created_at"]),
     });
+  });
+});
+
+describe("tasks: list redesign", () => {
+  it("sorts by clicking a column header and flips direction on the second click", async () => {
+    const api = mockApi();
+    renderApp("/tasks");
+    await screen.findByRole("link", { name: "Согласовать договор" });
+    expect(screen.queryByRole("combobox", { name: /Сортировка/ })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Срок" }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === "GET" && c.path.includes("sort=deadline&"))).toBe(true));
+    expect(screen.getByRole("columnheader", { name: /Срок/ }).getAttribute("aria-sort")).toBe("ascending");
+
+    fireEvent.click(screen.getByRole("button", { name: /Срок/ }));
+    await waitFor(() => expect(api.calls.some((c) => c.method === "GET" && c.path.includes("sort=-deadline"))).toBe(true));
+    expect(screen.getByRole("columnheader", { name: /Срок/ }).getAttribute("aria-sort")).toBe("descending");
+  });
+
+  it("creates a task from the quick-add line, assigned to the current user", async () => {
+    const api = mockApi({ "POST /tasks": () => [201, api.data.task] });
+    renderApp("/tasks");
+    await screen.findByRole("link", { name: "Согласовать договор" });
+
+    const input = screen.getByRole("textbox", { name: "Быстрая задача" }) as HTMLInputElement;
+    fireEvent.change(input, { target: { value: "  Позвонить проректору  " } });
+    fireEvent.submit(input.closest("form")!);
+
+    await waitFor(() => expect(api.count("POST", "/tasks")).toBe(1));
+    expect(api.calls.find((c) => c.method === "POST" && c.path === "/tasks")?.body).toEqual({
+      title: "Позвонить проректору",
+      assignee_ids: [1],
+    });
+    await waitFor(() => expect(input.value).toBe(""));
+  });
+
+  it("marks the active counter chip as pressed and clears the filter on a second click", async () => {
+    const api = mockApi({
+      "GET /tasks/counters": () => ({ open: 3, overdue: 2, due_today: 1, awaiting_review: 0, no_deadline: 1 }),
+    });
+    renderApp("/tasks");
+    const chip = await screen.findByRole("button", { name: /Просрочено/ });
+    expect(chip.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(chip);
+    await waitFor(() => expect(chip.getAttribute("aria-pressed")).toBe("true"));
+    expect(screen.getByTestId("location").textContent).toContain("deadline_preset=overdue");
+
+    fireEvent.click(chip);
+    await waitFor(() => expect(chip.getAttribute("aria-pressed")).toBe("false"));
+    expect(screen.getByTestId("location").textContent).not.toContain("deadline_preset");
+    expect(api.calls.some((c) => c.path.includes("deadline_preset=overdue"))).toBe(true);
+  });
+
+  it("shows institution, interaction and progress under the title", async () => {
+    const api = mockApi({
+      "GET /tasks": () => ({
+        items: [{
+          ...api.data.tasks[0],
+          university: { id: 1, name: "Колледж связи" },
+          interaction: { id: 1, program: "Аналитика данных" },
+          checklist_progress: { total: 3, completed: 1 },
+          subtasks: { total: 2, completed: 2 },
+          comment_count: 4,
+        }],
+        total: 1, limit: 25, offset: 0,
+      }),
+    });
+    renderApp("/tasks");
+    const row = (await screen.findByRole("link", { name: "Согласовать договор" })).closest("tr")!;
+    expect(within(row).getByText("Колледж связи · Аналитика данных")).toBeTruthy();
+    expect(within(row).getByLabelText("Чек-лист: 1 из 3")).toBeTruthy();
+    expect(within(row).getByLabelText("Подзадачи: 2 из 2")).toBeTruthy();
+    expect(within(row).getByLabelText("Комментариев: 4")).toBeTruthy();
+    expect(within(row).getAllByLabelText("Ирина Петрова")).toHaveLength(2); // assignee and creator avatars
   });
 });

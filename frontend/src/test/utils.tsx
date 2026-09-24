@@ -167,7 +167,12 @@ export function fixtures() {
       creator: { id: 5, full_name: "Ирина Петрова" },
       assignees: [{ id: 5, full_name: "Ирина Петрова" }],
       university: null,
+      interaction: null,
+      checklist_progress: { total: 0, completed: 0 },
+      subtasks: { total: 0, completed: 0 },
+      comment_count: 0,
       created_at: "2026-09-01T10:00:00Z",
+      updated_at: "2026-09-01T10:00:00Z",
       version: 1,
     },
   ];

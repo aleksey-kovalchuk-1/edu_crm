@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
-import { ListTree, Plus } from "lucide-react";
+import { CalendarClock, ChevronDown, Columns3, List, ListTree, Plus, Search } from "lucide-react";
 import {
   TASK_SCOPE_LABELS,
   VISIBLE_TASK_SCOPES,
@@ -17,8 +17,7 @@ import { canEditWorkflows } from "../lib/user";
 import { TaskCreateForm } from "../components/forms/TaskCreateForm";
 import { Modal } from "../components/Modal";
 import { RefreshError, queryFallback } from "../components/QueryState";
-import { SearchToolbar } from "../components/SearchToolbar";
-import { Tabs, type TabItem } from "../components/Tabs";
+import { TabList, type TabItem } from "../components/Tabs";
 import { TaskBulkActionsBar } from "../components/tasks/TaskBulkActionsBar";
 import { TaskColumnPicker, DEFAULT_COLUMNS } from "../components/tasks/TaskColumnPicker";
 import { TaskCounters } from "../components/tasks/TaskCounters";
@@ -28,29 +27,23 @@ import { TaskFilterDialog } from "../components/tasks/TaskFilterDialog";
 import { TaskFilterSummary } from "../components/tasks/TaskFilterSummary";
 import { TaskListView } from "../components/tasks/TaskListView";
 import { TaskPlannerView } from "../components/tasks/TaskPlannerView";
-import { activeFilterCount, filtersFromParams, hasExplicitFilters, savedFilterToPatch, type FilterPatch } from "../components/tasks/taskFilterState";
+import { TaskQuickAdd } from "../components/tasks/TaskQuickAdd";
+import { nextSort, ruPlural } from "../components/tasks/taskDisplay";
+import {
+  CLEAR_FILTERS,
+  activeFilterCount,
+  filtersFromParams,
+  hasExplicitFilters,
+  savedFilterToPatch,
+  type FilterPatch,
+} from "../components/tasks/taskFilterState";
 
 const PAGE_SIZE = 25;
 
-const SCOPE_TABS: TabItem[] = VISIBLE_TASK_SCOPES.map((id) => ({ id, label: TASK_SCOPE_LABELS[id] }));
-
-/** Switching view or scope moves to a different {view, scope} filter set entirely — the six filter
- * dimensions are cleared from the URL as part of that same navigation so the restore effect below sees
- * a clean slate for the new key, rather than treating the previous key's filters as an explicit choice
- * for this one and refusing to restore anything saved for it. */
-const CLEAR_FILTERS: FilterPatch = { status: [], priority: [], university_id: null, deadline_preset: null, active: null, has_checklist: null };
-
-const SORTS: { value: string; label: string }[] = [
-  { value: "-created_at", label: "Сначала новые" },
-  { value: "deadline", label: "По сроку" },
-  { value: "-priority", label: "По приоритету" },
-  { value: "title", label: "По названию" },
-];
-
 const VIEWS: TabItem[] = [
-  { id: "list", label: "Список" },
-  { id: "deadlines", label: "Сроки" },
-  { id: "planner", label: "Мой план" },
+  { id: "list", label: "Список", icon: <List size={15} aria-hidden="true" /> },
+  { id: "deadlines", label: "Сроки", icon: <CalendarClock size={15} aria-hidden="true" /> },
+  { id: "planner", label: "Мой план", icon: <Columns3 size={15} aria-hidden="true" /> },
 ];
 
 export function TasksPage() {
@@ -146,106 +139,108 @@ export function TasksPage() {
     closeFilterDialog();
   }
 
-  if (fallback) return fallback;
-
-  // Below both tab rows (moved up and enlarged per the current design): the template-library
-  // link stays available, alongside the counters — both shrunk and right-aligned as a single
-  // secondary row, since day-to-day navigation is the view/scope tabs above them, not these.
-  const utilityRow = (
-    <div className="task-utility-row">
-      {canEditWorkflows(user.roles) && (
-        <Link className="text-button" to={paths.taskTemplates}>
-          <ListTree size={16} />
-          Шаблоны планов
-        </Link>
-      )}
-      <TaskCounters scope={scope} onSelect={(patch) => update(patch)} />
-    </div>
-  );
+  const panelId = useId();
+  const count = view === "list" ? list.data?.total : undefined;
 
   return (
     <>
-      {activeQuery && <RefreshError queries={[activeQuery]} />}
-      <Tabs
-        label="Представление"
-        tabs={VIEWS}
-        selected={view}
-        onSelect={(id) => update({ view: id === "list" ? null : id, ...CLEAR_FILTERS })}
-        className="tabs-primary"
-      >
-        {view === "planner" ? (
-          <>
-            {utilityRow}
-            <TaskPlannerView />
-          </>
-        ) : (
-          <Tabs
-            label="Область видимости"
-            tabs={SCOPE_TABS}
-            selected={scope}
-            onSelect={(id) => update({ scope: id === "mine" ? null : id, ...CLEAR_FILTERS })}
-            className="tabs-scope"
-          >
-            {utilityRow}
-            <SearchToolbar
-              search={search}
-              onSearch={(value) => update({ q: value || null })}
-              placeholder="Поиск по названию или описанию"
-              count={view === "list" ? list.data?.total : undefined}
+      {activeQuery?.data && <RefreshError queries={[activeQuery]} />}
+      <div className="task-toolbar">
+        {view !== "planner" && (
+          <label className="scope-select">
+            <select
+              aria-label="Область видимости"
+              value={scope}
+              onChange={(e) => update({ scope: e.target.value === "mine" ? null : e.target.value, ...CLEAR_FILTERS })}
             >
-              <TaskFilterButton ref={filterButtonRef} count={activeFilterCount(params)} onClick={() => setFilterDialogOpen(true)} />
-              {view === "list" && (
-                <label className="inline-select">
-                  Сортировка
-                  <select value={sort} onChange={(e) => update({ sort: e.target.value === "-created_at" ? null : e.target.value }, false)}>
-                    {SORTS.map((s) => (
-                      <option value={s.value} key={s.value}>
-                        {s.label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              )}
-              {view === "list" && (
-                <TaskColumnPicker columns={columns} onChange={(cols) => savePreferences.mutate({ list_columns: cols })} />
-              )}
-              <button type="button" className="primary" onClick={() => setCreating(true)}>
-                <Plus size={18} />
-                Создать задачу
-              </button>
-            </SearchToolbar>
-            <TaskFilterSummary params={params} onUpdate={update} />
-            {selected.size > 0 && (
-              <TaskBulkActionsBar selectedIds={[...selected]} onDone={() => setSelected(new Set())} />
-            )}
-            {view === "list" && list.data && (
-              <TaskListView
-                items={list.data.items}
-                total={list.data.total}
-                limit={list.data.limit}
-                offset={list.data.offset}
-                columns={columns}
-                selected={selected}
-                onToggle={toggleSelect}
-                onToggleAll={() =>
-                  setSelected((prev) => {
-                    const ids = list.data!.items.map((t) => t.id);
-                    const allSelected = ids.every((id) => prev.has(id));
-                    const next = new Set(prev);
-                    for (const id of ids) {
-                      if (allSelected) next.delete(id);
-                      else next.add(id);
-                    }
-                    return next;
-                  })
-                }
-                onPage={(next) => update({ offset: String(next) }, false)}
-              />
-            )}
-            {view === "deadlines" && <TaskDeadlineBoard scope={scope} search={search} filters={filters} />}
-          </Tabs>
+              {VISIBLE_TASK_SCOPES.map((id) => (
+                <option value={id} key={id}>
+                  {TASK_SCOPE_LABELS[id]}
+                </option>
+              ))}
+            </select>
+            <ChevronDown size={16} aria-hidden="true" />
+          </label>
         )}
-      </Tabs>
+        {view !== "planner" && (
+          <div className="task-search">
+            <Search size={17} aria-hidden="true" />
+            <TaskFilterSummary params={params} onUpdate={update} />
+            <input
+              value={search}
+              onChange={(e) => update({ q: e.target.value || null })}
+              placeholder="Поиск по названию или описанию"
+              aria-label="Поиск"
+            />
+            <TaskFilterButton ref={filterButtonRef} count={activeFilterCount(params)} onClick={() => setFilterDialogOpen(true)} />
+          </div>
+        )}
+        <TabList
+          label="Представление"
+          tabs={VIEWS}
+          selected={view}
+          onSelect={(id) => update({ view: id === "list" ? null : id, ...CLEAR_FILTERS })}
+          className="tabs-segmented"
+          panelId={panelId}
+          idPrefix={panelId}
+        />
+        <button type="button" className="primary" onClick={() => setCreating(true)}>
+          <Plus size={18} />
+          Создать задачу
+        </button>
+      </div>
+      <div className="task-subbar">
+        {view !== "planner" && <TaskCounters scope={scope} params={params} onSelect={(patch) => update(patch)} />}
+        <div className="task-subbar-end">
+          {count !== undefined && (
+            <span className="muted">
+              {count} {ruPlural(count, "задача", "задачи", "задач")}
+            </span>
+          )}
+          {view === "list" && (
+            <TaskColumnPicker columns={columns} onChange={(cols) => savePreferences.mutate({ list_columns: cols })} />
+          )}
+          {canEditWorkflows(user.roles) && (
+            <Link className="text-button" to={paths.taskTemplates}>
+              <ListTree size={15} />
+              Шаблоны планов
+            </Link>
+          )}
+        </div>
+      </div>
+      <div role="tabpanel" id={panelId} aria-labelledby={`${panelId}-tab-${view}`}>
+        {selected.size > 0 && <TaskBulkActionsBar selectedIds={[...selected]} onDone={() => setSelected(new Set())} />}
+        {fallback}
+        {view === "list" && list.data && (
+          <TaskListView
+            items={list.data.items}
+            total={list.data.total}
+            limit={list.data.limit}
+            offset={list.data.offset}
+            columns={columns}
+            sort={sort}
+            selected={selected}
+            quickAdd={<TaskQuickAdd userId={user.id} />}
+            onSort={(field) => update({ sort: nextSort(sort, field) === "-created_at" ? null : nextSort(sort, field) }, false)}
+            onToggle={toggleSelect}
+            onToggleAll={() =>
+              setSelected((prev) => {
+                const ids = list.data!.items.map((t) => t.id);
+                const allSelected = ids.every((id) => prev.has(id));
+                const next = new Set(prev);
+                for (const id of ids) {
+                  if (allSelected) next.delete(id);
+                  else next.add(id);
+                }
+                return next;
+              })
+            }
+            onPage={(next) => update({ offset: String(next) }, false)}
+          />
+        )}
+        {view === "deadlines" && <TaskDeadlineBoard scope={scope} search={search} filters={filters} />}
+        {view === "planner" && <TaskPlannerView />}
+      </div>
       {filterDialogOpen && view !== "planner" && (
         <TaskFilterDialog
           initial={filters}
