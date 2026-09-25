@@ -10,7 +10,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from .errors import AppError, ErrorCode
-from .importer import ImportFileError, MAX_DATA_ROWS, MAX_FILE_BYTES, normalize_header, read_upload
+from .importer import ImportFileError, MAX_DATA_ROWS, MAX_FILE_BYTES, normalize_header, parse_date, read_upload
 from .learner_routes import LearnerIn, apply_fields
 from .models import CourseApplication, ITProduct, Learner, VendorCompany, VendorContact
 
@@ -150,6 +150,8 @@ class CustomerImportRunner:
         }
 
     def vendor(self, raw):
+        if isinstance(raw.get('phone'), (int, float)) and not isinstance(raw.get('phone'), bool):
+            raise ImportRowError('Телефон должен быть текстом: ведущие нули могли быть потеряны')
         company_name = str(raw.get('company') or '').strip()
         names = split_list(raw.get('products'))
         full_name = str(raw.get('full_name') or '').strip()
@@ -226,11 +228,14 @@ class CustomerImportRunner:
         return matches[0] if matches else None
 
     def learner(self, raw):
-        for field in DOCUMENT_FIELDS:
+        for field in DOCUMENT_FIELDS | {'phone'}:
             value = raw.get(field)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
-                raise ImportRowError('Документные номера и индекс должны быть текстом: ведущие нули могли быть потеряны')
+                raise ImportRowError('Телефон, документные номера и индекс должны быть текстом: ведущие нули могли быть потеряны')
         submitted = {field: value for field, value in raw.items() if value is not None and str(value).strip()}
+        for field in ('passport_issued_at', 'birth_date', 'diploma_issued_at'):
+            if field in submitted:
+                submitted[field] = parse_date(submitted[field]) or submitted[field]
         try:
             validated = LearnerIn.model_validate(submitted).model_dump(exclude_none=True, exclude_unset=True)
         except ValidationError as error:

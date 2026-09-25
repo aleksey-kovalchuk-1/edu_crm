@@ -220,6 +220,7 @@ function ProductsTab({ canEdit }: { canEdit: boolean }) {
                       <th scope="col">Вендор</th>
                       <th scope="col">Программное обеспечение</th>
                       <th scope="col">ИТ-направления</th>
+                      <th scope="col">Контакты по продукту</th>
                       <th scope="col">Статус</th>
                       {canEdit && (
                         <th scope="col">
@@ -245,6 +246,12 @@ function ProductsTab({ canEdit }: { canEdit: boolean }) {
                             ))}
                           </ul>
                           {!p.directions.length && <span className="muted">—</span>}
+                        </td>
+                        <td>
+                          {p.vendor_contacts?.length ? p.vendor_contacts.map((contact) => <div key={contact.id}>
+                            <strong>{contact.full_name}</strong>
+                            <small>{contact.preferred_channels.join(", ") || contact.email || contact.phone || "Способ не указан"}</small>
+                          </div>) : <span className="muted">—</span>}
                         </td>
                         <td>
                           <StatusCell active={p.is_active} />

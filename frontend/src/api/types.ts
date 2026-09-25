@@ -56,6 +56,8 @@ export interface ITProduct {
   name: string;
   description: string;
   is_active: boolean;
+  company_id?: number | null;
+  vendor_contacts?: { id: number; full_name: string; phone: string; email: string; preferred_channels: string[]; is_active: boolean }[];
   directions: NamedRef[];
 }
 export interface ITProductInput {

@@ -156,7 +156,9 @@ def list_contacts(company_id: int | None = None, product_id: int | None = None, 
         ))
     if q:
         pattern = like_pattern(q)
-        query = query.where(or_(VendorContact.full_name.ilike(pattern, escape='\\'), VendorContact.email.ilike(pattern, escape='\\')))
+        query = query.where(or_(VendorContact.full_name.ilike(pattern, escape='\\'),
+                                VendorContact.email.ilike(pattern, escape='\\'),
+                                VendorContact.phone.ilike(pattern, escape='\\')))
     return [contact_out(contact) for contact in db.scalars(query).all()]
 
 

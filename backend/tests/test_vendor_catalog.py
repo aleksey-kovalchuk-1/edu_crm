@@ -97,6 +97,7 @@ def test_vendor_catalog_links_contact_to_multiple_products_and_filters(head, man
     assert manager.post('/api/v1/vendor-contacts', json={'company_id': company['id'], 'full_name': 'Новый'}).status_code == 403
     filtered = manager.get('/api/v1/vendor-contacts', params={'product_id': lake['id']}).json()
     assert [item['id'] for item in filtered] == [contact['id']]
+    assert [item['id'] for item in manager.get('/api/v1/vendor-contacts', params={'q': '001234'}).json()] == [contact['id']]
     products = manager.get('/api/v1/it-products').json()
     assert all(item['company_id'] == company['id'] for item in products)
     assert all(item['vendor_contacts'][0]['id'] == contact['id'] for item in products)
