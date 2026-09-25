@@ -127,3 +127,20 @@ def test_learner_reimport_does_not_erase_filled_fields_with_blank_cells(head):
     detail = head.get(f'/api/v1/learners/{learner_id}').json()
     assert detail['education'] == 'Высшее'
     assert detail['passport_series'] == '0011'
+
+
+def test_numeric_phone_cell_is_rejected_before_leading_zero_can_be_lost(head):
+    content = workbook(['Фамилия', 'Имя', 'Телефон'], [['Тестов', 'Иван', 12345]])
+    preview = upload(head, 'learners', 'preview', content, 'слушатели.xlsx').json()
+    assert preview['summary']['invalid'] == 1
+    assert 'текстом' in preview['rows'][0]['errors'][0]
+
+
+def test_learner_import_accepts_russian_date_format(head):
+    content = workbook(['Фамилия', 'Имя', 'Телефон', 'Дата рождения'],
+                       [['Тестов', 'Иван', '00123', '01.02.2000']])
+    applied = upload(head, 'learners', 'apply', content, 'слушатели.xlsx')
+    assert applied.status_code == 200
+    assert applied.json()['summary']['created'] == 1
+    learner_id = head.get('/api/v1/learners').json()[0]['id']
+    assert head.get(f'/api/v1/learners/{learner_id}').json()['birth_date'] == '2000-02-01'
