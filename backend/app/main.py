@@ -24,6 +24,7 @@ from .profile_routes import router as profile_router
 from .report_routes import router as report_router
 from .task_routes import router as task_router
 from .workflow_routes import router as workflow_router
+from .vendor_routes import router as vendor_router
 from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
 from .schemas import LaunchInput, LaunchProductInput, StageInput
@@ -129,6 +130,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.include_router(report_router)
     app.include_router(task_router)
     app.include_router(workflow_router)
+    app.include_router(vendor_router)
 
     @app.get('/api/v1/health')
     def health(db: Session = Depends(get_db)):

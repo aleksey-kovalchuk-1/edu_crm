@@ -107,6 +107,7 @@ def test_apply_writes_catalogs_in_one_step_and_only_once(head, manager, database
         assert first.valid_until == date(2027, 1, 15)
         product = db.scalar(select(ITProduct).where(ITProduct.name == 'Учебная среда'))
         assert [direction.name for direction in product.directions] == ['DevOps', 'QA']
+        assert product.company is not None and product.company.name == 'РТК ИТ'
         assert (second.manager_user_id, second.manager_name, second.valid_until) == (None, 'Неизвестный Менеджер', date(2027, 3, 1))
         assert db.scalar(select(func.count()).select_from(AuditEvent).where(AuditEvent.action == 'import.apply')) == 1
 

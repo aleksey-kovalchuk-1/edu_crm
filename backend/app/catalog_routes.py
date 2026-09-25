@@ -21,6 +21,7 @@ from .models import (
     Contract,
     ITDirection,
     ITProduct,
+    VendorCompany,
     University,
     UniversityContact,
     UniversityManager,
@@ -47,6 +48,7 @@ CONFLICT_FIELDS = {
     'universities_name_key': ('name', 'Учебное заведение с таким названием уже есть'),
     'it_directions_name_key': ('name', 'Такое направление уже есть'),
     'it_products_vendor_key': ('name', 'Продукт с таким вендором и названием уже есть'),
+    'vendor_companies_name_key': ('name', 'Компания с таким названием уже есть'),
     'contracts_contract_number_key': ('contract_number', 'Договор с таким номером уже есть'),
     'university_contacts_university_id_key': ('full_name', 'Контакт с таким ФИО у этого вуза уже есть'),
     'university_managers_pkey': ('user_ids', 'Список ответственных только что изменил другой пользователь; обновите страницу'),
@@ -210,7 +212,19 @@ class ProductOut(BaseModel):
     name: str
     description: str
     is_active: bool
+    company_id: int | None
+    vendor_contacts: list['VendorContactBrief']
     directions: list[RefOut]
+
+
+class VendorContactBrief(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    full_name: str
+    phone: str
+    email: str
+    preferred_channels: list[str]
+    is_active: bool
 
 
 class ProductIn(BaseModel):
@@ -237,12 +251,24 @@ def load_directions(db, direction_ids):
 
 
 def product_out(db, product_id):
-    return db.scalar(select(ITProduct).options(selectinload(ITProduct.directions)).where(ITProduct.id == product_id))
+    return db.scalar(select(ITProduct).options(selectinload(ITProduct.directions), selectinload(ITProduct.vendor_contacts)).where(ITProduct.id == product_id))
+
+
+def company_for_vendor(db, vendor):
+    """Find or create the catalog company while retaining the product's original vendor text."""
+    key = ' '.join(vendor.split()).casefold().replace('ё', 'е')
+    for company in db.scalars(select(VendorCompany)):
+        if ' '.join(company.name.split()).casefold().replace('ё', 'е') == key:
+            return company
+    company = VendorCompany(name=' '.join(vendor.split()))
+    db.add(company)
+    flush_or_conflict(db)
+    return company
 
 
 @router.get('/it-products', response_model=list[ProductOut], summary='ИТ-продукты', dependencies=[Depends(any_role)])
 def list_products(q: str | None = None, direction_id: int | None = None, include_inactive: bool = False, db: Session = Depends(get_db)):
-    query = select(ITProduct).options(selectinload(ITProduct.directions)).order_by(ITProduct.vendor, ITProduct.name)
+    query = select(ITProduct).options(selectinload(ITProduct.directions), selectinload(ITProduct.vendor_contacts)).order_by(ITProduct.vendor, ITProduct.name)
     if not include_inactive:
         query = query.where(ITProduct.is_active.is_(True))
     if q:
@@ -257,7 +283,9 @@ def list_products(q: str | None = None, direction_id: int | None = None, include
 
 @router.post('/it-products', response_model=ProductOut, status_code=201, summary='Добавить ИТ-продукт')
 def create_product(data: ProductIn, request: Request, auth: AuthContext = Depends(catalog_editor), db: Session = Depends(get_db)):
-    product = ITProduct(vendor=data.vendor, name=data.name, description=data.description, directions=load_directions(db, data.direction_ids))
+    company = company_for_vendor(db, data.vendor)
+    product = ITProduct(vendor=data.vendor, name=data.name, description=data.description, company=company,
+                        directions=load_directions(db, data.direction_ids))
     db.add(product)
     flush_or_conflict(db)
     record_event(db, request, auth.user, 'it_product.create', entity_type='it_product', entity_id=product.id,
@@ -276,7 +304,10 @@ def update_product(product_id: int, data: ProductPatch, request: Request, auth: 
     # Look up directions before touching the product: the query would otherwise autoflush a renamed product
     # and surface a duplicate name as an unhandled database error instead of 409.
     directions = load_directions(db, direction_ids) if direction_ids is not None else None
+    company = company_for_vendor(db, submitted['vendor']) if 'vendor' in submitted and submitted['vendor'] != product.vendor else None
     changes = differing(product, submitted)
+    if company is not None and company.id != product.company_id:
+        changes['company_id'] = company.id
     if directions is not None and {d.id for d in directions} != {d.id for d in product.directions}:
         changes['direction_ids'] = sorted(d.id for d in directions)
     if changes:

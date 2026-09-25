@@ -465,6 +465,22 @@ class ITDirection(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
 
 
+vendor_contact_products = Table(
+    'vendor_contact_products', Base.metadata,
+    Column('vendor_contact_id', ForeignKey('vendor_contacts.id', ondelete='CASCADE'), primary_key=True),
+    Column('it_product_id', ForeignKey('it_products.id', ondelete='CASCADE'), primary_key=True),
+)
+
+
+class VendorCompany(Base):
+    __tablename__ = 'vendor_companies'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(russian_text(200), unique=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    products: Mapped[list['ITProduct']] = relationship(back_populates='company', order_by='ITProduct.name')
+    contacts: Mapped[list['VendorContact']] = relationship(back_populates='company', order_by='VendorContact.full_name')
+
+
 class ITProduct(Base):
     __tablename__ = 'it_products'
     __table_args__ = (UniqueConstraint('vendor', 'name'),)
@@ -474,7 +490,27 @@ class ITProduct(Base):
     name: Mapped[str] = mapped_column(russian_text(200))
     description: Mapped[str] = mapped_column(Text, default='', server_default='')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    company_id: Mapped[int | None] = mapped_column(ForeignKey('vendor_companies.id'), index=True)
+    company: Mapped['VendorCompany | None'] = relationship(back_populates='products')
+    vendor_contacts: Mapped[list['VendorContact']] = relationship(
+        secondary=vendor_contact_products, back_populates='products', order_by='VendorContact.full_name',
+    )
     directions: Mapped[list['ITDirection']] = relationship(secondary=it_product_directions, order_by='ITDirection.name')
+
+
+class VendorContact(Base):
+    __tablename__ = 'vendor_contacts'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    company_id: Mapped[int] = mapped_column(ForeignKey('vendor_companies.id'), index=True)
+    full_name: Mapped[str] = mapped_column(russian_text(200))
+    phone: Mapped[str] = mapped_column(String(50), default='', server_default='')
+    email: Mapped[str] = mapped_column(String(254), default='', server_default='')
+    preferred_channels: Mapped[list[str]] = mapped_column(ARRAY(String(50)), default=list, server_default='{}')
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    company: Mapped['VendorCompany'] = relationship(back_populates='contacts')
+    products: Mapped[list['ITProduct']] = relationship(
+        secondary=vendor_contact_products, back_populates='vendor_contacts', order_by='ITProduct.name',
+    )
 
 
 class UniversityContact(Base):

@@ -13,7 +13,7 @@ from .catalog_routes import PersonOut
 from .db import get_db
 from .errors import AppError, ErrorCode
 from .importer import FIELD_LABELS, FIELDS, ImportFileError, UnsupportedFileType, interpret_row, name_key, read_upload, suggest_mapping, validate_mapping
-from .models import CatalogImport, Contract, ITDirection, ITProduct, University, UniversityContact, User, utcnow
+from .models import CatalogImport, Contract, ITDirection, ITProduct, University, UniversityContact, User, VendorCompany, utcnow
 
 router = APIRouter(prefix='/api/v1/imports', tags=['Загрузка справочников'])
 importer_role = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
@@ -249,6 +249,7 @@ class CatalogWriter:
         db = self.db
         self.universities = {name_key(university.name): university for university in db.scalars(select(University))}
         self.products = {(name_key(product.vendor), name_key(product.name)): product for product in db.scalars(select(ITProduct).options(selectinload(ITProduct.directions)))}
+        self.companies = {name_key(company.name): company for company in db.scalars(select(VendorCompany))}
         self.directions = {name_key(direction.name): direction for direction in db.scalars(select(ITDirection))}
         users_by_name = {}
         for user in db.scalars(select(User).where(User.is_active.is_(True))):
@@ -309,18 +310,32 @@ class CatalogWriter:
                     self.planned.add(('product', key))
                     self.created['it_products'] += 1
                 return None
-            product = ITProduct(vendor=vendor, name=name, directions=[direction for direction in directions if direction])
+            company = self._company(vendor)
+            product = ITProduct(vendor=vendor, name=name, company=company,
+                                directions=[direction for direction in directions if direction])
             self.db.add(product)
             self.db.flush()
             self.products[key] = product
             self.created['it_products'] += 1
             return product
         if self.apply:
+            if product.company_id is None:
+                product.company = self._company(vendor)
             known = {direction.id for direction in product.directions}
             for direction in directions:
                 if direction is not None and direction.id not in known:
                     product.directions.append(direction)
         return product
+
+    def _company(self, vendor):
+        key = name_key(vendor)
+        company = self.companies.get(key)
+        if company is None:
+            company = VendorCompany(name=vendor)
+            self.db.add(company)
+            self.db.flush()
+            self.companies[key] = company
+        return company
 
     def _contacts(self, university, result):
         contacts = []
