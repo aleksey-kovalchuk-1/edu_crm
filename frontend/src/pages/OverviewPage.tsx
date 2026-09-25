@@ -13,6 +13,7 @@ import { useDashboard, useLaunches, useStages } from "../api/queries";
 import { useTaskList } from "../api/tasks";
 import { paths } from "../app/navigation";
 import { AnnualChart } from "../components/AnnualChart";
+import { ChartDownloads } from "../components/ChartDownloads";
 import { LaunchTable } from "../components/LaunchTable";
 import { RefreshError, queryFallback } from "../components/QueryState";
 import { RecentActions } from "../components/RecentActions";
@@ -92,12 +93,15 @@ export function OverviewPage() {
               <h2>Цикл взаимодействия</h2>
               <p>Распределение программ по этапам</p>
             </div>
-            <button
-              className="text-button"
-              onClick={() => navigate(paths.interactions)}
-            >
-              Открыть доску <ArrowUpRight size={16} />
-            </button>
+            <span className="chart-downloads">
+              <ChartDownloads chart="interactions-by-status" title="Цикл взаимодействия" />
+              <button
+                className="text-button"
+                onClick={() => navigate(paths.interactions)}
+              >
+                Открыть доску <ArrowUpRight size={16} />
+              </button>
+            </span>
           </div>
           <div className="pipeline">
             {stageGroups.map((g, i) => (

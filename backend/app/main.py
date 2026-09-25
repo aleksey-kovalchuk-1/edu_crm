@@ -10,6 +10,7 @@ from .admin_routes import router as admin_router
 from .audit import record_event
 from .audit_routes import router as audit_router
 from .auth import ALL_ROLES, AuthContext, require_roles, router as auth_router
+from .chart_routes import router as chart_router
 from .catalog_routes import active_university_in_scope, router as catalog_router, university_scope
 from .email_routes import router as email_router
 from .import_routes import router as import_router
@@ -120,6 +121,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.include_router(auth_router)
     app.include_router(audit_router)
     app.include_router(catalog_router)
+    app.include_router(chart_router)
     app.include_router(email_router)
     app.include_router(import_router)
     app.include_router(plan_router)

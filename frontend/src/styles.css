@@ -4027,3 +4027,15 @@ dialog.wide {
     grid-column: auto;
   }
 }
+
+/* Chart PNG / PDF downloads (D-222) */
+.chart-downloads {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--space-1_5);
+}
+.chart-downloads .secondary {
+  padding: var(--space-1_5) var(--space-3);
+  font-size: var(--text-xs);
+  text-decoration: none;
+}
