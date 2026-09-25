@@ -551,6 +551,21 @@ class Learner(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
+class CourseApplication(Base):
+    """Course request, without an inferred payment state."""
+    __tablename__ = 'course_applications'
+    __table_args__ = (CheckConstraint("payment_status = 'unconfirmed_by_data'", name='payment_status'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    external_number: Mapped[str] = mapped_column(String(100), unique=True)
+    learner_id: Mapped[int] = mapped_column(ForeignKey('learners.id'), index=True)
+    course: Mapped[str] = mapped_column(russian_text(200))
+    stream_number: Mapped[str] = mapped_column(String(100))
+    payment_status: Mapped[str] = mapped_column(String(40), default='unconfirmed_by_data', server_default='unconfirmed_by_data')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    learner: Mapped['Learner'] = relationship()
+
+
 class UniversityContact(Base):
     """Responsible person on the university side; personal data, visible only within the user's data scope."""
     __tablename__ = 'university_contacts'
