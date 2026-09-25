@@ -513,6 +513,44 @@ class VendorContact(Base):
     )
 
 
+class Learner(Base):
+    """Learner profile. Document identifiers are encrypted by the application before persistence."""
+    __tablename__ = 'learners'
+    id: Mapped[int] = mapped_column(primary_key=True)
+    last_name: Mapped[str] = mapped_column(russian_text(200))
+    first_name: Mapped[str] = mapped_column(russian_text(200))
+    middle_name: Mapped[str] = mapped_column(russian_text(200), default='', server_default='')
+    phone: Mapped[str] = mapped_column(String(50), default='', server_default='', index=True)
+    email: Mapped[str] = mapped_column(String(254), default='', server_default='', index=True)
+    snils_encrypted: Mapped[str | None] = mapped_column(Text)
+    passport_series_encrypted: Mapped[str | None] = mapped_column(Text)
+    passport_number_encrypted: Mapped[str | None] = mapped_column(Text)
+    passport_issued_by_encrypted: Mapped[str | None] = mapped_column(Text)
+    passport_issued_at: Mapped[date | None] = mapped_column(Date)
+    passport_department_code_encrypted: Mapped[str | None] = mapped_column(Text)
+    gender: Mapped[str | None] = mapped_column(String(20))
+    birth_date: Mapped[date | None] = mapped_column(Date)
+    registration_region: Mapped[str | None] = mapped_column(russian_text(200))
+    registration_locality: Mapped[str | None] = mapped_column(russian_text(200))
+    registration_street: Mapped[str | None] = mapped_column(russian_text(200))
+    registration_house: Mapped[str | None] = mapped_column(String(50))
+    registration_apartment: Mapped[str | None] = mapped_column(String(50))
+    postal_code: Mapped[str | None] = mapped_column(String(20))
+    dative_first_name: Mapped[str | None] = mapped_column(russian_text(200))
+    dative_last_name: Mapped[str | None] = mapped_column(russian_text(200))
+    dative_middle_name: Mapped[str | None] = mapped_column(russian_text(200))
+    education: Mapped[str | None] = mapped_column(russian_text(200))
+    diploma_profession: Mapped[str | None] = mapped_column(russian_text(200))
+    diploma_institution: Mapped[str | None] = mapped_column(russian_text(200))
+    diploma_last_name: Mapped[str | None] = mapped_column(russian_text(200))
+    diploma_number_encrypted: Mapped[str | None] = mapped_column(Text)
+    diploma_series_encrypted: Mapped[str | None] = mapped_column(Text)
+    diploma_registration_number_encrypted: Mapped[str | None] = mapped_column(Text)
+    diploma_issued_at: Mapped[date | None] = mapped_column(Date)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+
 class UniversityContact(Base):
     """Responsible person on the university side; personal data, visible only within the user's data scope."""
     __tablename__ = 'university_contacts'
