@@ -44,6 +44,16 @@ def test_invalid_encryption_key_is_rejected():
         load_settings(valid_environ(SESSION_ENCRYPTION_KEY='not-a-key'))
 
 
+def test_learner_key_must_be_valid_and_different_from_session_key():
+    with pytest.raises(SettingsError, match='LEARNER_DATA_ENCRYPTION_KEY'):
+        load_settings(valid_environ(LEARNER_DATA_ENCRYPTION_KEY='not-a-key'))
+    same_key = Fernet.generate_key().decode()
+    with pytest.raises(SettingsError, match='LEARNER_DATA_ENCRYPTION_KEY'):
+        load_settings(valid_environ(SESSION_ENCRYPTION_KEY=same_key, LEARNER_DATA_ENCRYPTION_KEY=same_key))
+    distinct_key = Fernet.generate_key().decode()
+    assert load_settings(valid_environ(LEARNER_DATA_ENCRYPTION_KEY=distinct_key)).learner_data_encryption_key == distinct_key
+
+
 @pytest.mark.parametrize('name, value', [
     ('PUBLIC_BASE_URL', 'localhost:8080'),
     ('PUBLIC_BASE_URL', 'http://localhost:8080/app'),

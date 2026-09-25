@@ -29,6 +29,7 @@ class Settings:
     oidc_client_secret: str
     public_base_url: str
     session_encryption_key: str
+    learner_data_encryption_key: str = ''
     session_ttl_hours: int = 8
     session_revalidate_seconds: int = 120
     cookie_secure: bool = True
@@ -126,6 +127,15 @@ def load_settings(environ=None):
     except (ValueError, TypeError) as error:
         raise SettingsError(f'SESSION_ENCRYPTION_KEY must be a Fernet key; generate one with: {FERNET_KEY_HINT}') from error
 
+    learner_key = (environ.get('LEARNER_DATA_ENCRYPTION_KEY') or '').strip()
+    if learner_key:
+        try:
+            Fernet(learner_key)
+        except (ValueError, TypeError) as error:
+            raise SettingsError('LEARNER_DATA_ENCRYPTION_KEY must be a separate Fernet key') from error
+        if learner_key == encryption_key:
+            raise SettingsError('LEARNER_DATA_ENCRYPTION_KEY must differ from SESSION_ENCRYPTION_KEY')
+
     allowed_origins = tuple(
         normalize_origin(origin, 'ALLOWED_ORIGINS')
         for origin in (environ.get('ALLOWED_ORIGINS') or '').split(',')
@@ -139,6 +149,7 @@ def load_settings(environ=None):
         oidc_client_secret=environ['OIDC_CLIENT_SECRET'].strip(),
         public_base_url=normalize_origin(environ['PUBLIC_BASE_URL'], 'PUBLIC_BASE_URL'),
         session_encryption_key=encryption_key,
+        learner_data_encryption_key=learner_key,
         session_ttl_hours=_positive_int(environ, 'SESSION_TTL_HOURS', 8),
         session_revalidate_seconds=_positive_int(environ, 'SESSION_REVALIDATE_SECONDS', 120),
         cookie_secure=_boolean(environ, 'COOKIE_SECURE', True),
