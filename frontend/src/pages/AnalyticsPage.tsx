@@ -2,6 +2,7 @@ import { ChartNoAxesCombined, Download } from "lucide-react";
 import { useDashboard } from "../api/queries";
 import type { AnnualMetric } from "../api/types";
 import { AnnualChart } from "../components/AnnualChart";
+import { ChartDownloads } from "../components/ChartDownloads";
 import { RefreshError, queryFallback } from "../components/QueryState";
 import { formatNumber, toCsv } from "../lib/format";
 
@@ -37,10 +38,13 @@ export function AnalyticsPage() {
               <h2>Динамика образовательных программ</h2>
               <p>Сопоставимые полные годы</p>
             </div>
-            <button className="secondary" onClick={() => exportCsv(annual)}>
-              <Download size={16} />
-              CSV
-            </button>
+            <span className="chart-downloads">
+              <ChartDownloads chart="annual" title="Динамика образовательных программ" />
+              <button className="secondary" onClick={() => exportCsv(annual)}>
+                <Download size={14} />
+                CSV
+              </button>
+            </span>
           </div>
           <AnnualChart annual={annual} />
         </section>

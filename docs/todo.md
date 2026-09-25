@@ -51,7 +51,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
       audited; 10 parallel builds tested. Interactions can link to a catalog IT product.
 - [ ] Link the existing interactions to catalog IT products (the live catalog is empty — fill
       Справочники or import them first); until then product/direction filters match nothing.
-- [ ] Charts export to PNG / PDF (specification "visualization ... png, pdf"; T-053).
+- [x] Charts export to PNG / PDF (D-222): Аналитика and Обзор charts.
 - [ ] Notifications: in-app centre + email for "assigned to you", "overdue", "new comment",
       "review requested"; Настройки → Уведомления (currently a placeholder) becomes their settings.
 - [ ] Fill the other placeholder settings pages: Организация, Безопасность, Резервное
@@ -81,3 +81,23 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [ ] Test-client deprecation warnings (I-005); pin local Python to 3.12 like Docker/CI (I-006).
 - [ ] Code-split the frontend bundle (Vite warns about chunk size).
 - [ ] User and admin guides in the app (T-072); architecture and install docs (T-073).
+
+## Handover — state on 2026-09-25
+
+Live on unicrm.tech and pushed to `ai/design-tokens` (not yet merged into `main`):
+design tokens (D-216), Задачи list (D-217), task page (D-218), board cards (D-219), compact shell
+and density pass (D-220), reports module (D-221), chart PNG/PDF export (D-222).
+
+**Next, in order**
+1. Calendar view for tasks — a fourth «Календарь» tab next to Список/Сроки/Мой план: month grid
+   by `deadline` (and `planned_start` when set), same scope/filters as the list, drag to move a
+   deadline via the existing `PATCH /tasks/{id}` (as «Сроки» does, D-206). Frontend only.
+2. Owner: fill the IT product / direction catalogs and link interactions (reports filters by
+   product/direction match nothing until then). Do not seed placeholder catalog data.
+3. Housekeeping section above: PR into `main` after `ai/phone-verification` is merged, protect
+   `main`, `scripts/deploy-public.sh`, `CLAUDE.md`.
+4. Then: slide-over task panel, notifications, LMS/CMS connector (F-001), security headers.
+
+**How to deploy** (the laptop stack *is* production): `scripts/db-backup.sh <label>`, then
+`docker compose -f compose.yaml -f compose.public.yaml up -d --build api web`, then check
+`/api/v1/health`, the page, and that `/api/v1/auth/login` redirects to `https://unicrm.tech/auth/…`.

@@ -240,7 +240,7 @@ def _xls(columns, rows):
     return out.getvalue()
 
 
-def _register_fonts():
+def register_pdf_fonts():
     global _fonts_registered
     if not _fonts_registered:
         pdfmetrics.registerFont(TTFont('DejaVuSans', str(FONTS_DIR / 'DejaVuSans.ttf')))
@@ -249,7 +249,7 @@ def _register_fonts():
 
 
 def _pdf(columns, rows, subtitle):
-    _register_fonts()
+    register_pdf_fonts()
     body = ParagraphStyle('cell', fontName='DejaVuSans', fontSize=8, leading=10)
     head = ParagraphStyle('head', parent=body, fontName='DejaVuSans-Bold')
     title = ParagraphStyle('title', fontName='DejaVuSans-Bold', fontSize=14, leading=18)

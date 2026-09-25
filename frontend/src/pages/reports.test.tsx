@@ -124,3 +124,17 @@ describe("new interaction form", () => {
     expect(api.calls.find((c) => c.method === "POST")?.body).toMatchObject({ it_product_id: 3, product: "Учебная среда" });
   });
 });
+
+describe("chart downloads", () => {
+  it("offers PNG and PDF for the analytics chart and the overview pipeline", async () => {
+    mockApi();
+    renderApp("/analytics");
+    const png = await screen.findByRole("link", { name: "Скачать «Динамика образовательных программ» в PNG" });
+    expect(png.getAttribute("href")).toBe("/api/v1/charts/annual?format=png");
+    expect(screen.getByRole("link", { name: /в PDF/ }).getAttribute("href")).toBe("/api/v1/charts/annual?format=pdf");
+    renderApp("/");
+    expect(
+      (await screen.findByRole("link", { name: "Скачать «Цикл взаимодействия» в PDF" })).getAttribute("href"),
+    ).toBe("/api/v1/charts/interactions-by-status?format=pdf");
+  });
+});
