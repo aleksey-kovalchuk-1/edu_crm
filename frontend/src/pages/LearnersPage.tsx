@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router";
 import { useLearner, useLearners, useSaveLearner, type LearnerFull } from "../api/customerData";
 import { useSession } from "../app/AuthGate";
 import { Modal } from "../components/Modal";
@@ -47,10 +48,14 @@ const SECTIONS: { title: string; fields: Field[] }[] = [
 ];
 
 export function LearnersPage() {
+  const [params] = useSearchParams();
   const { user } = useSession();
   const canSeeFull = canEditCatalog(user.roles);
   const [search, setSearch] = useState("");
-  const [detailId, setDetailId] = useState<number>();
+  const [detailId, setDetailId] = useState<number | undefined>(() => {
+    const id = Number(params.get("id"));
+    return Number.isSafeInteger(id) && id > 0 ? id : undefined;
+  });
   const [creating, setCreating] = useState(false);
   const list = useLearners(useDebouncedValue(search));
   const detail = useLearner(canSeeFull ? detailId : undefined);

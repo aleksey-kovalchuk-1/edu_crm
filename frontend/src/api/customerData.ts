@@ -37,7 +37,13 @@ export interface ImportRow {
 export interface ImportReport {
   summary: { rows: number; valid: number; invalid: number; skipped: number; created: number; updated: number };
   rows: ImportRow[];
+  template_version?: string;
+  mapping?: Record<string, string>;
+  unmapped_headers?: string[];
+  batch_id?: number;
+  record_links?: { row_number: number; entity_type: "vendor_contact" | "learner" | "course_application"; entity_id: number; action: "created" | "updated" }[];
 }
+export interface ImportBatch { id: number; kind: ImportKind; template_version: string; created_at: string; summary: ImportReport["summary"] }
 
 const query = (params: Record<string, string | number | boolean | undefined>) => {
   const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== "");
@@ -50,6 +56,7 @@ const keys = {
   contacts: ["customer", "contacts"] as const,
   learners: ["customer", "learners"] as const,
   applications: ["customer", "applications"] as const,
+  importHistory: ["customer", "importHistory"] as const,
 };
 
 export const useVendorCompanies = (q = "", includeInactive = false) => useQuery({
@@ -107,23 +114,28 @@ export const useCourseApplications = (course = "", streamNumber = "") => useQuer
   queryFn: () => apiRequest<CourseApplication[]>(`/course-applications${query({ course, stream_number: streamNumber })}`),
 });
 
-function upload(kind: ImportKind, phase: "preview" | "apply", file: File, resolved?: Record<string, number>) {
+function upload(kind: ImportKind, phase: "preview" | "apply", file: File, resolved?: Record<string, number>, mapping?: Record<string, string>) {
   const data = new FormData();
   data.append("file", file);
   if (resolved) data.append("resolved_learner_ids", JSON.stringify(resolved));
+  if (mapping) data.append("mapping", JSON.stringify(mapping));
   return apiRequest<ImportReport>(`/customer-imports/${kind}/${phase}`, "POST", data);
 }
 export function usePreviewCustomerImport() {
-  return useMutation({ mutationFn: ({ kind, file }: { kind: ImportKind; file: File }) => upload(kind, "preview", file) });
+  return useMutation({ mutationFn: ({ kind, file, mapping }: { kind: ImportKind; file: File; mapping?: Record<string, string> }) => upload(kind, "preview", file, undefined, mapping) });
 }
 export function useApplyCustomerImport() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: ({ kind, file, resolved }: { kind: ImportKind; file: File; resolved?: Record<string, number> }) =>
-      upload(kind, "apply", file, resolved),
+    mutationFn: ({ kind, file, resolved, mapping }: { kind: ImportKind; file: File; resolved?: Record<string, number>; mapping?: Record<string, string> }) =>
+      upload(kind, "apply", file, resolved, mapping),
     onSuccess: () => {
       for (const key of Object.values(keys)) void client.invalidateQueries({ queryKey: key });
       invalidateAudit(client);
     },
   });
 }
+export const useCustomerImportHistory = () => useQuery({
+  queryKey: keys.importHistory,
+  queryFn: () => apiRequest<ImportBatch[]>("/customer-imports/history"),
+});
