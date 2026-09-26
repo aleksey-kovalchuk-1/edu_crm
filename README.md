@@ -31,7 +31,7 @@ docker compose up --build -d
 - API Swagger: http://localhost:8080/api/docs (схема OpenAPI: http://localhost:8080/api/openapi.json)
 - Проверка API: http://localhost:8080/api/v1/health
 - Коды ошибок API: [docs/api/errors.md](docs/api/errors.md)
-- Компании, анкеты слушателей, заявки и загрузка файлов: [docs/api/customer-data.md](docs/api/customer-data.md). Перед загрузкой реальных анкет выполните условия защиты резервных копий из [docs/operations/backup.md](docs/operations/backup.md).
+- Компании, анкеты слушателей, заявки и загрузка файлов: [docs/api/customer-data.md](docs/api/customer-data.md). Перед загрузкой реальных анкет выполните условия готовности из [docs/operations/backup.md](docs/operations/backup.md): зашифрованные копии базы и вложений, ограничение доступа и срока хранения, восстановление с ключами и проверка прав на анкеты и журнала действий.
 
 Данные PostgreSQL сохраняются в volume `postgres_data`. `docker compose down` сохраняет этот volume. Для пустой БД установите `SEED_DEMO=false` до первого запуска. Демоданные добавляются один раз при старте контейнера `api` (`python -m app.seed`) и не дублируются при перезапуске. API запускается в нескольких процессах (`WEB_CONCURRENCY`, по умолчанию 4).
 
