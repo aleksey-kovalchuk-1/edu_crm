@@ -22,6 +22,18 @@ const MANUAL_FIELDS: Record<ImportKind, { value: string; label: string }[]> = {
   applications: [],
 };
 const CARD_PATH = { vendor_contact: "/vendors", learner: "/learners", course_application: "/applications" };
+const SIGNAL_LABELS: Record<string, string> = {
+  application_number_conflict: "Конфликт номера заявки",
+  learner_match_conflict: "Неоднозначное совпадение анкет",
+  shared_contact: "Общий контакт",
+  document_identifier_reuse: "Повтор документа",
+  batch_repetition: "Повтор в файле",
+  import_velocity: "Необычный объём загрузок",
+};
+const PRIORITY_LABELS = { low: "низкий", medium: "средний", high: "высокий" };
+function signalText(signal: { rule_code: string; priority: "low" | "medium" | "high" }) {
+  return `${SIGNAL_LABELS[signal.rule_code] ?? signal.rule_code} (${PRIORITY_LABELS[signal.priority]})`;
+}
 function columnWord(count: number) {
   if (count % 100 >= 11 && count % 100 <= 14) return "столбцов";
   return count % 10 === 1 ? "столбец" : count % 10 >= 2 && count % 10 <= 4 ? "столбца" : "столбцов";
@@ -40,6 +52,7 @@ function CustomerImportWorkspace() {
   const [applied, setApplied] = useState(false);
   const [resolved, setResolved] = useState<Record<string, number>>({});
   const [manual, setManual] = useState<Record<string, string>>({});
+  const [approvedMapping, setApprovedMapping] = useState<Record<string, string> | undefined>();
   const [mappingReviewed, setMappingReviewed] = useState(true);
   const preview = usePreviewCustomerImport();
   const apply = useApplyCustomerImport();
@@ -50,7 +63,7 @@ function CustomerImportWorkspace() {
   const actionable = report?.rows.some((row) => row.status === "ok" ||
     (row.candidate_ids.length > 0 && !!resolved[String(row.row_number)]));
   function selectedMapping() {
-    if (!report || !Object.values(manual).some(Boolean)) return undefined;
+    if (!report || (!Object.values(manual).some(Boolean) && !Object.keys(report.mapping_conflicts ?? {}).length)) return undefined;
     const mapping = { ...report.mapping };
     for (const [header, field] of Object.entries(manual)) {
       if (!field) continue;
@@ -60,17 +73,19 @@ function CustomerImportWorkspace() {
     }
     return mapping;
   }
-  function clear() { setReport(null); setApplied(false); setResolved({}); setManual({}); setMappingReviewed(true); preview.reset(); apply.reset(); }
+  function clear() { setReport(null); setApplied(false); setResolved({}); setManual({}); setApprovedMapping(undefined); setMappingReviewed(true); preview.reset(); apply.reset(); }
   async function runPreview(mapping?: Record<string, string>) {
     if (!file) return;
     const next = await preview.mutateAsync({ kind, file, mapping });
     setReport(next);
     setApplied(false);
-    setMappingReviewed(true);
+    setManual({});
+    setApprovedMapping(mapping);
+    setMappingReviewed(!Object.keys(next.mapping_conflicts ?? {}).length);
   }
   async function runApply() {
     if (!file || !report) return;
-    const next = await apply.mutateAsync({ kind, file, resolved, mapping: selectedMapping() });
+    const next = await apply.mutateAsync({ kind, file, resolved, mapping: approvedMapping });
     setReport(next);
     setApplied(true);
   }
@@ -93,16 +108,20 @@ function CustomerImportWorkspace() {
           onClick={() => void runApply()}>Применить</button> : null}
       </div>
       <p>Строк: {report.summary.rows}. Подходят: {report.summary.valid}. Ошибок: {report.summary.invalid}. Пропущено: {report.summary.skipped}.</p>
+      {report.batch_signals?.length ? <p className="form-note">Сигналы пакета: {report.batch_signals.map(signalText).join("; ")}.</p> : null}
       {report.mapping ? <p>{Object.keys(report.mapping).length} {columnWord(Object.keys(report.mapping).length)} распознано. Шаблон: {report.template_version}.</p> : null}
       {report.mapping ? <details><summary>Сопоставление столбцов</summary><ul>{Object.entries(report.mapping).map(([field, header]) =>
         <li key={field}>{header} → {field}</li>)}</ul></details> : null}
+      {Object.keys(report.mapping_conflicts ?? {}).length ? <p className="form-note">
+        Несколько столбцов подходят для одного поля. Проверьте выбор и подтвердите сопоставление. Если заголовки одинаковые, переименуйте один из них в файле.
+      </p> : null}
       {report.unmapped_headers?.length ? <div className="form-note"><p>Не перенесены: {report.unmapped_headers.join(", ")}</p>
         {!applied && kind !== "applications" ? <>
           {report.unmapped_headers.map((header) => <label key={header}>{header} → <select value={manual[header] ?? ""}
             onChange={(event) => { setManual((current) => ({ ...current, [header]: event.target.value })); setMappingReviewed(false); }}>
             <option value="">Не переносить</option>{MANUAL_FIELDS[kind].map((field) => <option key={field.value} value={field.value}>{field.label}</option>)}
           </select></label>)}
-          <button type="button" disabled={!Object.values(manual).some(Boolean) || preview.isPending}
+          <button type="button" disabled={mappingReviewed || preview.isPending}
             onClick={() => void runPreview(selectedMapping())}>Проверить сопоставление</button>
         </> : null}
       </div> : null}
@@ -112,7 +131,7 @@ function CustomerImportWorkspace() {
         <th scope="col">Строка</th><th scope="col">Результат</th><th scope="col">Сообщение</th><th scope="col">Сопоставление</th>
       </tr></thead><tbody>{report.rows.map((row) => <tr key={row.row_number}>
         <td>{row.row_number}</td><td>{row.status === "ok" ? "Готово" : row.status === "skipped" ? "Пропущено" : "Ошибка"}</td>
-        <td>{[...row.errors, ...row.warnings].join("; ") || "—"}</td>
+        <td>{[...row.errors, ...row.warnings, ...(row.signals ?? []).map(signalText)].join("; ") || "—"}</td>
         <td>{applied && report.record_links?.some((link) => link.row_number === row.row_number) ? (() => {
           const link = report.record_links!.find((item) => item.row_number === row.row_number)!;
           return <a href={`${CARD_PATH[link.entity_type]}?id=${link.entity_id}`}>Открыть карточку #{link.entity_id}</a>;

@@ -33,6 +33,7 @@ export type ImportKind = "vendors" | "learners" | "applications";
 export interface ImportRow {
   row_number: number; status: "ok" | "error" | "skipped";
   action: "created" | "updated" | null; errors: string[]; warnings: string[]; candidate_ids: number[];
+  signals?: { rule_code: string; priority: "low" | "medium" | "high"; evidence_kind?: string | null }[];
 }
 export interface ImportReport {
   summary: { rows: number; valid: number; invalid: number; skipped: number; created: number; updated: number };
@@ -40,6 +41,8 @@ export interface ImportReport {
   template_version?: string;
   mapping?: Record<string, string>;
   unmapped_headers?: string[];
+  mapping_conflicts?: Record<string, string[]>;
+  batch_signals?: ImportRow["signals"];
   batch_id?: number;
   record_links?: { row_number: number; entity_type: "vendor_contact" | "learner" | "course_application"; entity_id: number; action: "created" | "updated" }[];
 }

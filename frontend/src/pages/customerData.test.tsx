@@ -151,7 +151,9 @@ describe("customer data pages", () => {
       unmapped_headers: ["Дополнительное поле"],
       summary: { rows: 1, valid: 1, invalid: 0, skipped: 0, created: 1, updated: 0 },
       rows: [{ row_number: 2, status: "ok", action: "created", errors: [],
-        warnings: ["Телефон был числом Excel; проверьте исходную ячейку"], candidate_ids: [] }] };
+        warnings: ["Телефон был числом Excel; проверьте исходную ячейку"], candidate_ids: [],
+        signals: [{ rule_code: "document_identifier_reuse", priority: "high" }] }],
+      batch_signals: [{ rule_code: "import_velocity", priority: "medium" }] };
     mockApi({
       "GET /customer-imports/history": () => [{ id: 5, kind: "learners", created_at: "2026-09-26T12:00:00Z",
         template_version: "customer-learners-v1", summary: report.summary }],
@@ -167,6 +169,8 @@ describe("customer data pages", () => {
     expect(await screen.findByText(/2 столбца распознано/)).toBeTruthy();
     expect(screen.getByText(/Не перенесены: Дополнительное поле/)).toBeTruthy();
     expect(screen.getByText(/Телефон был числом Excel/)).toBeTruthy();
+    expect(screen.getByText(/Повтор документа \(высокий\)/)).toBeTruthy();
+    expect(screen.getByText(/Необычный объём загрузок \(средний\)/)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Применить" }));
     expect((await screen.findByRole("link", { name: /Открыть карточку/ }) as HTMLAnchorElement).pathname).toBe("/learners");
   });
@@ -181,5 +185,30 @@ describe("customer data pages", () => {
     fireEvent.change(screen.getByLabelText("Файл"), { target: { files: [new File(["demo"], "blank.xlsx")] } });
     fireEvent.click(screen.getByRole("button", { name: "Проверить файл" }));
     expect((await screen.findByRole("button", { name: "Применить" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("requires a second preview for duplicate columns and keeps the approved choice for apply", async () => {
+    const summary = { rows: 1, valid: 1, invalid: 0, skipped: 0, created: 1, updated: 0 };
+    const row = { row_number: 2, status: "ok", action: "created", errors: [], warnings: [], candidate_ids: [] };
+    const mapping = { last_name: "Фамилия", first_name: "Имя", phone: "Телефон" };
+    let previews = 0;
+    const api = mockApi({
+      "POST /customer-imports/learners/preview": () => ({ summary, rows: [row], mapping,
+        unmapped_headers: ["Номер телефона"],
+        mapping_conflicts: ++previews === 1 ? { phone: ["Телефон", "Номер телефона"] } : {} }),
+      "POST /customer-imports/learners/apply": () => ({ summary, rows: [row] }),
+    });
+    renderApp("/customer-imports");
+    fireEvent.change(await screen.findByLabelText("Вид данных"), { target: { value: "learners" } });
+    fireEvent.change(screen.getByLabelText("Файл"), { target: { files: [new File(["demo"], "synthetic.xlsx")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить файл" }));
+    expect((await screen.findByRole("button", { name: "Применить" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Проверить сопоставление" }));
+    await waitFor(() => expect(previews).toBe(2));
+    expect((screen.getByRole("button", { name: "Применить" }) as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+    await waitFor(() => expect(api.count("POST", "/customer-imports/learners/apply")).toBe(1));
+    const body = api.calls.find((call) => call.path.includes("/customer-imports/learners/apply"))?.body as FormData;
+    expect(JSON.parse(body.get("mapping") as string)).toEqual(mapping);
   });
 });
