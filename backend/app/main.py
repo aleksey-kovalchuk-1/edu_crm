@@ -90,7 +90,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
 
     # Documentation lives under /api because nginx only proxies that prefix to the API.
     app = FastAPI(
-        title='Образование CRM API',
+        title='UniCRM API',
         version='0.1.0',
         lifespan=lifespan,
         description='CRM взаимодействия с учебными заведениями. Вход — через Keycloak (`/api/v1/auth/login`); коды ошибок — docs/api/errors.md.',

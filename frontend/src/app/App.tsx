@@ -24,6 +24,7 @@ import { SettingsAccountPage } from "../pages/settings/SettingsAccountPage";
 import { SettingsBackupsPage } from "../pages/settings/SettingsBackupsPage";
 import { SettingsNotificationsPage } from "../pages/settings/SettingsNotificationsPage";
 import { SettingsOrganizationPage } from "../pages/settings/SettingsOrganizationPage";
+import { SettingsUniversitiesPage } from "../pages/settings/SettingsUniversitiesPage";
 import { SettingsPersonalDataPage } from "../pages/settings/SettingsPersonalDataPage";
 import { SettingsProfilePage } from "../pages/settings/SettingsProfilePage";
 import { SettingsSecurityPage } from "../pages/settings/SettingsSecurityPage";
@@ -68,6 +69,7 @@ export function AppRoutes() {
           />
           <Route path="settings/profile" element={<SettingsProfilePage />} />
           <Route path="settings/organization" element={<SettingsOrganizationPage />} />
+          <Route path="settings/universities" element={<SettingsUniversitiesPage />} />
           <Route path="settings/notifications" element={<SettingsNotificationsPage />} />
           <Route path="settings/security" element={<SettingsSecurityPage />} />
           <Route path="settings/users" element={<SettingsUsersPage />} />

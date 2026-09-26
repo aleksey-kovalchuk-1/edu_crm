@@ -15,9 +15,11 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
       `ai/registration-polish`, `ai/integration-candidate` all diverge from `main` (D-158). Decide
       the merge order, merge, delete stale branches/worktrees.
 - [ ] Protect `main` (P-003) so the live site is only ever deployed from reviewed code.
-- [ ] Write a one-command deploy script (`scripts/deploy-public.sh`: backup → rebuild api/web with
-      both compose files → health + login-redirect check), so a deploy can't drop the public
-      overlay again.
+- [x] Write a one-command deploy script (`scripts/deploy-public.sh`: encrypted database and
+      attachment backups → rebuild api/web with both compose files → health + login redirect).
+- [ ] Replace the six demonstration universities with the customer's ten confirmed Rostelecom
+      partner universities after receiving their exact names; review linked demo tasks before
+      changing any existing records. New universities can already be added in Settings.
 - [ ] Add `CLAUDE.md` (stack, commands, conventions, "the laptop stack *is* production").
 
 ## 1. Design and UX (F-002)
