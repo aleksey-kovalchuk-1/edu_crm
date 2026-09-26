@@ -19,6 +19,7 @@ def upgrade() -> None:
         sa.Column('dedupe_key', sa.String(200), nullable=False),
         sa.Column('rule_code', sa.String(60), nullable=False),
         sa.Column('rule_version', sa.Integer(), nullable=False),
+        sa.Column('evidence_kind', sa.String(30)),
         sa.Column('priority', sa.String(10), nullable=False),
         sa.Column('status', sa.String(20), server_default='open', nullable=False),
         sa.Column('entity_type', sa.String(30)),

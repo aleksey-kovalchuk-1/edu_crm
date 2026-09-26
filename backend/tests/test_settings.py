@@ -1,4 +1,5 @@
 import pytest
+import base64
 from cryptography.fernet import Fernet
 
 from app.main import create_app
@@ -52,6 +53,20 @@ def test_learner_key_must_be_valid_and_different_from_session_key():
         load_settings(valid_environ(SESSION_ENCRYPTION_KEY=same_key, LEARNER_DATA_ENCRYPTION_KEY=same_key))
     distinct_key = Fernet.generate_key().decode()
     assert load_settings(valid_environ(LEARNER_DATA_ENCRYPTION_KEY=distinct_key)).learner_data_encryption_key == distinct_key
+
+
+def test_fraud_match_key_is_separate_and_coverage_requires_it():
+    with pytest.raises(SettingsError, match='FRAUD_MATCH_KEY'):
+        load_settings(valid_environ(FRAUD_MATCH_KEY='short'))
+    with pytest.raises(SettingsError, match='FRAUD_MATCH_COVERAGE_COMPLETE'):
+        load_settings(valid_environ(FRAUD_MATCH_COVERAGE_COMPLETE='true'))
+    session_key = Fernet.generate_key().decode()
+    with pytest.raises(SettingsError, match='FRAUD_MATCH_KEY'):
+        load_settings(valid_environ(SESSION_ENCRYPTION_KEY=session_key, FRAUD_MATCH_KEY=session_key))
+    fraud_key = base64.urlsafe_b64encode(b'x' * 32).decode()
+    settings = load_settings(valid_environ(FRAUD_MATCH_KEY=fraud_key, FRAUD_MATCH_KEY_VERSION='2'))
+    assert settings.fraud_match_key_version == 2
+    assert settings.fraud_match_coverage_complete is False
 
 
 @pytest.mark.parametrize('name, value', [

@@ -13,6 +13,8 @@ from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_r
 from .catalog_routes import _email, like_pattern, not_found
 from .db import get_db
 from .errors import AppError, ErrorCode
+from .fraud_alerts import upsert_alert
+from .fraud_fingerprint import sync_fingerprints
 from .models import Learner
 
 router = APIRouter(prefix='/api/v1/learners', tags=['Слушатели'])
@@ -187,6 +189,8 @@ def create_learner(data: LearnerIn, request: Request, auth: AuthContext = Depend
     apply_fields(record, data.model_dump(exclude_none=True), request)
     db.add(record)
     db.flush()
+    for signal in sync_fingerprints(db, record, request):
+        upsert_alert(db, signal, None)
     record_event(db, request, auth.user, 'learner.create', entity_type='learner', entity_id=record.id,
                  summary='Создана анкета слушателя', payload={})
     db.commit()
@@ -202,6 +206,8 @@ def update_learner(learner_id: int, data: LearnerPatch, request: Request,
     submitted = data.model_dump(exclude_unset=True)
     if submitted:
         apply_fields(record, submitted, request)
+        for signal in sync_fingerprints(db, record, request):
+            upsert_alert(db, signal, None)
         record_event(db, request, auth.user, 'learner.update', entity_type='learner', entity_id=record.id,
                      summary='Изменена анкета слушателя', payload={'fields': sorted(submitted)})
         db.commit()

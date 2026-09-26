@@ -608,6 +608,7 @@ class FraudAlert(Base):
     dedupe_key: Mapped[str] = mapped_column(String(200), unique=True)
     rule_code: Mapped[str] = mapped_column(String(60))
     rule_version: Mapped[int]
+    evidence_kind: Mapped[str | None] = mapped_column(String(30))
     priority: Mapped[str] = mapped_column(String(10))
     status: Mapped[str] = mapped_column(String(20), default='open', server_default='open')
     entity_type: Mapped[str | None] = mapped_column(String(30))
@@ -620,6 +621,18 @@ class FraudAlert(Base):
     reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
     reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     resolution_code: Mapped[str | None] = mapped_column(String(60))
+
+
+class LearnerFingerprint(Base):
+    __tablename__ = 'learner_fingerprints'
+    __table_args__ = (
+        CheckConstraint("kind in ('snils', 'passport_pair')", name='kind'),
+        Index('ix_learner_fingerprints_lookup', 'kind', 'key_version', 'digest'),
+    )
+    learner_id: Mapped[int] = mapped_column(ForeignKey('learners.id', ondelete='CASCADE'), primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20), primary_key=True)
+    key_version: Mapped[int] = mapped_column(primary_key=True)
+    digest: Mapped[str] = mapped_column(String(64))
 
 
 class UniversityContact(Base):

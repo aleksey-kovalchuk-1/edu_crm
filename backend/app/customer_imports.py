@@ -12,6 +12,7 @@ from sqlalchemy import select
 
 from .errors import AppError, ErrorCode
 from .fraud_rules import FraudSignal, evaluate_application, evaluate_learner_match_conflict, evaluate_shared_contact
+from .fraud_fingerprint import sync_fingerprints
 from .importer import ImportFileError, MAX_DATA_ROWS, MAX_FILE_BYTES, normalize_header, parse_date, read_upload
 from .learner_routes import LearnerIn, apply_fields
 from .models import CourseApplication, ITProduct, Learner, VendorCompany, VendorContact
@@ -358,6 +359,7 @@ class CustomerImportRunner:
                 apply_fields(match, validated, self.request)
                 self.db.add(match)
                 self.db.flush()
+                self.row_signals.extend(sync_fingerprints(self.db, match, self.request))
             else:
                 match = SimpleNamespace(id=-len(self.learners)-1, phone=validated.get('phone'), email=validated.get('email'),
                                         last_name=validated['last_name'], first_name=validated['first_name'])
@@ -371,6 +373,7 @@ class CustomerImportRunner:
         if self.apply:
             apply_fields(match, validated, self.request)
             self.current_entity = ('learner', match.id)
+            self.row_signals.extend(sync_fingerprints(self.db, match, self.request))
         shared_signals = evaluate_shared_contact(shared_ids, match.id, self.current_row_number)
         if shared_signals:
             self.row_warnings.append('Контакт уже встречается у другой анкеты; проверьте совпадение')
