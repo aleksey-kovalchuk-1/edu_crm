@@ -87,6 +87,7 @@ async def preview(kind: Kind, request: Request, file: UploadFile = File(...),
     db.rollback()
     return {**report, 'template_version': parsed.template_version,
             'mapping': parsed.mapping, 'unmapped_headers': parsed.unmapped_headers,
+            'mapping_conflicts': parsed.mapping_conflicts or {},
             'batch_signals': [asdict(signal) for signal in batch_signals]}
 
 
@@ -139,6 +140,8 @@ async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...
         raise AppError(ErrorCode.VALIDATION_ERROR, 'Некорректные решения по совпадениям слушателей') from error
     content = await file.read(10 * 1024 * 1024 + 1)
     parsed = read_customer_file(kind, file.filename or '', content, selected_mapping=parse_mapping(mapping))
+    if parsed.mapping_conflicts:
+        raise AppError(ErrorCode.VALIDATION_ERROR, 'Разрешите неоднозначное сопоставление столбцов перед загрузкой')
     if not parsed.rows:
         raise AppError(ErrorCode.VALIDATION_ERROR, 'В файле нет строк для применения')
     report = CustomerImportRunner(db, request, apply=True, resolved_learner_ids=resolutions).run(kind, parsed.rows)
@@ -161,4 +164,5 @@ async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...
     db.commit()
     return {**report, 'batch_id': batch.id, 'template_version': parsed.template_version,
             'mapping': parsed.mapping, 'unmapped_headers': parsed.unmapped_headers,
+            'mapping_conflicts': parsed.mapping_conflicts or {},
             'batch_signals': [asdict(signal) for signal in batch_signals]}

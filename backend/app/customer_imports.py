@@ -12,7 +12,7 @@ from sqlalchemy import select
 
 from .errors import AppError, ErrorCode
 from .fraud_rules import FraudSignal, evaluate_application, evaluate_learner_match_conflict, evaluate_shared_contact
-from .fraud_fingerprint import sync_fingerprints
+from .fraud_fingerprint import preview_document_matches, sync_fingerprints
 from .importer import ImportFileError, MAX_DATA_ROWS, MAX_FILE_BYTES, normalize_header, parse_date, read_upload
 from .learner_routes import LearnerIn, apply_fields
 from .models import CourseApplication, ITProduct, Learner, VendorCompany, VendorContact
@@ -85,6 +85,7 @@ class CustomerFile:
     mapping: dict[str, str]
     unmapped_headers: list[str]
     rows: list[tuple[int, dict | None]]
+    mapping_conflicts: dict[str, list[str]] | None = None
 
 
 def key(value):
@@ -148,6 +149,7 @@ def read_customer_file(kind, filename, content, *, selected_mapping=None):
     mapping = {}
     by_index = {}
     unknown = []
+    conflicts = {}
     if selected_mapping is not None:
         if not isinstance(selected_mapping, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in selected_mapping.items()):
             raise AppError(ErrorCode.VALIDATION_ERROR, 'Некорректное сопоставление столбцов')
@@ -168,7 +170,9 @@ def read_customer_file(kind, filename, content, *, selected_mapping=None):
             if normalized in columns:
                 field = columns[normalized]
                 if field in mapping:
-                    raise AppError(ErrorCode.VALIDATION_ERROR, 'Два столбца соответствуют одному полю анкеты')
+                    conflicts.setdefault(field, [mapping[field]]).append(header)
+                    unknown.append(header)
+                    continue
                 mapping[field] = header
                 by_index[index] = field
             elif not re.fullmatch(r'Столбец \d+', header):
@@ -183,7 +187,7 @@ def read_customer_file(kind, filename, content, *, selected_mapping=None):
     template = VENDOR_TEMPLATE_HEADERS if kind == 'vendors' else LEARNER_TEMPLATE_HEADERS
     exact = [normalize_header(header) for header in sheet.headers[:len(template)]] == [normalize_header(header) for header in template]
     version = f'customer-{kind}-v1' if exact else f'customer-{kind}-custom'
-    return CustomerFile(kind, version, sheet.headers, mapping, unknown, rows)
+    return CustomerFile(kind, version, sheet.headers, mapping, unknown, rows, conflicts)
 
 
 class CustomerImportRunner:
@@ -353,6 +357,10 @@ class CustomerImportRunner:
         if match is not None and (key(match.last_name) != key(validated['last_name']) or
                                   key(match.first_name) != key(validated['first_name'])):
             match = None
+        if not self.apply:
+            self.row_signals.extend(preview_document_matches(
+                self.db, validated, self.request, learner=match if isinstance(match, Learner) else None,
+                row_number=self.current_row_number))
         if match is None:
             if self.apply:
                 match = Learner(last_name=validated['last_name'], first_name=validated['first_name'])
@@ -398,7 +406,9 @@ class CustomerImportRunner:
         existing = self.applications.get(number)
         if existing is not None:
             proposed = self.match_learner(values.get('phone'), values.get('email'))
-            signals = evaluate_application(existing, proposed.id if proposed is not None else None,
+            same_name = (key(existing.learner.last_name) == key(values['last_name']) and
+                         key(existing.learner.first_name) == key(values['first_name']))
+            signals = evaluate_application(existing, proposed.id if proposed is not None and same_name else None,
                                            course, stream, self.current_row_number)
             if signals:
                 raise ImportRowError('Номер заявки противоречит сохранённой карточке; требуется проверка', signals=signals)
@@ -407,6 +417,14 @@ class CustomerImportRunner:
                 self.current_entity = ('course_application', existing.id)
             return 'updated', 1
         learner = self.match_learner(values.get('phone'), values.get('email'))
+        shared_ids = {row.id for row in self.learners if
+                      (values.get('phone') and phone_key(row.phone) == phone_key(values['phone'])) or
+                      (values.get('email') and email_key(row.email) == email_key(values['email']))}
+        explicitly_resolved = self.resolved_learner_ids.get(str(self.current_row_number)) == getattr(learner, 'id', None)
+        if learner is not None and not explicitly_resolved and (
+                key(learner.last_name) != key(values['last_name']) or
+                key(learner.first_name) != key(values['first_name'])):
+            learner = None
         if learner is None:
             values['last_name'] = str(values['last_name']).strip()
             values['first_name'] = str(values['first_name']).strip()
@@ -417,8 +435,13 @@ class CustomerImportRunner:
                 self.db.add(learner)
                 self.db.flush()
             else:
-                learner = SimpleNamespace(id=-len(self.learners)-1, phone=values.get('phone'), email=values.get('email'))
+                learner = SimpleNamespace(id=-len(self.learners)-1, phone=values.get('phone'), email=values.get('email'),
+                                          last_name=values['last_name'], first_name=values['first_name'])
             self.learners.append(learner)
+            shared_signals = evaluate_shared_contact(shared_ids, learner.id, self.current_row_number)
+            if shared_signals:
+                self.row_warnings.append('Контакт уже встречается у другой анкеты; проверьте совпадение')
+                self.row_signals.extend(shared_signals)
         application = CourseApplication(external_number=number, course=course, stream_number=stream,
                                         learner_id=learner.id) if self.apply else SimpleNamespace(external_number=number)
         if self.apply:

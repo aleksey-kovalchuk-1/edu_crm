@@ -105,6 +105,32 @@ def test_shared_family_phone_does_not_merge_distinct_learners(head):
     assert result['record_links'][0]['entity_id'] != first['id']
 
 
+def test_application_with_shared_phone_keeps_distinct_learner_names(head):
+    first = head.post('/api/v1/learners', json={'last_name': 'Один', 'first_name': 'Тест',
+                                               'phone': '79000000001'}).json()
+    item = {**applications()[0], 'Фамилия': 'Другой', 'Имя': 'Слушатель'}
+    content = json.dumps([item], ensure_ascii=False).encode()
+    preview = upload(head, 'applications', 'preview', content, 'synthetic.json').json()
+    assert preview['rows'][0]['signals'][0]['rule_code'] == 'shared_contact'
+    applied = upload(head, 'applications', 'apply', content, 'synthetic.json').json()
+    assert applied['summary']['created'] == 1
+    assert head.get('/api/v1/course-applications').json()[0]['learner_name'] == 'Другой Слушатель Иванович'
+    assert len(head.get('/api/v1/learners').json()) == 2
+    assert head.get('/api/v1/course-applications').json()[0]['learner_id'] != first['id']
+
+
+def test_existing_application_rejects_changed_name_even_with_same_contact(head):
+    item = applications()[0]
+    content = json.dumps([item], ensure_ascii=False).encode()
+    assert upload(head, 'applications', 'apply', content, 'synthetic.json').status_code == 200
+    changed = {**item, 'Фамилия': 'Подмененный'}
+    result = upload(head, 'applications', 'apply', json.dumps([changed], ensure_ascii=False).encode(),
+                    'synthetic.json').json()
+    assert result['summary']['invalid'] == 1
+    assert result['rows'][0]['signals'][0]['rule_code'] == 'application_number_conflict'
+    assert head.get('/api/v1/course-applications').json()[0]['learner_name'] == 'Тестов Иван Иванович'
+
+
 def test_import_velocity_warns_without_blocking_rows(head):
     head.app.state.settings = replace(head.app.state.settings, fraud_batch_row_limit=1, fraud_hourly_import_limit=1)
     content = json.dumps([applications()[0], None], ensure_ascii=False).encode()
@@ -279,15 +305,23 @@ def test_customer_import_is_supervisor_only(app, keycloak):
         assert upload(client, 'learners', 'apply', content, 'blank.xlsx').status_code == 403
 
 
-def test_duplicate_target_needs_manual_mapping():
+def test_duplicate_target_previews_but_apply_needs_manual_mapping(head):
     content = workbook(['Фамилия', 'Имя', 'Телефон', 'Номер телефона'],
                        [['Тестов', 'Иван', '79000000001', '79000000001']])
-    with pytest.raises(customer_imports.AppError):
-        customer_imports.read_customer_file('learners', 'synthetic.xlsx', content)
+    preview = upload(head, 'learners', 'preview', content, 'synthetic.xlsx')
+    assert preview.status_code == 200, preview.text
+    assert preview.json()['mapping_conflicts'] == {'phone': ['Телефон', 'Номер телефона']}
+    assert upload(head, 'learners', 'apply', content, 'synthetic.xlsx').status_code == 422
     parsed = customer_imports.read_customer_file('learners', 'synthetic.xlsx', content,
                                                  selected_mapping={'last_name': 'Фамилия', 'first_name': 'Имя',
                                                                    'phone': 'Номер телефона'})
     assert parsed.unmapped_headers == ['Телефон']
+    assert parsed.mapping_conflicts == {}
+    mapped = head.post('/api/v1/customer-imports/learners/apply',
+                       files={'file': ('synthetic.xlsx', content)},
+                       data={'mapping': json.dumps(parsed.mapping)})
+    assert mapped.status_code == 200, mapped.text
+    assert mapped.json()['summary']['created'] == 1
 
 
 def test_apply_records_safe_batch_history_and_card_link(head, database_url):

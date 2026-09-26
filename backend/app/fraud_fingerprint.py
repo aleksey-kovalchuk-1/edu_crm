@@ -4,11 +4,12 @@ import hashlib
 import hmac
 import re
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
+from .audit import record_event
 from .errors import AppError, ErrorCode
 from .fraud_rules import FraudSignal
-from .models import LearnerFingerprint
+from .models import FraudAlert, LearnerFingerprint, utcnow
 
 
 def normalize_snils(value):
@@ -35,6 +36,70 @@ def _decrypted(record, field, cipher):
     return value
 
 
+def normalized_record_values(record, cipher):
+    return {
+        'snils': normalize_snils(_decrypted(record, 'snils', cipher)),
+        'passport_pair': normalize_passport_pair(_decrypted(record, 'passport_series', cipher),
+                                                   _decrypted(record, 'passport_number', cipher)),
+    }
+
+
+def preview_document_matches(db, values, request, *, learner=None, row_number=None):
+    """Check submitted identifiers without storing a fingerprint or source value."""
+    settings = request.app.state.settings
+    if not settings.fraud_match_key or not settings.fraud_match_coverage_complete:
+        return []
+    cipher = request.app.state.learner_cipher
+    def effective(field):
+        if field in values:
+            return values[field]
+        return _decrypted(learner, field, cipher) if learner is not None else ''
+
+    candidates = {
+        'snils': normalize_snils(effective('snils')),
+        'passport_pair': normalize_passport_pair(effective('passport_series'), effective('passport_number')),
+    }
+    key = base64.urlsafe_b64decode(settings.fraud_match_key)
+    learner_id = learner.id if learner is not None else None
+    signals = []
+    for kind, value in candidates.items():
+        if not value:
+            continue
+        digest = fingerprint(kind, value, key)
+        query = select(LearnerFingerprint).where(
+            LearnerFingerprint.kind == kind,
+            LearnerFingerprint.key_version == settings.fraud_match_key_version,
+            LearnerFingerprint.digest == digest,
+        )
+        if learner_id is not None:
+            query = query.where(LearnerFingerprint.learner_id != learner_id)
+        for match in db.scalars(query).all():
+            signals.append(FraudSignal('document_identifier_reuse', 1, 'high', 'learner',
+                                       learner_id, match.learner_id, row_number, kind))
+    return signals
+
+
+def clear_stale_document_alerts(db, learner_id, kind, version, current_digest):
+    """Close unresolved pairs that no longer share a current document fingerprint."""
+    alerts = db.scalars(select(FraudAlert).where(
+        FraudAlert.rule_code == 'document_identifier_reuse', FraudAlert.evidence_kind == kind,
+        FraudAlert.status.in_(('open', 'in_review')),
+        or_(FraudAlert.entity_id == learner_id, FraudAlert.related_entity_id == learner_id))).all()
+    for alert in alerts:
+        other_id = alert.related_entity_id if alert.entity_id == learner_id else alert.entity_id
+        other = db.get(LearnerFingerprint, (other_id, kind, version)) if other_id is not None else None
+        if current_digest and other is not None and other.digest == current_digest:
+            continue
+        alert.status = 'cleared'
+        alert.resolution_code = 'data_corrected'
+        alert.reviewed_by_user_id = None
+        alert.reviewed_at = utcnow()
+        alert.updated_at = alert.reviewed_at
+        record_event(db, None, None, 'fraud_alert.auto_clear', entity_type='fraud_alert', entity_id=alert.id,
+                     summary='Сигнал закрыт после изменения документа',
+                     payload={'rule_code': alert.rule_code, 'resolution_code': 'data_corrected'})
+
+
 def sync_fingerprints(db, record, request):
     settings = request.app.state.settings
     if not settings.fraud_match_key:
@@ -42,25 +107,27 @@ def sync_fingerprints(db, record, request):
     key = base64.urlsafe_b64decode(settings.fraud_match_key)
     version = settings.fraud_match_key_version
     cipher = request.app.state.learner_cipher
-    values = {
-        'snils': normalize_snils(_decrypted(record, 'snils', cipher)),
-        'passport_pair': normalize_passport_pair(_decrypted(record, 'passport_series', cipher),
-                                                   _decrypted(record, 'passport_number', cipher)),
-    }
+    values = normalized_record_values(record, cipher)
     signals = []
     for kind, value in values.items():
+        previous = db.get(LearnerFingerprint, (record.id, kind, version))
+        previous_digest = previous.digest if previous is not None else None
         if not value:
             for old in db.scalars(select(LearnerFingerprint).where(
                     LearnerFingerprint.learner_id == record.id, LearnerFingerprint.kind == kind)).all():
                 db.delete(old)
+            if previous_digest and settings.fraud_match_coverage_complete:
+                clear_stale_document_alerts(db, record.id, kind, version, None)
             continue
         digest = fingerprint(kind, value, key)
-        row = db.get(LearnerFingerprint, (record.id, kind, version))
+        row = previous
         if row is None:
             row = LearnerFingerprint(learner_id=record.id, kind=kind, key_version=version, digest=digest)
             db.add(row)
         else:
             row.digest = digest
+        if previous_digest and previous_digest != digest and settings.fraud_match_coverage_complete:
+            clear_stale_document_alerts(db, record.id, kind, version, digest)
         if settings.fraud_match_coverage_complete:
             matches = db.scalars(select(LearnerFingerprint).where(
                 LearnerFingerprint.kind == kind, LearnerFingerprint.key_version == version,

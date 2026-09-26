@@ -1,13 +1,15 @@
 import base64
+import io
 from dataclasses import replace
 
+import openpyxl
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app import models
 from app.fraud_fingerprint import fingerprint, normalize_passport_pair, normalize_snils
-from app.backfill_fraud_fingerprints import backfill
+from app.backfill_fraud_fingerprints import backfill, verify_coverage
 from app.security import TokenCipher
 from helpers import database, login
 
@@ -42,6 +44,71 @@ def test_duplicate_document_creates_safe_alert_when_coverage_complete(app, keycl
         assert '00123456789' not in str([item.__dict__ for item in fingerprints])
 
 
+def test_customer_preview_reports_document_reuse_without_writing(app, keycloak, database_url):
+    app.state.learner_cipher = TokenCipher(Fernet.generate_key())
+    app.state.settings = replace(app.state.settings, fraud_match_key=base64.urlsafe_b64encode(b'x' * 32).decode(),
+                                 fraud_match_key_version=1, fraud_match_coverage_complete=True)
+    book = openpyxl.Workbook()
+    book.active.append(['Фамилия', 'Имя', 'Телефон', 'СНИЛС'])
+    book.active.append(['Другой', 'Слушатель', '79000000002', '001-234-567 89'])
+    output = io.BytesIO()
+    book.save(output)
+    with TestClient(app) as client:
+        login(client, keycloak, roles=('crm-supervisor',), subject='kc-fingerprint-preview')
+        assert client.post('/api/v1/learners', json={'last_name': 'Один', 'first_name': 'Тест',
+                                                    'phone': '79000000001', 'snils': '001-234-567 89'}).status_code == 201
+        preview = client.post('/api/v1/customer-imports/learners/preview',
+                              files={'file': ('synthetic.xlsx', output.getvalue())})
+        assert preview.status_code == 200, preview.text
+        assert preview.json()['rows'][0]['signals'][0]['rule_code'] == 'document_identifier_reuse'
+        assert '00123456789' not in preview.text
+    with database(database_url) as db:
+        assert db.scalar(select(func.count()).select_from(models.Learner)) == 1
+        assert db.scalar(select(func.count()).select_from(models.FraudAlert)) == 0
+
+
+def test_editing_reused_document_closes_stale_alert_and_recurrence_reopens_it(app, keycloak, database_url):
+    app.state.learner_cipher = TokenCipher(Fernet.generate_key())
+    app.state.settings = replace(app.state.settings, fraud_match_key=base64.urlsafe_b64encode(b'x' * 32).decode(),
+                                 fraud_match_key_version=1, fraud_match_coverage_complete=True)
+    with TestClient(app) as client:
+        login(client, keycloak, roles=('crm-supervisor',), subject='kc-fingerprint-correction')
+        for number in (1, 2):
+            assert client.post('/api/v1/learners', json={
+                'last_name': f'Тестов{number}', 'first_name': 'Иван',
+                'snils': '001-234-567 89'}).status_code == 201
+        with database(database_url) as db:
+            alert_id = db.scalar(select(models.FraudAlert.id))
+        assert client.patch('/api/v1/learners/2', json={'snils': '001-234-567 80'}).status_code == 200
+        assert client.get(f'/api/v1/fraud-alerts/{alert_id}').json()['status'] == 'cleared'
+        assert client.get(f'/api/v1/fraud-alerts/{alert_id}').json()['resolution_code'] == 'data_corrected'
+        assert client.patch('/api/v1/learners/2', json={'snils': '001-234-567 89'}).status_code == 200
+        assert client.get(f'/api/v1/fraud-alerts/{alert_id}').json()['status'] == 'open'
+    with database(database_url) as db:
+        actions = [event.action for event in db.scalars(select(models.AuditEvent)).all()]
+        assert 'fraud_alert.auto_clear' in actions
+        assert 'fraud_alert.reopened' in actions
+
+
+def test_human_document_decision_is_not_reset_by_repeated_match(app, keycloak, database_url):
+    app.state.learner_cipher = TokenCipher(Fernet.generate_key())
+    app.state.settings = replace(app.state.settings, fraud_match_key=base64.urlsafe_b64encode(b'x' * 32).decode(),
+                                 fraud_match_key_version=1, fraud_match_coverage_complete=True)
+    with TestClient(app) as client:
+        login(client, keycloak, roles=('crm-supervisor',), subject='kc-fingerprint-human-review')
+        for number in (1, 2):
+            assert client.post('/api/v1/learners', json={
+                'last_name': f'Тестов{number}', 'first_name': 'Иван',
+                'snils': '001-234-567 89'}).status_code == 201
+        alert = client.get('/api/v1/fraud-alerts').json()[0]
+        review = client.patch(f"/api/v1/fraud-alerts/{alert['id']}", json={
+            'status': 'cleared', 'resolution_code': 'data_corrected',
+            'expected_updated_at': alert['updated_at']})
+        assert review.status_code == 200, review.text
+        assert client.patch('/api/v1/learners/2', json={'snils': '001-234-567 89'}).status_code == 200
+        assert client.get(f"/api/v1/fraud-alerts/{alert['id']}").json()['status'] == 'cleared'
+
+
 def test_no_fingerprint_key_keeps_normal_learner_editing_available(app, keycloak, database_url):
     app.state.learner_cipher = TokenCipher(Fernet.generate_key())
     with TestClient(app) as client:
@@ -62,10 +129,15 @@ def test_backfill_is_resumable_and_prints_counts_only(app, keycloak, database_ur
                                                      'snils': '001-234-567 89'}).status_code == 201
     settings = replace(app.state.settings, fraud_match_key=base64.urlsafe_b64encode(b'x' * 32).decode())
     with database(database_url) as db:
+        assert verify_coverage(db, settings, cipher)['missing'] == 1
         processed, last_id = backfill(db, settings, cipher, batch_size=1)
         assert processed == 1
         assert backfill(db, settings, cipher, after_id=last_id) == (0, last_id)
         assert db.scalar(select(func.count()).select_from(models.LearnerFingerprint)) == 1
+        assert verify_coverage(db, settings, cipher)['missing'] == 0
+        db.scalar(select(models.LearnerFingerprint)).digest = '0' * 64
+        db.commit()
+        assert verify_coverage(db, settings, cipher)['mismatched'] == 1
     assert '001-234-567 89' not in capsys.readouterr().out
 
 
