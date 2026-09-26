@@ -1,5 +1,6 @@
 import io
 import json
+from dataclasses import replace
 
 import openpyxl
 import pytest
@@ -78,6 +79,7 @@ def test_ambiguous_phone_match_is_reported_without_merging(head, database_url):
     assert preview.json()['summary']['invalid'] == 1
     assert 'неоднознач' in preview.json()['rows'][0]['errors'][0].lower()
     assert set(preview.json()['rows'][0]['candidate_ids']) == {first['id'], second['id']}
+    assert preview.json()['rows'][0]['signals'][0]['rule_code'] == 'learner_match_conflict'
     applied = upload(head, 'applications', 'apply', content, 'заявки.json')
     assert applied.json()['summary']['created'] == 0
     with database(database_url) as db:
@@ -90,12 +92,37 @@ def test_ambiguous_phone_match_is_reported_without_merging(head, database_url):
     assert head.get('/api/v1/course-applications').json()[0]['learner_id'] == first['id']
 
 
+def test_shared_family_phone_does_not_merge_distinct_learners(head):
+    first = head.post('/api/v1/learners', json={'last_name': 'Один', 'first_name': 'Тест',
+                                               'phone': '79000000001', 'email': 'one@example.test'}).json()
+    content = workbook(['Фамилия', 'Имя', 'Телефон', 'Email'],
+                       [['Другой', 'Тест', '79000000001', 'two@example.test']])
+    result = upload(head, 'learners', 'apply', content, 'synthetic.xlsx').json()
+    assert result['summary']['created'] == 1
+    assert result['rows'][0]['signals'][0]['rule_code'] == 'shared_contact'
+    assert result['rows'][0]['warnings']
+    assert len(head.get('/api/v1/learners').json()) == 2
+    assert result['record_links'][0]['entity_id'] != first['id']
+
+
+def test_import_velocity_warns_without_blocking_rows(head):
+    head.app.state.settings = replace(head.app.state.settings, fraud_batch_row_limit=1, fraud_hourly_import_limit=1)
+    content = json.dumps([applications()[0], None], ensure_ascii=False).encode()
+    preview = upload(head, 'applications', 'preview', content, 'synthetic.json').json()
+    assert preview['batch_signals'][0]['rule_code'] == 'import_velocity'
+    first = upload(head, 'applications', 'apply', content, 'synthetic.json').json()
+    assert first['summary']['created'] == 1
+    second = upload(head, 'applications', 'apply', content, 'synthetic.json').json()
+    assert second['batch_signals'][0]['rule_code'] == 'import_velocity'
+
+
 def test_duplicate_external_number_is_reported_and_second_row_is_skipped(head):
     repeated = [applications()[0], {**applications()[0], 'Курс': 'Другой курс'}]
     content = json.dumps(repeated, ensure_ascii=False).encode()
     preview = upload(head, 'applications', 'preview', content, 'заявки.json').json()
     assert preview['summary']['invalid'] == 1
     assert 'повторяется' in preview['rows'][1]['errors'][0]
+    assert preview['rows'][1]['signals'][0]['rule_code'] == 'batch_repetition'
     assert upload(head, 'applications', 'apply', content, 'заявки.json').json()['summary']['created'] == 1
     assert head.get('/api/v1/course-applications').json()[0]['course'] == 'Python'
 

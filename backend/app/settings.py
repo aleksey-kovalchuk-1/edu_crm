@@ -30,6 +30,8 @@ class Settings:
     public_base_url: str
     session_encryption_key: str
     learner_data_encryption_key: str = ''
+    fraud_batch_row_limit: int = 500
+    fraud_hourly_import_limit: int = 10
     session_ttl_hours: int = 8
     session_revalidate_seconds: int = 120
     cookie_secure: bool = True
@@ -150,6 +152,8 @@ def load_settings(environ=None):
         public_base_url=normalize_origin(environ['PUBLIC_BASE_URL'], 'PUBLIC_BASE_URL'),
         session_encryption_key=encryption_key,
         learner_data_encryption_key=learner_key,
+        fraud_batch_row_limit=_positive_int(environ, 'FRAUD_BATCH_ROW_LIMIT', 500),
+        fraud_hourly_import_limit=_positive_int(environ, 'FRAUD_HOURLY_IMPORT_LIMIT', 10),
         session_ttl_hours=_positive_int(environ, 'SESSION_TTL_HOURS', 8),
         session_revalidate_seconds=_positive_int(environ, 'SESSION_REVALIDATE_SECONDS', 120),
         cookie_secure=_boolean(environ, 'COOKIE_SECURE', True),

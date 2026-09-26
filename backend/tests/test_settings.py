@@ -60,6 +60,8 @@ def test_learner_key_must_be_valid_and_different_from_session_key():
     ('ALLOWED_ORIGINS', 'ftp://files.example'),
     ('SESSION_TTL_HOURS', '0'),
     ('SESSION_TTL_HOURS', 'eight'),
+    ('FRAUD_BATCH_ROW_LIMIT', '0'),
+    ('FRAUD_HOURLY_IMPORT_LIMIT', '-1'),
     ('COOKIE_SECURE', 'maybe'),
 ])
 def test_invalid_values_are_rejected(name, value):
