@@ -4,6 +4,7 @@ Reports contain row positions and safe diagnostics, never source cells or docume
 """
 import json
 import re
+from dataclasses import dataclass
 from types import SimpleNamespace
 
 from pydantic import ValidationError
@@ -38,6 +39,31 @@ LEARNER_COLUMNS = {
     'регистрационный номер диплома': 'diploma_registration_number',
     'дата выдачи диплома': 'diploma_issued_at',
 }
+LEARNER_TEMPLATE_HEADERS = (
+    'Фамилия', 'Имя', 'Отчествопри наличии)', 'Номер телефона', 'Email', 'СНИЛС',
+    'Серия паспорта', 'Номер паспорта', 'Кем выдан паспорт', 'Дата выдачи паспорта',
+    'Код подразделения', 'Пол', 'Дата рождения', 'Регион регистрации',
+    'Населенный пункт регистрации', 'Улица регистрации', 'Дом регистрации',
+    'Квартира регистрации', 'Индекс регистрации', 'Имядательный падеж)',
+    'Фамилиядательный падеж)', 'Отчестводательный падеж)', 'Образование',
+    'Профессия по диплому', 'Учебное заведение по диплому',
+    'Фамилия, указанная в дипломе', 'Номер диплома', 'Серия диплома',
+    'Регистрационный номер диплома', 'Дата выдачи диплома',
+)
+VENDOR_TEMPLATE_HEADERS = ('Компания', 'Продукт', 'ФИО', 'Телефон', 'Почта', 'Способ связи')
+LEARNER_COLUMNS.update({
+    'отчествопри наличии': 'middle_name',
+    'номер телефона': 'phone',
+    'населенный пункт регистрации': 'registration_locality',
+    'улица регистрации': 'registration_street',
+    'дом регистрации': 'registration_house',
+    'квартира регистрации': 'registration_apartment',
+    'имядательный падеж': 'dative_first_name',
+    'фамилиядательный падеж': 'dative_last_name',
+    'отчестводательный падеж': 'dative_middle_name',
+    'учебное заведение по диплому': 'diploma_institution',
+    'фамилия указанная в дипломе': 'diploma_last_name',
+})
 APPLICATION_COLUMNS = {
     'Номер заявки': 'external_number', 'Курс': 'course', 'Фамилия': 'last_name',
     'Имя': 'first_name', 'Отчество': 'middle_name', 'Телефон': 'phone',
@@ -47,6 +73,16 @@ DOCUMENT_FIELDS = {
     'snils', 'passport_series', 'passport_number', 'passport_department_code',
     'diploma_number', 'diploma_series', 'diploma_registration_number', 'postal_code',
 }
+
+
+@dataclass
+class CustomerFile:
+    kind: str
+    template_version: str
+    headers: list[str]
+    mapping: dict[str, str]
+    unmapped_headers: list[str]
+    rows: list[tuple[int, dict | None]]
 
 
 def key(value):
@@ -71,6 +107,10 @@ def split_list(value):
 
 
 def read_rows(kind, filename, content):
+    return read_customer_file(kind, filename, content).rows
+
+
+def read_customer_file(kind, filename, content):
     if len(content) > MAX_FILE_BYTES:
         raise AppError(ErrorCode.PAYLOAD_TOO_LARGE, 'Файл больше 10 МБ')
     if kind == 'applications':
@@ -82,22 +122,38 @@ def read_rows(kind, filename, content):
             raise AppError(ErrorCode.VALIDATION_ERROR, 'Не удалось прочитать JSON') from error
         if not isinstance(items, list) or len(items) > MAX_DATA_ROWS:
             raise AppError(ErrorCode.VALIDATION_ERROR, 'Ожидается массив не более 5000 записей')
-        return [(position, item) for position, item in enumerate(items, 1)]
+        return CustomerFile(kind, 'customer-applications-v1', list(APPLICATION_COLUMNS),
+                            {field: header for header, field in APPLICATION_COLUMNS.items()}, [],
+                            [(position, item) for position, item in enumerate(items, 1)])
     try:
         sheet = read_upload(filename, content)
     except ImportFileError as error:
         raise AppError(ErrorCode.VALIDATION_ERROR, str(error)) from error
     columns = VENDOR_COLUMNS if kind == 'vendors' else LEARNER_COLUMNS
-    mapping = {index: columns[normalize_header(header)] for index, header in enumerate(sheet.headers)
-               if normalize_header(header) in columns}
+    mapping = {}
+    by_index = {}
+    unknown = []
+    for index, header in enumerate(sheet.headers):
+        normalized = normalize_header(header)
+        if normalized in columns:
+            field = columns[normalized]
+            if field in mapping:
+                raise AppError(ErrorCode.VALIDATION_ERROR, 'Два столбца соответствуют одному полю анкеты')
+            mapping[field] = header
+            by_index[index] = field
+        elif not re.fullmatch(r'Столбец \d+', header):
+            unknown.append(header)
     required = {'company', 'products', 'full_name'} if kind == 'vendors' else {'last_name', 'first_name'}
-    if not required.issubset(mapping.values()):
+    if not required.issubset(mapping):
         raise AppError(ErrorCode.VALIDATION_ERROR, 'Не найдены обязательные столбцы')
     rows = []
     for number, cells in sheet.rows:
-        values = {field: cells[index] for index, field in mapping.items() if index < len(cells)}
+        values = {field: cells[index] for index, field in by_index.items() if index < len(cells)}
         rows.append((number, values))
-    return rows
+    template = VENDOR_TEMPLATE_HEADERS if kind == 'vendors' else LEARNER_TEMPLATE_HEADERS
+    exact = [normalize_header(header) for header in sheet.headers[:len(template)]] == [normalize_header(header) for header in template]
+    version = f'customer-{kind}-v1' if exact else f'customer-{kind}-custom'
+    return CustomerFile(kind, version, sheet.headers, mapping, unknown, rows)
 
 
 class CustomerImportRunner:
