@@ -9,6 +9,7 @@ from sqlalchemy import func, select
 
 from app import models
 from app import customer_imports
+from app import customer_import_routes
 from app.customer_imports import read_rows
 from app.security import TokenCipher
 from helpers import database, login
@@ -235,6 +236,41 @@ def test_duplicate_target_needs_manual_mapping():
                                                  selected_mapping={'last_name': 'Фамилия', 'first_name': 'Имя',
                                                                    'phone': 'Номер телефона'})
     assert parsed.unmapped_headers == ['Телефон']
+
+
+def test_apply_records_safe_batch_history_and_card_link(head, database_url):
+    content = workbook(['Фамилия', 'Имя', 'Телефон'], [['Тестов', 'Иван', '79000000001']])
+    response = upload(head, 'learners', 'apply', content, 'private-name.xlsx')
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result['batch_id'] > 0
+    assert result['record_links'][0]['entity_type'] == 'learner'
+    learner_id = result['record_links'][0]['entity_id']
+    assert head.get(f'/api/v1/learners/{learner_id}').status_code == 200
+    history = head.get('/api/v1/customer-imports/history')
+    assert history.status_code == 200
+    assert history.json()[0]['id'] == result['batch_id']
+    detail = head.get(f"/api/v1/customer-imports/history/{result['batch_id']}")
+    assert detail.status_code == 200
+    assert detail.json()['record_links'][0]['entity_id'] == learner_id
+    with database(database_url) as db:
+        audit = db.scalars(select(models.AuditEvent)).all()
+        assert '79000000001' not in json.dumps([event.payload for event in audit])
+    assert 'private-name.xlsx' not in json.dumps(history.json())
+    assert '79000000001' not in json.dumps(detail.json())
+
+
+def test_apply_failure_rolls_back_cards_and_batch(head, database_url, monkeypatch):
+    def fail_after_rows(*args, **kwargs):
+        raise RuntimeError('synthetic failure')
+    monkeypatch.setattr(customer_import_routes, 'record_event', fail_after_rows)
+    content = workbook(['Фамилия', 'Имя', 'Телефон'], [['Тестов', 'Иван', '79000000001']])
+    with pytest.raises(RuntimeError, match='synthetic failure'):
+        upload(head, 'learners', 'apply', content, 'synthetic.xlsx')
+    with database(database_url) as db:
+        assert db.scalar(select(func.count()).select_from(models.Learner)) == 0
+        assert db.scalar(select(func.count()).select_from(models.CustomerImportBatch)) == 0
+        assert db.scalar(select(func.count()).select_from(models.CustomerImportRowLink)) == 0
 
 
 def test_learner_import_accepts_russian_date_format(head):

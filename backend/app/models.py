@@ -566,6 +566,37 @@ class CourseApplication(Base):
     learner: Mapped['Learner'] = relationship()
 
 
+class CustomerImportBatch(Base):
+    __tablename__ = 'customer_import_batches'
+    __table_args__ = (CheckConstraint("kind in ('vendors', 'learners', 'applications')", name='kind'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    template_version: Mapped[str] = mapped_column(String(60))
+    created_by_user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+    rows: Mapped[int]
+    valid: Mapped[int]
+    invalid: Mapped[int]
+    skipped: Mapped[int]
+    created: Mapped[int]
+    updated: Mapped[int]
+    record_links: Mapped[list['CustomerImportRowLink']] = relationship(back_populates='batch', order_by='CustomerImportRowLink.row_number')
+
+
+class CustomerImportRowLink(Base):
+    __tablename__ = 'customer_import_row_links'
+    __table_args__ = (
+        CheckConstraint("entity_type in ('vendor_contact', 'learner', 'course_application')", name='entity_type'),
+        CheckConstraint("action in ('created', 'updated')", name='action'),
+    )
+    batch_id: Mapped[int] = mapped_column(ForeignKey('customer_import_batches.id', ondelete='CASCADE'), primary_key=True)
+    row_number: Mapped[int] = mapped_column(primary_key=True)
+    entity_type: Mapped[str] = mapped_column(String(30))
+    entity_id: Mapped[int] = mapped_column(index=True)
+    action: Mapped[str] = mapped_column(String(10))
+    batch: Mapped['CustomerImportBatch'] = relationship(back_populates='record_links')
+
+
 class UniversityContact(Base):
     """Responsible person on the university side; personal data, visible only within the user's data scope."""
     __tablename__ = 'university_contacts'

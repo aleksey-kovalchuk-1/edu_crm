@@ -202,9 +202,11 @@ class CustomerImportRunner:
 
     def run(self, kind, rows):
         report = []
+        record_links = []
         created = updated = 0
         for number, raw in rows:
             self.current_row_number = number
+            self.current_entity = None
             self.row_warnings = []
             entry = {'row_number': number, 'status': 'ok', 'action': None, 'errors': [], 'warnings': [], 'candidate_ids': []}
             if raw is None:
@@ -220,6 +222,10 @@ class CustomerImportRunner:
                     else:
                         action, count = self.application(raw)
                     entry['action'] = action
+                    if self.apply and self.current_entity is not None:
+                        entity_type, entity_id = self.current_entity
+                        record_links.append({'row_number': number, 'entity_type': entity_type,
+                                             'entity_id': entity_id, 'action': action})
                     if action == 'created':
                         created += count
                     elif action == 'updated':
@@ -233,6 +239,7 @@ class CustomerImportRunner:
             'summary': {'rows': len(report), 'valid': statuses.count('ok'), 'invalid': statuses.count('error'),
                         'skipped': statuses.count('skipped'), 'created': created, 'updated': updated},
             'rows': report,
+            'record_links': record_links,
         }
 
     def vendor(self, raw):
@@ -296,6 +303,8 @@ class CustomerImportRunner:
             for product in products:
                 if product not in contact.products:
                     contact.products.append(product)
+        if self.apply:
+            self.current_entity = ('vendor_contact', contact.id)
         return ('created', added) if added else ('updated', 1)
 
     def match_learner(self, phone, email):
@@ -340,9 +349,12 @@ class CustomerImportRunner:
             else:
                 match = SimpleNamespace(id=-len(self.learners)-1, phone=validated.get('phone'), email=validated.get('email'))
             self.learners.append(match)
+            if self.apply:
+                self.current_entity = ('learner', match.id)
             return 'created', 1
         if self.apply:
             apply_fields(match, validated, self.request)
+            self.current_entity = ('learner', match.id)
         return 'updated', 1
 
     def application(self, raw):
@@ -365,6 +377,8 @@ class CustomerImportRunner:
                 existing.course = course
                 existing.stream_number = stream
             self.seen_application_numbers.add(number)
+            if self.apply:
+                self.current_entity = ('course_application', existing.id)
             return 'updated', 1
         learner = self.match_learner(values.get('phone'), values.get('email'))
         if learner is None:
@@ -386,6 +400,8 @@ class CustomerImportRunner:
             self.db.flush()
         self.applications[number] = application
         self.seen_application_numbers.add(number)
+        if self.apply:
+            self.current_entity = ('course_application', application.id)
         return 'created', 1
 
 
