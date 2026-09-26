@@ -138,6 +138,21 @@ def test_numeric_phone_cell_is_rejected_before_leading_zero_can_be_lost(head):
     assert 'текстом' in preview['rows'][0]['errors'][0]
 
 
+@pytest.mark.parametrize('number', [79000000001, 89000000001])
+def test_numeric_eleven_digit_phone_is_accepted_with_row_warning(head, number):
+    content = workbook(['Фамилия', 'Имя', 'Номер телефона'], [['Тестов', 'Иван', number]])
+    preview = upload(head, 'learners', 'preview', content, 'synthetic.xlsx').json()
+    assert preview['summary']['valid'] == 1
+    assert len(preview['rows'][0]['warnings']) == 1
+    assert str(number) not in json.dumps(preview, ensure_ascii=False)
+
+
+@pytest.mark.parametrize('number', [9000000001, 90000000001, 79000000001.5])
+def test_uncertain_numeric_phone_is_rejected(number):
+    with pytest.raises(customer_imports.ImportRowError):
+        customer_imports.normalize_import_phone(number)
+
+
 def test_exact_customer_learner_template_maps_all_named_columns():
     headers = [
         'Фамилия', 'Имя', 'Отчествопри наличии)', 'Номер телефона', 'Email', 'СНИЛС',

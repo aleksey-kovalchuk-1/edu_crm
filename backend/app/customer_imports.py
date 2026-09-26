@@ -106,6 +106,17 @@ def split_list(value):
     return [item.strip() for item in re.split(r'[,;\n]+', str(value or '')) if item.strip()]
 
 
+def normalize_import_phone(value):
+    if isinstance(value, int) and not isinstance(value, bool):
+        digits = str(value)
+        if len(digits) == 11 and digits[0] in '78':
+            return digits, ['Телефон был числом Excel; проверьте исходную ячейку']
+        raise ImportRowError('Телефон должен быть текстом: числовое значение нельзя восстановить без проверки')
+    if isinstance(value, float):
+        raise ImportRowError('Телефон должен быть текстом: числовое значение нельзя восстановить без проверки')
+    return value, []
+
+
 def read_rows(kind, filename, content):
     return read_customer_file(kind, filename, content).rows
 
@@ -177,6 +188,7 @@ class CustomerImportRunner:
         created = updated = 0
         for number, raw in rows:
             self.current_row_number = number
+            self.row_warnings = []
             entry = {'row_number': number, 'status': 'ok', 'action': None, 'errors': [], 'warnings': [], 'candidate_ids': []}
             if raw is None:
                 entry.update(status='skipped', warnings=['Значение null пропущено'])
@@ -197,6 +209,7 @@ class CustomerImportRunner:
                         updated += count
                 except ImportRowError as error:
                     entry.update(status='error', errors=[str(error)], candidate_ids=error.candidate_ids)
+                entry['warnings'].extend(self.row_warnings)
             report.append(entry)
         statuses = [entry['status'] for entry in report]
         return {
@@ -206,8 +219,8 @@ class CustomerImportRunner:
         }
 
     def vendor(self, raw):
-        if isinstance(raw.get('phone'), (int, float)) and not isinstance(raw.get('phone'), bool):
-            raise ImportRowError('Телефон должен быть текстом: ведущие нули могли быть потеряны')
+        phone_value, warnings = normalize_import_phone(raw.get('phone'))
+        self.row_warnings.extend(warnings)
         company_name = str(raw.get('company') or '').strip()
         names = split_list(raw.get('products'))
         full_name = str(raw.get('full_name') or '').strip()
@@ -216,7 +229,7 @@ class CustomerImportRunner:
         if any(len(value) > 200 for value in [company_name, full_name, *names]):
             raise ImportRowError('Название или ФИО длиннее 200 символов')
         channels = list(dict.fromkeys(split_list(raw.get('channels'))))
-        phone = str(raw.get('phone') or '').strip()
+        phone = str(phone_value or '').strip()
         email = str(raw.get('email') or '').strip()
         if email and ('@' not in email or email.startswith('@') or email.endswith('@')):
             raise ImportRowError('Некорректный формат почты')
@@ -284,7 +297,10 @@ class CustomerImportRunner:
         return matches[0] if matches else None
 
     def learner(self, raw):
-        for field in DOCUMENT_FIELDS | {'phone'}:
+        phone_value, warnings = normalize_import_phone(raw.get('phone'))
+        self.row_warnings.extend(warnings)
+        raw = {**raw, 'phone': phone_value}
+        for field in DOCUMENT_FIELDS:
             value = raw.get(field)
             if isinstance(value, (int, float)) and not isinstance(value, bool):
                 raise ImportRowError('Телефон, документные номера и индекс должны быть текстом: ведущие нули могли быть потеряны')
