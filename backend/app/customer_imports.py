@@ -121,10 +121,12 @@ def read_rows(kind, filename, content):
     return read_customer_file(kind, filename, content).rows
 
 
-def read_customer_file(kind, filename, content):
+def read_customer_file(kind, filename, content, *, selected_mapping=None):
     if len(content) > MAX_FILE_BYTES:
         raise AppError(ErrorCode.PAYLOAD_TOO_LARGE, 'Файл больше 10 МБ')
     if kind == 'applications':
+        if selected_mapping is not None:
+            raise AppError(ErrorCode.VALIDATION_ERROR, 'Ручное сопоставление для JSON не требуется')
         if not filename.lower().endswith('.json'):
             raise AppError(ErrorCode.UNSUPPORTED_MEDIA_TYPE, 'Для заявок нужен файл JSON')
         try:
@@ -137,23 +139,38 @@ def read_customer_file(kind, filename, content):
                             {field: header for header, field in APPLICATION_COLUMNS.items()}, [],
                             [(position, item) for position, item in enumerate(items, 1)])
     try:
-        sheet = read_upload(filename, content)
+        sheet = read_upload(filename, content, allow_empty_rows=True)
     except ImportFileError as error:
         raise AppError(ErrorCode.VALIDATION_ERROR, str(error)) from error
     columns = VENDOR_COLUMNS if kind == 'vendors' else LEARNER_COLUMNS
     mapping = {}
     by_index = {}
     unknown = []
-    for index, header in enumerate(sheet.headers):
-        normalized = normalize_header(header)
-        if normalized in columns:
-            field = columns[normalized]
-            if field in mapping:
-                raise AppError(ErrorCode.VALIDATION_ERROR, 'Два столбца соответствуют одному полю анкеты')
+    if selected_mapping is not None:
+        if not isinstance(selected_mapping, dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in selected_mapping.items()):
+            raise AppError(ErrorCode.VALIDATION_ERROR, 'Некорректное сопоставление столбцов')
+        if not set(selected_mapping).issubset(set(columns.values())):
+            raise AppError(ErrorCode.VALIDATION_ERROR, 'Неизвестное поле анкеты в сопоставлении')
+        if len(set(selected_mapping.values())) != len(selected_mapping):
+            raise AppError(ErrorCode.VALIDATION_ERROR, 'Один столбец выбран для нескольких полей')
+        for field, header in selected_mapping.items():
+            indices = [index for index, source in enumerate(sheet.headers) if source == header and not re.fullmatch(r'Столбец \d+', source)]
+            if len(indices) != 1:
+                raise AppError(ErrorCode.VALIDATION_ERROR, 'Выбранный столбец отсутствует или повторяется')
             mapping[field] = header
-            by_index[index] = field
-        elif not re.fullmatch(r'Столбец \d+', header):
-            unknown.append(header)
+            by_index[indices[0]] = field
+        unknown = [header for index, header in enumerate(sheet.headers) if index not in by_index and not re.fullmatch(r'Столбец \d+', header)]
+    else:
+        for index, header in enumerate(sheet.headers):
+            normalized = normalize_header(header)
+            if normalized in columns:
+                field = columns[normalized]
+                if field in mapping:
+                    raise AppError(ErrorCode.VALIDATION_ERROR, 'Два столбца соответствуют одному полю анкеты')
+                mapping[field] = header
+                by_index[index] = field
+            elif not re.fullmatch(r'Столбец \d+', header):
+                unknown.append(header)
     required = {'company', 'products', 'full_name'} if kind == 'vendors' else {'last_name', 'first_name'}
     if not required.issubset(mapping):
         raise AppError(ErrorCode.VALIDATION_ERROR, 'Не найдены обязательные столбцы')

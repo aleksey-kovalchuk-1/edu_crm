@@ -193,6 +193,50 @@ def test_customer_file_describes_vendor_mapping_without_source_values():
     assert len(parsed.rows) == 1
 
 
+def test_customer_header_only_preview_and_apply_rejection(head):
+    content = workbook(['Фамилия', 'Имя'], [])
+    preview = upload(head, 'learners', 'preview', content, 'blank.xlsx')
+    assert preview.status_code == 200, preview.text
+    assert preview.json()['summary']['rows'] == 0
+    assert preview.json()['mapping'] == {'last_name': 'Фамилия', 'first_name': 'Имя'}
+    assert upload(head, 'learners', 'apply', content, 'blank.xlsx').status_code == 422
+
+
+def test_unknown_column_and_manual_mapping(head):
+    content = workbook(['Фамилия', 'Имя', 'Контактный телефон'], [['Тестов', 'Иван', '79000000001']])
+    preview = upload(head, 'learners', 'preview', content, 'synthetic.xlsx').json()
+    assert preview['unmapped_headers'] == ['Контактный телефон']
+    assert preview['summary']['invalid'] == 1
+    mapping = {'last_name': 'Фамилия', 'first_name': 'Имя', 'phone': 'Контактный телефон'}
+    response = head.post('/api/v1/customer-imports/learners/preview',
+                         files={'file': ('synthetic.xlsx', content)}, data={'mapping': json.dumps(mapping)})
+    assert response.status_code == 200, response.text
+    assert response.json()['summary']['valid'] == 1
+    assert response.json()['unmapped_headers'] == []
+    bad = head.post('/api/v1/customer-imports/learners/preview',
+                    files={'file': ('synthetic.xlsx', content)}, data={'mapping': json.dumps({'phone': 'Чужой столбец'})})
+    assert bad.status_code == 422
+
+
+def test_customer_import_is_supervisor_only(app, keycloak):
+    content = workbook(['Фамилия', 'Имя'], [])
+    with TestClient(app) as client:
+        login(client, keycloak, roles=('crm-user',), subject='kc-import-regular')
+        assert upload(client, 'learners', 'preview', content, 'blank.xlsx').status_code == 403
+        assert upload(client, 'learners', 'apply', content, 'blank.xlsx').status_code == 403
+
+
+def test_duplicate_target_needs_manual_mapping():
+    content = workbook(['Фамилия', 'Имя', 'Телефон', 'Номер телефона'],
+                       [['Тестов', 'Иван', '79000000001', '79000000001']])
+    with pytest.raises(customer_imports.AppError):
+        customer_imports.read_customer_file('learners', 'synthetic.xlsx', content)
+    parsed = customer_imports.read_customer_file('learners', 'synthetic.xlsx', content,
+                                                 selected_mapping={'last_name': 'Фамилия', 'first_name': 'Имя',
+                                                                   'phone': 'Номер телефона'})
+    assert parsed.unmapped_headers == ['Телефон']
+
+
 def test_learner_import_accepts_russian_date_format(head):
     content = workbook(['Фамилия', 'Имя', 'Телефон', 'Дата рождения'],
                        [['Тестов', 'Иван', '00123', '01.02.2000']])
