@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session, selectinload
 from .audit import record_event
 from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_roles
 from .catalog_routes import like_pattern, not_found
-from .customer_imports import CustomerImportRunner, read_rows
+from .customer_imports import CustomerImportRunner, read_customer_file
 from .db import get_db
 from .errors import AppError, ErrorCode
 from .models import CourseApplication
@@ -65,17 +65,32 @@ def get_application(application_id: int, auth: AuthContext = Depends(viewer), db
 
 @router.post('/customer-imports/{kind}/preview')
 async def preview(kind: Kind, request: Request, file: UploadFile = File(...),
+                  mapping: str | None = Form(None),
                   auth: AuthContext = Depends(importer), db: Session = Depends(get_db)):
     content = await file.read(10 * 1024 * 1024 + 1)
-    rows = read_rows(kind, file.filename or '', content)
-    report = CustomerImportRunner(db, request, apply=False).run(kind, rows)
+    parsed = read_customer_file(kind, file.filename or '', content, selected_mapping=parse_mapping(mapping))
+    report = CustomerImportRunner(db, request, apply=False).run(kind, parsed.rows)
     db.rollback()
-    return report
+    return {**report, 'template_version': parsed.template_version,
+            'mapping': parsed.mapping, 'unmapped_headers': parsed.unmapped_headers}
+
+
+def parse_mapping(value):
+    if value is None:
+        return None
+    try:
+        parsed = json.loads(value)
+    except (ValueError, json.JSONDecodeError) as error:
+        raise AppError(ErrorCode.VALIDATION_ERROR, 'Некорректное сопоставление столбцов') from error
+    if not isinstance(parsed, dict):
+        raise AppError(ErrorCode.VALIDATION_ERROR, 'Некорректное сопоставление столбцов')
+    return parsed
 
 
 @router.post('/customer-imports/{kind}/apply')
 async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...),
                        resolved_learner_ids: str = Form('{}'),
+                       mapping: str | None = Form(None),
                        auth: AuthContext = Depends(importer), db: Session = Depends(get_db)):
     try:
         resolutions = json.loads(resolved_learner_ids)
@@ -85,8 +100,10 @@ async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...
     except (ValueError, json.JSONDecodeError) as error:
         raise AppError(ErrorCode.VALIDATION_ERROR, 'Некорректные решения по совпадениям слушателей') from error
     content = await file.read(10 * 1024 * 1024 + 1)
-    rows = read_rows(kind, file.filename or '', content)
-    report = CustomerImportRunner(db, request, apply=True, resolved_learner_ids=resolutions).run(kind, rows)
+    parsed = read_customer_file(kind, file.filename or '', content, selected_mapping=parse_mapping(mapping))
+    if not parsed.rows:
+        raise AppError(ErrorCode.VALIDATION_ERROR, 'В файле нет строк для применения')
+    report = CustomerImportRunner(db, request, apply=True, resolved_learner_ids=resolutions).run(kind, parsed.rows)
     # Do not retain the uploaded filename or rows; either can contain personal data.
     record_event(db, request, auth.user, f'customer_import.{kind}', summary='Применён импорт данных заказчика',
                  payload={'kind': kind, 'summary': report['summary']})

@@ -97,7 +97,7 @@ def name_key(value):
     return normalize_name(value).casefold().replace('ё', 'е')
 
 
-def read_upload(filename, content):
+def read_upload(filename, content, *, allow_empty_rows=False):
     name = (filename or '').lower()
     if len(content) > MAX_FILE_BYTES:
         raise ImportFileError('Файл больше 10 МБ')
@@ -107,7 +107,7 @@ def read_upload(filename, content):
         cells = _read_xls(content)
     else:
         raise UnsupportedFileType('Поддерживаются только файлы Excel .xls и .xlsx')
-    return _split_header(cells)
+    return _split_header(cells, allow_empty_rows=allow_empty_rows)
 
 
 def _read_xlsx(content):
@@ -172,7 +172,7 @@ def _is_empty(value):
     return value is None or (isinstance(value, str) and not value.strip())
 
 
-def _split_header(cells):
+def _split_header(cells, *, allow_empty_rows=False):
     known = {synonym for _, _, synonyms in FIELDS.values() for synonym in synonyms}
     header_index = None
     for index, row in enumerate(cells[:HEADER_SEARCH_ROWS]):
@@ -192,7 +192,7 @@ def _split_header(cells):
         for offset, row in enumerate(cells[header_index + 1:])
         if any(not _is_empty(value) for value in row)
     ]
-    if not rows:
+    if not rows and not allow_empty_rows:
         raise ImportFileError('В файле нет строк с данными')
     if len(rows) > MAX_DATA_ROWS:
         raise ImportFileError(f'В файле больше {MAX_DATA_ROWS} строк данных')
