@@ -145,4 +145,41 @@ describe("customer data pages", () => {
     const body = api.calls.find((call) => call.path.includes("/customer-imports/applications/apply"))?.body;
     expect((body as FormData).get("resolved_learner_ids")).toBe('{"1":7}');
   });
+
+  it("shows template mapping, omissions, row warnings, and safe history", async () => {
+    const report = { template_version: "customer-learners-v1", mapping: { last_name: "Фамилия", first_name: "Имя" },
+      unmapped_headers: ["Дополнительное поле"],
+      summary: { rows: 1, valid: 1, invalid: 0, skipped: 0, created: 1, updated: 0 },
+      rows: [{ row_number: 2, status: "ok", action: "created", errors: [],
+        warnings: ["Телефон был числом Excel; проверьте исходную ячейку"], candidate_ids: [] }] };
+    mockApi({
+      "GET /customer-imports/history": () => [{ id: 5, kind: "learners", created_at: "2026-09-26T12:00:00Z",
+        template_version: "customer-learners-v1", summary: report.summary }],
+      "POST /customer-imports/learners/preview": () => report,
+      "POST /customer-imports/learners/apply": () => ({ ...report, batch_id: 6,
+        record_links: [{ row_number: 2, entity_type: "learner", entity_id: 7, action: "created" }] }),
+    });
+    renderApp("/customer-imports");
+    expect(await screen.findByText(/Пакет 5/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText("Вид данных"), { target: { value: "learners" } });
+    fireEvent.change(screen.getByLabelText("Файл"), { target: { files: [new File(["demo"], "demo.xlsx")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить файл" }));
+    expect(await screen.findByText(/2 столбца распознано/)).toBeTruthy();
+    expect(screen.getByText(/Не перенесены: Дополнительное поле/)).toBeTruthy();
+    expect(screen.getByText(/Телефон был числом Excel/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Применить" }));
+    expect((await screen.findByRole("link", { name: /Открыть карточку/ }) as HTMLAnchorElement).pathname).toBe("/learners");
+  });
+
+  it("disables apply for a header-only template", async () => {
+    mockApi({ "POST /customer-imports/learners/preview": () => ({
+      template_version: "customer-learners-v1", mapping: { last_name: "Фамилия", first_name: "Имя" },
+      unmapped_headers: [], summary: { rows: 0, valid: 0, invalid: 0, skipped: 0, created: 0, updated: 0 }, rows: [],
+    }) });
+    renderApp("/customer-imports");
+    fireEvent.change(await screen.findByLabelText("Вид данных"), { target: { value: "learners" } });
+    fireEvent.change(screen.getByLabelText("Файл"), { target: { files: [new File(["demo"], "blank.xlsx")] } });
+    fireEvent.click(screen.getByRole("button", { name: "Проверить файл" }));
+    expect((await screen.findByRole("button", { name: "Применить" }) as HTMLButtonElement).disabled).toBe(true);
+  });
 });

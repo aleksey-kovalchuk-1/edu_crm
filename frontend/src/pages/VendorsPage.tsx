@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router";
 import { useItProducts } from "../api/catalogs";
 import {
   useSaveVendorCompany, useSaveVendorContact, useVendorCompanies, useVendorContacts,
@@ -11,6 +12,7 @@ import { canEditCatalog } from "../lib/user";
 import { useDebouncedValue } from "../lib/useDebouncedValue";
 
 export function VendorsPage() {
+  const [params, setParams] = useSearchParams();
   const { user } = useSession();
   const editable = canEditCatalog(user.roles);
   const [search, setSearch] = useState("");
@@ -18,11 +20,15 @@ export function VendorsPage() {
   const [productId, setProductId] = useState("");
   const [inactive, setInactive] = useState(false);
   const [companyForm, setCompanyForm] = useState<VendorCompany | "new" | null>(null);
-  const [contactForm, setContactForm] = useState<VendorContact | "new" | null>(null);
+  const [contactFormState, setContactForm] = useState<VendorContact | "new" | null>(null);
   const q = useDebouncedValue(search);
   const companies = useVendorCompanies(q, inactive);
   const contacts = useVendorContacts(companyId ? Number(companyId) : undefined,
     productId ? Number(productId) : undefined, q, inactive);
+  const contactId = Number(params.get("id"));
+  const contactForm = contactFormState ?? (editable && Number.isSafeInteger(contactId) && contactId > 0
+    ? contacts.data?.find((item) => item.id === contactId) : null);
+  function closeContact() { setContactForm(null); setParams((current) => { current.delete("id"); return current; }); }
   const products = useItProducts({ include_inactive: inactive });
   const saveCompany = useSaveVendorCompany();
   const saveContact = useSaveVendorContact();
@@ -79,10 +85,10 @@ export function VendorsPage() {
     {companyForm ? <Modal title={companyForm === "new" ? "Новая компания" : "Изменить компанию"} close={() => setCompanyForm(null)}>
       <CompanyEditor record={companyForm === "new" ? undefined : companyForm} save={saveCompany.mutateAsync} done={() => setCompanyForm(null)} />
     </Modal> : null}
-    {contactForm ? <Modal title={contactForm === "new" ? "Новый контакт" : "Изменить контакт"} close={() => setContactForm(null)} wide>
+    {contactForm ? <Modal title={contactForm === "new" ? "Новый контакт" : "Изменить контакт"} close={closeContact} wide>
       <ContactEditor record={contactForm === "new" ? undefined : contactForm} companies={companies.data ?? []}
         products={products.data ?? []} initialCompanyId={companyId ? Number(companyId) : undefined}
-        save={saveContact.mutateAsync} done={() => setContactForm(null)} />
+        save={saveContact.mutateAsync} done={closeContact} />
     </Modal> : null}
   </div>;
 }

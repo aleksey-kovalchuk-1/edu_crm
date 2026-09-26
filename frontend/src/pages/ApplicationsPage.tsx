@@ -1,14 +1,20 @@
 import { useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router";
 import { useCourseApplications, type CourseApplication } from "../api/customerData";
 import { Modal } from "../components/Modal";
 import { queryFallback } from "../components/QueryState";
 
 export function ApplicationsPage() {
+  const [params, setParams] = useSearchParams();
   const [courseInput, setCourseInput] = useState("");
   const [streamInput, setStreamInput] = useState("");
   const [filters, setFilters] = useState({ course: "", stream: "" });
-  const [selected, setSelected] = useState<CourseApplication | null>(null);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const applications = useCourseApplications(filters.course, filters.stream);
+  const id = selectedId ?? Number(params.get("id"));
+  const selected: CourseApplication | undefined = Number.isSafeInteger(id) && id > 0
+    ? applications.data?.find((item) => item.id === id) : undefined;
+  function closeSelected() { setSelectedId(null); setParams((current) => { current.delete("id"); return current; }); }
   function search(event: FormEvent) { event.preventDefault(); setFilters({ course: courseInput.trim(), stream: streamInput.trim() }); }
   return <div className="customer-workspace">
     <form className="customer-toolbar" onSubmit={search}>
@@ -20,11 +26,11 @@ export function ApplicationsPage() {
       <th scope="col">Номер заявки</th><th scope="col">Курс</th><th scope="col">Поток</th>
       <th scope="col">Слушатель</th><th scope="col">Оплата</th>
     </tr></thead><tbody>{applications.data?.map((item) => <tr key={item.id}>
-      <td><button className="table-link" onClick={() => setSelected(item)}>{item.external_number}</button></td>
+      <td><button className="table-link" onClick={() => setSelectedId(item.id)}>{item.external_number}</button></td>
       <td>{item.course}</td><td>{item.stream_number}</td><td>{item.learner_name}</td>
       <td><span className="badge badge-2">{item.payment_status_label}</span></td>
     </tr>)}</tbody></table>{!applications.data?.length ? <p className="empty">Заявки не найдены.</p> : null}</div>}</section>
-    {selected ? <Modal title="Заявка на курс" close={() => setSelected(null)}>
+    {selected ? <Modal title="Заявка на курс" close={closeSelected}>
       <dl className="customer-details">
         <div><dt>Номер заявки</dt><dd>{selected.external_number}</dd></div>
         <div><dt>Слушатель</dt><dd>{selected.learner_name}</dd></div>
