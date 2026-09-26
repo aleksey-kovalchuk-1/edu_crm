@@ -50,7 +50,7 @@ def test_requests_that_change_nothing_or_fail_record_nothing(client, keycloak, d
 
 def test_forbidden_request_records_nothing(client, keycloak, database_url):
     login(client, keycloak, roles=('crm-user',))
-    assert client.post('/api/v1/universities', json={'name': 'Вуз', 'city': 'Москва'}).status_code == 403
+    assert client.post('/api/v1/it-directions', json={'name': 'Новая специализация'}).status_code == 403
     assert recorded_events(database_url) == []
 
 

@@ -15,6 +15,7 @@ export function TaskCreateForm({
   onCancel,
   initialDeadline,
   initialUniversityId,
+  initialUniversityName,
   initialLaunchId,
 }: {
   onCreated: (task: Task) => void;
@@ -25,6 +26,7 @@ export function TaskCreateForm({
   /** When set (e.g. opened from an Interaction page), the University/Interaction fields are
    * pre-filled and locked — a task created from that page always belongs to that Interaction. */
   initialUniversityId?: number;
+  initialUniversityName?: string;
   initialLaunchId?: number;
 }) {
   const [universityId, setUniversityId] = useState(initialUniversityId ? String(initialUniversityId) : "");
@@ -105,7 +107,7 @@ export function TaskCreateForm({
         Учебное заведение
         {locked ? (
           <span className="muted">
-            {universities.data?.find((u) => u.id === initialUniversityId)?.name ?? initialUniversityId}
+            {initialUniversityName ?? universities.data?.find((u) => u.id === initialUniversityId)?.name ?? initialUniversityId}
           </span>
         ) : (
           <select

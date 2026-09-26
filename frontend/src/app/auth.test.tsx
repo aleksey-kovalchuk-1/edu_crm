@@ -232,7 +232,7 @@ describe("csrf and permissions", () => {
   });
 
   it.each([
-    [["crm-user"], "Менеджер", false],
+    [["crm-user"], "Менеджер", true],
     [["crm-supervisor"], "Руководитель", true],
     [["crm-user", "crm-admin"], "Администратор", true],
   ])("roles %j: label %s, can add universities: %s", async (roles, label, canCreate) => {
@@ -241,7 +241,7 @@ describe("csrf and permissions", () => {
     expect(await screen.findByText(label)).toBeTruthy();
     expect(screen.getByText("Анна Петрова")).toBeTruthy();
     expect(screen.getAllByText("АП")).toHaveLength(2);
-    // Read-only data stays visible for every role.
+    // Every signed-in role can register a new university for its first task.
     expect(await screen.findByText("Колледж связи")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Добавить заведение/ }) !== null).toBe(
       canCreate,

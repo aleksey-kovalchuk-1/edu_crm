@@ -76,7 +76,7 @@ def test_every_role_can_read(client, keycloak, role):
         assert client.get(path).status_code == 200, path
 
 
-@pytest.mark.parametrize('role, status', [('crm-user', 403), ('crm-supervisor', 201), ('crm-admin', 201)])
-def test_only_heads_and_administrators_create_universities(client, keycloak, role, status):
+@pytest.mark.parametrize('role', ALL_ROLES)
+def test_every_crm_role_can_register_a_university(client, keycloak, role):
     login(client, keycloak, roles=(role,))
-    assert client.post('/api/v1/universities', json={'name': 'Вуз', 'city': 'Москва'}).status_code == status
+    assert client.post('/api/v1/universities', json={'name': 'Вуз', 'city': 'Москва'}).status_code == 201

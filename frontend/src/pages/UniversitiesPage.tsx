@@ -17,7 +17,7 @@ import { useDebouncedValue } from "../lib/useDebouncedValue";
 import type { InteractionsState } from "./InteractionsPage";
 
 export const NO_UNIVERSITIES_TEXT =
-  "Вам пока не назначены учебные заведения. Обратитесь к руководителю.";
+  "Вам пока не назначены учебные заведения.";
 
 export function WebsiteLink({ website }: { website: string }) {
   const href = safeWebsiteUrl(website);
@@ -71,7 +71,10 @@ export function UniversitiesPage() {
         </label>
       </SearchToolbar>
       {unassigned ? (
-        <p className="empty panel empty-state">{NO_UNIVERSITIES_TEXT}</p>
+        <div className="empty panel empty-state">
+          <p>{NO_UNIVERSITIES_TEXT}</p>
+          <Link to={paths.settingsUniversities}>Добавить вуз в настройках</Link>
+        </div>
       ) : (
         <div className="panel table-wrap university-table">
           <table className="data-table">

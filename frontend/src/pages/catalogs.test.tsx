@@ -137,7 +137,9 @@ describe("universities", () => {
     mockApi({ ...asManager(), "GET /universities": () => [] });
     renderApp("/universities");
     expect(await screen.findByText(NO_UNIVERSITIES_TEXT)).toBeTruthy();
-    expect(screen.queryByRole("button", { name: /Добавить заведение/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Добавить заведение/ })).toBeTruthy();
+    expect(screen.getByRole("link", { name: "Добавить вуз в настройках" }).getAttribute("href"))
+      .toBe("/settings/universities");
   });
 
   it("explains the empty contracts list to a manager without assigned universities", async () => {

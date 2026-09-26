@@ -10,7 +10,7 @@ import {
 import { useTaskCounters } from "../api/tasks";
 import { CreateModal } from "../components/forms/CreateModal";
 import { ErrorAlert } from "../components/QueryState";
-import { canEditCatalog, roleLabel, userInitials } from "../lib/user";
+import { roleLabel, userInitials } from "../lib/user";
 import { useSession, useSignOut } from "./AuthGate";
 import {
   NOT_FOUND_TITLE,
@@ -48,9 +48,7 @@ export function Layout() {
   // The server enforces roles; the interface only hides actions that would be refused.
   const createKind =
     page && page.create && isPageRoot(page, location.pathname) ? page.create : null;
-  const canCreate =
-    createKind !== null &&
-    (createKind !== "university" || canEditCatalog(user.roles));
+  const canCreate = createKind !== null;
 
   return (
     <>

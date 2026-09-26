@@ -414,10 +414,15 @@ def get_university(university_id: int, auth: AuthContext = Depends(any_role), db
 
 
 @router.post('/universities', response_model=UniversityOut, status_code=201, summary='Добавить учебное заведение')
-def create_university(data: UniversityIn, request: Request, auth: AuthContext = Depends(catalog_editor), db: Session = Depends(get_db)):
+def create_university(data: UniversityIn, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
     university = University(**data.model_dump())
     db.add(university)
     flush_or_conflict(db)
+    # A scoped manager must immediately see the new university and create its first task.
+    # Supervisors and admins already see every university; assigning them would also change
+    # the "university_manager" task-template rule for a newly added institution.
+    if not sees_all(auth.user):
+        db.add(UniversityManager(university_id=university.id, user_id=auth.user.id, assigned_by_user_id=auth.user.id))
     record_event(db, request, auth.user, 'university.create', entity_type='university', entity_id=university.id,
                  summary=f'Добавлено учебное заведение «{university.name}»', payload={'name': university.name, 'city': university.city})
     db.commit()

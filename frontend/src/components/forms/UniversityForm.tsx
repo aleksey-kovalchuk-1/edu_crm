@@ -7,9 +7,11 @@ import { FieldError, FormFooter, formText } from "./FormParts";
 export function UniversityForm({
   university,
   onDone,
+  onSaved,
 }: {
   university?: University;
   onDone: () => void;
+  onSaved?: (saved: University) => void;
 }) {
   const save = useSaveUniversity();
   function submit(e: FormEvent<HTMLFormElement>) {
@@ -26,7 +28,7 @@ export function UniversityForm({
           website: formText(f, "website").trim(),
         },
       },
-      { onSuccess: onDone },
+      { onSuccess: (saved) => { onSaved?.(saved); onDone(); } },
     );
   }
   return (

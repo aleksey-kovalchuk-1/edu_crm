@@ -1,7 +1,7 @@
 {
   "realm": "edu-crm",
-  "displayName": "Образование CRM",
-  "displayNameHtml": "Образование CRM",
+  "displayName": "UniCRM",
+  "displayNameHtml": "UniCRM",
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
@@ -53,7 +53,7 @@
   "clients": [
     {
       "clientId": "edu-crm-api",
-      "name": "Образование CRM",
+      "name": "UniCRM",
       "description": "Серверный OIDC-клиент CRM (backend-for-frontend)",
       "enabled": true,
       "protocol": "openid-connect",
@@ -110,7 +110,7 @@
     },
     {
       "clientId": "edu-crm-admin",
-      "name": "Образование CRM — административный доступ",
+      "name": "UniCRM — административный доступ",
       "description": "Служебная учётная запись для Keycloak Admin API (список пользователей, роли, политика паролей)",
       "enabled": true,
       "protocol": "openid-connect",

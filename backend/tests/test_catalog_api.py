@@ -98,6 +98,20 @@ def test_manager_sees_only_assigned_universities(head, manager):
     assert len(head.get('/api/v1/universities').json()) == 2
 
 
+def test_manager_registers_university_and_can_immediately_create_its_task(manager):
+    response = manager.post('/api/v1/universities', json={'name': 'Новый вуз', 'city': 'Казань'})
+    assert response.status_code == 201, response.text
+    university = response.json()
+    assert [person['id'] for person in university['managers']] == [manager.user_id]
+    assert [item['id'] for item in manager.get('/api/v1/universities').json()] == [university['id']]
+
+    task = manager.post('/api/v1/tasks', json={
+        'title': 'Связаться с новым вузом', 'university_id': university['id'],
+    })
+    assert task.status_code == 201, task.text
+    assert task.json()['university']['id'] == university['id']
+
+
 def test_university_input_is_validated(head):
     response = head.post('/api/v1/universities', json={'name': 'Вуз', 'city': 'Москва', 'website': 'javascript:alert(1)'})
     assert response.status_code == 422
