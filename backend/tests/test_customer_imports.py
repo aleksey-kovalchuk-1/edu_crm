@@ -8,6 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy import func, select
 
 from app import models
+from app import customer_imports
+from app.customer_imports import read_rows
 from app.security import TokenCipher
 from helpers import database, login
 
@@ -134,6 +136,46 @@ def test_numeric_phone_cell_is_rejected_before_leading_zero_can_be_lost(head):
     preview = upload(head, 'learners', 'preview', content, 'слушатели.xlsx').json()
     assert preview['summary']['invalid'] == 1
     assert 'текстом' in preview['rows'][0]['errors'][0]
+
+
+def test_exact_customer_learner_template_maps_all_named_columns():
+    headers = [
+        'Фамилия', 'Имя', 'Отчествопри наличии)', 'Номер телефона', 'Email', 'СНИЛС',
+        'Серия паспорта', 'Номер паспорта', 'Кем выдан паспорт', 'Дата выдачи паспорта',
+        'Код подразделения', 'Пол', 'Дата рождения', 'Регион регистрации',
+        'Населенный пункт регистрации', 'Улица регистрации', 'Дом регистрации',
+        'Квартира регистрации', 'Индекс регистрации', 'Имядательный падеж)',
+        'Фамилиядательный падеж)', 'Отчестводательный падеж)', 'Образование',
+        'Профессия по диплому', 'Учебное заведение по диплому',
+        'Фамилия, указанная в дипломе', 'Номер диплома', 'Серия диплома',
+        'Регистрационный номер диплома', 'Дата выдачи диплома', None,
+    ]
+    values = [''] * len(headers)
+    values[0], values[1], values[3] = 'Тестов', 'Иван', 79000000001
+    book = openpyxl.Workbook()
+    book.active.append(headers)
+    book.active.append(values)
+    book.create_sheet('Вспомогательный').append(['Не импортировать'])
+    content = io.BytesIO()
+    book.save(content)
+    parsed = customer_imports.read_customer_file('learners', 'synthetic.xlsx', content.getvalue())
+    assert parsed.template_version == 'customer-learners-v1'
+    assert len(parsed.mapping) == 30
+    assert parsed.unmapped_headers == []
+    assert len(parsed.rows) == 1
+    assert len(parsed.rows[0][1]) == 30
+    assert parsed.rows[0][1]['phone'] == 79000000001
+
+
+def test_customer_file_describes_vendor_mapping_without_source_values():
+    content = workbook(['Компания', 'Продукт', 'ФИО', 'Телефон', 'Почта', 'Способ связи'],
+                       [['Демо компания', 'Демо продукт', 'Тестовый Контакт', '79000000001',
+                         'demo@example.test', 'Почта']])
+    parsed = customer_imports.read_customer_file('vendors', 'synthetic.xlsx', content)
+    assert parsed.template_version == 'customer-vendors-v1'
+    assert parsed.mapping['company'] == 'Компания'
+    assert parsed.unmapped_headers == []
+    assert len(parsed.rows) == 1
 
 
 def test_learner_import_accepts_russian_date_format(head):
