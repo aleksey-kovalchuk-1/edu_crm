@@ -119,6 +119,19 @@ def test_application_with_shared_phone_keeps_distinct_learner_names(head):
     assert head.get('/api/v1/course-applications').json()[0]['learner_id'] != first['id']
 
 
+def test_unique_contact_resolution_cannot_bypass_different_name_guard(head):
+    first = head.post('/api/v1/learners', json={'last_name': 'Один', 'first_name': 'Тест',
+                                               'phone': '79000000001'}).json()
+    item = {**applications()[0], 'Фамилия': 'Другой', 'Имя': 'Слушатель'}
+    content = json.dumps([item], ensure_ascii=False).encode()
+    response = head.post('/api/v1/customer-imports/applications/apply',
+                         files={'file': ('synthetic.json', content)},
+                         data={'resolved_learner_ids': json.dumps({'1': first['id']})})
+    assert response.status_code == 200, response.text
+    assert response.json()['summary']['created'] == 1
+    assert head.get('/api/v1/course-applications').json()[0]['learner_id'] != first['id']
+
+
 def test_existing_application_rejects_changed_name_even_with_same_contact(head):
     item = applications()[0]
     content = json.dumps([item], ensure_ascii=False).encode()
