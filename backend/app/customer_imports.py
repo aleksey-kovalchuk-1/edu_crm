@@ -4,13 +4,14 @@ Reports contain row positions and safe diagnostics, never source cells or docume
 """
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import asdict, dataclass
 from types import SimpleNamespace
 
 from pydantic import ValidationError
 from sqlalchemy import select
 
 from .errors import AppError, ErrorCode
+from .fraud_rules import evaluate_application
 from .importer import ImportFileError, MAX_DATA_ROWS, MAX_FILE_BYTES, normalize_header, parse_date, read_upload
 from .learner_routes import LearnerIn, apply_fields
 from .models import CourseApplication, ITProduct, Learner, VendorCompany, VendorContact
@@ -208,7 +209,7 @@ class CustomerImportRunner:
             self.current_row_number = number
             self.current_entity = None
             self.row_warnings = []
-            entry = {'row_number': number, 'status': 'ok', 'action': None, 'errors': [], 'warnings': [], 'candidate_ids': []}
+            entry = {'row_number': number, 'status': 'ok', 'action': None, 'errors': [], 'warnings': [], 'candidate_ids': [], 'signals': []}
             if raw is None:
                 entry.update(status='skipped', warnings=['Значение null пропущено'])
             elif not isinstance(raw, dict):
@@ -231,7 +232,8 @@ class CustomerImportRunner:
                     elif action == 'updated':
                         updated += count
                 except ImportRowError as error:
-                    entry.update(status='error', errors=[str(error)], candidate_ids=error.candidate_ids)
+                    entry.update(status='error', errors=[str(error)], candidate_ids=error.candidate_ids,
+                                 signals=[asdict(signal) for signal in error.signals])
                 entry['warnings'].extend(self.row_warnings)
             report.append(entry)
         statuses = [entry['status'] for entry in report]
@@ -373,9 +375,11 @@ class CustomerImportRunner:
             raise ImportRowError('Некорректный формат почты')
         existing = self.applications.get(number)
         if existing is not None:
-            if self.apply:
-                existing.course = course
-                existing.stream_number = stream
+            proposed = self.match_learner(values.get('phone'), values.get('email'))
+            signals = evaluate_application(existing, proposed.id if proposed is not None else None,
+                                           course, stream, self.current_row_number)
+            if signals:
+                raise ImportRowError('Номер заявки противоречит сохранённой карточке; требуется проверка', signals=signals)
             self.seen_application_numbers.add(number)
             if self.apply:
                 self.current_entity = ('course_application', existing.id)
@@ -408,6 +412,7 @@ class CustomerImportRunner:
 class ImportRowError(Exception):
     """A safe row diagnostic with no source personal data."""
 
-    def __init__(self, message, *, candidate_ids=()):
+    def __init__(self, message, *, candidate_ids=(), signals=()):
         super().__init__(message)
         self.candidate_ids = list(candidate_ids)
+        self.signals = list(signals)

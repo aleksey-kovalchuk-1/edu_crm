@@ -100,6 +100,31 @@ def test_duplicate_external_number_is_reported_and_second_row_is_skipped(head):
     assert head.get('/api/v1/course-applications').json()[0]['course'] == 'Python'
 
 
+def test_reimported_application_number_cannot_overwrite_conflicting_course(head):
+    first = applications()[0]
+    assert upload(head, 'applications', 'apply', json.dumps([first], ensure_ascii=False).encode(), 'demo.json').status_code == 200
+    changed = {**first, 'Курс': 'Другой курс', 'Номер потока': 'P-2'}
+    preview = upload(head, 'applications', 'preview', json.dumps([changed], ensure_ascii=False).encode(), 'demo.json').json()
+    assert preview['summary']['invalid'] == 1
+    assert preview['rows'][0]['signals'][0]['rule_code'] == 'application_number_conflict'
+    applied = upload(head, 'applications', 'apply', json.dumps([changed], ensure_ascii=False).encode(), 'demo.json').json()
+    assert applied['summary']['updated'] == 0
+    card = head.get('/api/v1/course-applications').json()[0]
+    assert card['course'] == 'Python'
+    assert card['stream_number'] == 'P-1'
+
+
+def test_reimported_application_number_cannot_change_learner(head):
+    first = applications()[0]
+    upload(head, 'applications', 'apply', json.dumps([first], ensure_ascii=False).encode(), 'demo.json')
+    changed = {**first, 'Фамилия': 'Другой', 'Имя': 'Человек',
+               'Телефон': '79000000002', 'Email': 'other@example.test'}
+    response = upload(head, 'applications', 'apply', json.dumps([changed], ensure_ascii=False).encode(), 'demo.json')
+    assert response.json()['summary']['invalid'] == 1
+    assert response.json()['rows'][0]['signals'][0]['rule_code'] == 'application_number_conflict'
+    assert head.get('/api/v1/course-applications').json()[0]['learner_name'] == 'Тестов Иван Иванович'
+
+
 def test_vendor_table_splits_products_and_reuses_company_contact(head):
     content = workbook(
         ['Компания', 'Продукт', 'ФИО', 'Телефон', 'Почта', 'Способ связи'],
