@@ -6,6 +6,7 @@ import { VendorsPage } from "../pages/VendorsPage";
 import { LearnersPage } from "../pages/LearnersPage";
 import { ApplicationsPage } from "../pages/ApplicationsPage";
 import { CustomerImportsPage } from "../pages/CustomerImportsPage";
+import { FraudAlertsPage } from "../pages/FraudAlertsPage";
 import { ContractsPage } from "../pages/ContractsPage";
 import { ImportsPage } from "../pages/ImportsPage";
 import { InteractionsPage } from "../pages/InteractionsPage";
@@ -46,6 +47,7 @@ export function AppRoutes() {
           <Route path="learners" element={<LearnersPage />} />
           <Route path="applications" element={<ApplicationsPage />} />
           <Route path="customer-imports" element={<CustomerImportsPage />} />
+          <Route path="fraud-alerts" element={<FraudAlertsPage />} />
           <Route path="imports" element={<ImportsPage />} />
           <Route path="interactions" element={<InteractionsPage />} />
           <Route path="interactions/board" element={<StatusBoardPage />} />
