@@ -13,6 +13,8 @@ from .catalog_routes import like_pattern, not_found
 from .customer_imports import CustomerImportRunner, read_customer_file
 from .db import get_db
 from .errors import AppError, ErrorCode
+from .fraud_alerts import upsert_alert
+from .fraud_rules import FraudSignal
 from .models import CourseApplication, CustomerImportBatch, CustomerImportRowLink
 
 router = APIRouter(prefix='/api/v1', tags=['Данные заказчика'])
@@ -133,6 +135,9 @@ async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...
     db.flush()
     for link in report['record_links']:
         db.add(CustomerImportRowLink(batch_id=batch.id, **link))
+    for row in report['rows']:
+        for safe_signal in row['signals']:
+            upsert_alert(db, FraudSignal(**safe_signal), batch.id)
     # Do not retain the uploaded filename or rows; either can contain personal data.
     record_event(db, request, auth.user, f'customer_import.{kind}', summary='Применён импорт данных заказчика',
                  payload={'kind': kind, 'summary': report['summary']})

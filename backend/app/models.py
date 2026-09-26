@@ -597,6 +597,31 @@ class CustomerImportRowLink(Base):
     batch: Mapped['CustomerImportBatch'] = relationship(back_populates='record_links')
 
 
+class FraudAlert(Base):
+    __tablename__ = 'fraud_alerts'
+    __table_args__ = (
+        CheckConstraint("priority in ('low', 'medium', 'high')", name='priority'),
+        CheckConstraint("status in ('open', 'in_review', 'cleared', 'confirmed')", name='status'),
+        Index('ix_fraud_alerts_queue', 'status', 'priority', 'created_at'),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    dedupe_key: Mapped[str] = mapped_column(String(200), unique=True)
+    rule_code: Mapped[str] = mapped_column(String(60))
+    rule_version: Mapped[int]
+    priority: Mapped[str] = mapped_column(String(10))
+    status: Mapped[str] = mapped_column(String(20), default='open', server_default='open')
+    entity_type: Mapped[str | None] = mapped_column(String(30))
+    entity_id: Mapped[int | None]
+    related_entity_id: Mapped[int | None]
+    batch_id: Mapped[int | None] = mapped_column(ForeignKey('customer_import_batches.id'), index=True)
+    row_number: Mapped[int | None]
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    resolution_code: Mapped[str | None] = mapped_column(String(60))
+
+
 class UniversityContact(Base):
     """Responsible person on the university side; personal data, visible only within the user's data scope."""
     __tablename__ = 'university_contacts'
