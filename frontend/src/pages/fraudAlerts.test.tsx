@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { mockApi, renderApp, sessionFixture } from "../test/utils";
 
@@ -40,5 +40,21 @@ describe("fraud review", () => {
     renderApp("/fraud-alerts");
     expect(await screen.findByText(/доступна руководителю/)).toBeTruthy();
     expect(api.count("GET", "/fraud-alerts")).toBe(0);
+  });
+
+  it("only offers valid next review states for a cleared signal", async () => {
+    const cleared = { ...alert, status: "cleared", resolution_code: "false_positive" };
+    mockApi({
+      "GET /fraud-alerts": () => [cleared],
+      "GET /fraud-alerts/status": () => ({ document_match: "active", rule_version: 1,
+        batch_row_limit: 500, hourly_import_limit: 10 }),
+      "GET /fraud-alerts/8": () => cleared,
+    });
+    renderApp("/fraud-alerts");
+    fireEvent.click(await screen.findByRole("button", { name: /Сигнал 8/ }));
+    const decision = await screen.findByLabelText("Решение");
+    expect(within(decision).getByRole("option", { name: "На проверке" })).toBeTruthy();
+    expect(within(decision).queryByRole("option", { name: "Открыт" })).toBeNull();
+    expect(within(decision).queryByRole("option", { name: "Подтверждён проверкой" })).toBeNull();
   });
 });

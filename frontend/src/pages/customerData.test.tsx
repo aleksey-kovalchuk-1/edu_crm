@@ -157,17 +157,22 @@ describe("customer data pages", () => {
     mockApi({
       "GET /customer-imports/history": () => [{ id: 5, kind: "learners", created_at: "2026-09-26T12:00:00Z",
         template_version: "customer-learners-v1", summary: report.summary }],
+      "GET /customer-imports/history/5": () => ({ id: 5, kind: "learners", created_at: "2026-09-26T12:00:00Z",
+        template_version: "customer-learners-v1", summary: report.summary,
+        record_links: [{ row_number: 2, entity_type: "learner", entity_id: 7, action: "created" }] }),
       "POST /customer-imports/learners/preview": () => report,
       "POST /customer-imports/learners/apply": () => ({ ...report, batch_id: 6,
         record_links: [{ row_number: 2, entity_type: "learner", entity_id: 7, action: "created" }] }),
     });
     renderApp("/customer-imports");
-    expect(await screen.findByText(/Пакет 5/)).toBeTruthy();
+    fireEvent.click(await screen.findByRole("button", { name: /Пакет 5/ }));
+    expect((await screen.findByRole("link", { name: /Карточка строки 2/ }) as HTMLAnchorElement).pathname).toBe("/learners");
     fireEvent.change(screen.getByLabelText("Вид данных"), { target: { value: "learners" } });
     fireEvent.change(screen.getByLabelText("Файл"), { target: { files: [new File(["demo"], "demo.xlsx")] } });
     fireEvent.click(screen.getByRole("button", { name: "Проверить файл" }));
     expect(await screen.findByText(/2 столбца распознано/)).toBeTruthy();
     expect(screen.getByText(/Не перенесены: Дополнительное поле/)).toBeTruthy();
+    expect(within(screen.getByLabelText(/Дополнительное поле/)).getByRole("option", { name: "Телефон" })).toBeTruthy();
     expect(screen.getByText(/Телефон был числом Excel/)).toBeTruthy();
     expect(screen.getByText(/Повтор документа \(высокий\)/)).toBeTruthy();
     expect(screen.getByText(/Необычный объём загрузок \(средний\)/)).toBeTruthy();
