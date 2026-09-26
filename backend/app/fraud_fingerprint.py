@@ -4,7 +4,7 @@ import hashlib
 import hmac
 import re
 
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, update
 
 from .audit import record_event
 from .errors import AppError, ErrorCode
@@ -44,7 +44,8 @@ def normalized_record_values(record, cipher):
     }
 
 
-def preview_document_matches(db, values, request, *, learner=None, row_number=None):
+def preview_document_matches(db, values, request, *, learner=None, incoming_learner_id=None,
+                             row_number=None, in_file_index=None):
     """Check submitted identifiers without storing a fingerprint or source value."""
     settings = request.app.state.settings
     if not settings.fraud_match_key or not settings.fraud_match_coverage_complete:
@@ -60,7 +61,7 @@ def preview_document_matches(db, values, request, *, learner=None, row_number=No
         'passport_pair': normalize_passport_pair(effective('passport_series'), effective('passport_number')),
     }
     key = base64.urlsafe_b64decode(settings.fraud_match_key)
-    learner_id = learner.id if learner is not None else None
+    learner_id = incoming_learner_id if incoming_learner_id is not None else learner.id if learner is not None else None
     signals = []
     for kind, value in candidates.items():
         if not value:
@@ -71,11 +72,19 @@ def preview_document_matches(db, values, request, *, learner=None, row_number=No
             LearnerFingerprint.key_version == settings.fraud_match_key_version,
             LearnerFingerprint.digest == digest,
         )
-        if learner_id is not None:
+        if learner_id is not None and learner_id > 0:
             query = query.where(LearnerFingerprint.learner_id != learner_id)
         for match in db.scalars(query).all():
             signals.append(FraudSignal('document_identifier_reuse', 1, 'high', 'learner',
-                                       learner_id, match.learner_id, row_number, kind))
+                                       learner_id if learner_id and learner_id > 0 else None,
+                                       match.learner_id, row_number, kind))
+        if in_file_index is not None:
+            prior_id = in_file_index.get((kind, digest))
+            if prior_id is not None and prior_id != learner_id:
+                signals.append(FraudSignal('document_identifier_reuse', 1, 'high', 'learner',
+                                           learner_id if learner_id and learner_id > 0 else None,
+                                           prior_id if prior_id > 0 else None, row_number, kind))
+            in_file_index[(kind, digest)] = learner_id
     return signals
 
 
@@ -90,11 +99,16 @@ def clear_stale_document_alerts(db, learner_id, kind, version, current_digest):
         other = db.get(LearnerFingerprint, (other_id, kind, version)) if other_id is not None else None
         if current_digest and other is not None and other.digest == current_digest:
             continue
-        alert.status = 'cleared'
-        alert.resolution_code = 'data_corrected'
-        alert.reviewed_by_user_id = None
-        alert.reviewed_at = utcnow()
-        alert.updated_at = alert.reviewed_at
+        changed_at = utcnow()
+        transitioned = db.execute(update(FraudAlert).where(
+            FraudAlert.id == alert.id, FraudAlert.updated_at == alert.updated_at,
+            FraudAlert.status.in_(('open', 'in_review'))).values(
+                status='cleared', resolution_code='data_corrected', reviewed_by_user_id=None,
+                reviewed_at=changed_at, updated_at=changed_at).returning(FraudAlert.id)
+            .execution_options(synchronize_session=False)).scalar_one_or_none()
+        db.expire(alert)
+        if transitioned is None:
+            continue
         record_event(db, None, None, 'fraud_alert.auto_clear', entity_type='fraud_alert', entity_id=alert.id,
                      summary='Сигнал закрыт после изменения документа',
                      payload={'rule_code': alert.rule_code, 'resolution_code': 'data_corrected'})

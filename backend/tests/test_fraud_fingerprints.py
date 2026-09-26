@@ -5,12 +5,15 @@ from dataclasses import replace
 import openpyxl
 from cryptography.fernet import Fernet
 from fastapi.testclient import TestClient
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 
 from app import models
-from app.fraud_fingerprint import fingerprint, normalize_passport_pair, normalize_snils
+from app.fraud_fingerprint import clear_stale_document_alerts, fingerprint, normalize_passport_pair, normalize_snils
+from app.fraud_alerts import upsert_alert
+from app.fraud_rules import FraudSignal
 from app.backfill_fraud_fingerprints import backfill, verify_coverage
 from app.security import TokenCipher
+from app.models import utcnow
 from helpers import database, login
 
 
@@ -67,6 +70,29 @@ def test_customer_preview_reports_document_reuse_without_writing(app, keycloak, 
         assert db.scalar(select(func.count()).select_from(models.FraudAlert)) == 0
 
 
+def test_customer_preview_detects_document_reuse_within_one_file(app, keycloak, database_url):
+    app.state.learner_cipher = TokenCipher(Fernet.generate_key())
+    app.state.settings = replace(app.state.settings, fraud_match_key=base64.urlsafe_b64encode(b'x' * 32).decode(),
+                                 fraud_match_key_version=1, fraud_match_coverage_complete=True)
+    book = openpyxl.Workbook()
+    book.active.append(['Фамилия', 'Имя', 'Телефон', 'СНИЛС'])
+    book.active.append(['Первый', 'Слушатель', '79000000001', '001-234-567 89'])
+    book.active.append(['Второй', 'Слушатель', '79000000002', '001-234-567 89'])
+    output = io.BytesIO()
+    book.save(output)
+    with TestClient(app) as client:
+        login(client, keycloak, roles=('crm-supervisor',), subject='kc-fingerprint-in-file')
+        preview = client.post('/api/v1/customer-imports/learners/preview',
+                              files={'file': ('synthetic.xlsx', output.getvalue())})
+        assert preview.status_code == 200, preview.text
+        assert preview.json()['summary']['valid'] == 2
+        assert preview.json()['rows'][0]['signals'] == []
+        assert preview.json()['rows'][1]['signals'][0]['rule_code'] == 'document_identifier_reuse'
+        assert '00123456789' not in preview.text
+    with database(database_url) as db:
+        assert db.scalar(select(func.count()).select_from(models.Learner)) == 0
+
+
 def test_editing_reused_document_closes_stale_alert_and_recurrence_reopens_it(app, keycloak, database_url):
     app.state.learner_cipher = TokenCipher(Fernet.generate_key())
     app.state.settings = replace(app.state.settings, fraud_match_key=base64.urlsafe_b64encode(b'x' * 32).decode(),
@@ -107,6 +133,76 @@ def test_human_document_decision_is_not_reset_by_repeated_match(app, keycloak, d
         assert review.status_code == 200, review.text
         assert client.patch('/api/v1/learners/2', json={'snils': '001-234-567 89'}).status_code == 200
         assert client.get(f"/api/v1/fraud-alerts/{alert['id']}").json()['status'] == 'cleared'
+
+
+def test_concurrent_human_decision_wins_over_automatic_clear(app, keycloak, database_url, monkeypatch):
+    app.state.learner_cipher = TokenCipher(Fernet.generate_key())
+    app.state.settings = replace(app.state.settings, fraud_match_key=base64.urlsafe_b64encode(b'x' * 32).decode(),
+                                 fraud_match_key_version=1, fraud_match_coverage_complete=True)
+    with TestClient(app) as client:
+        login(client, keycloak, roles=('crm-supervisor',), subject='kc-fingerprint-race')
+        for number in (1, 2):
+            assert client.post('/api/v1/learners', json={
+                'last_name': f'Тестов{number}', 'first_name': 'Иван',
+                'snils': '001-234-567 89'}).status_code == 201
+    with database(database_url) as db:
+        alert_id = db.scalar(select(models.FraudAlert.id))
+        original_scalars = db.scalars
+
+        class LoadedRows:
+            def __init__(self, rows):
+                self.rows = rows
+
+            def all(self):
+                return self.rows
+
+        def concurrent_review(statement, *args, **kwargs):
+            rows = original_scalars(statement, *args, **kwargs).all()
+            with database(database_url) as reviewer:
+                reviewer.execute(update(models.FraudAlert).where(models.FraudAlert.id == alert_id).values(
+                    status='confirmed', resolution_code='confirmed_by_review', updated_at=utcnow()))
+                reviewer.commit()
+            return LoadedRows(rows)
+
+        monkeypatch.setattr(db, 'scalars', concurrent_review)
+        clear_stale_document_alerts(db, 2, 'snils', 1, None)
+        db.commit()
+    with database(database_url) as db:
+        assert db.get(models.FraudAlert, alert_id).status == 'confirmed'
+        assert db.scalar(select(func.count()).select_from(models.AuditEvent).where(
+            models.AuditEvent.action == 'fraud_alert.auto_clear')) == 0
+
+
+def test_concurrent_review_wins_over_automatic_reopen(app, keycloak, database_url, monkeypatch):
+    app.state.learner_cipher = TokenCipher(Fernet.generate_key())
+    app.state.settings = replace(app.state.settings, fraud_match_key=base64.urlsafe_b64encode(b'x' * 32).decode(),
+                                 fraud_match_key_version=1, fraud_match_coverage_complete=True)
+    with TestClient(app) as client:
+        login(client, keycloak, roles=('crm-supervisor',), subject='kc-fingerprint-reopen-race')
+        for number in (1, 2):
+            assert client.post('/api/v1/learners', json={
+                'last_name': f'Тестов{number}', 'first_name': 'Иван',
+                'snils': '001-234-567 89'}).status_code == 201
+        assert client.patch('/api/v1/learners/2', json={'snils': '001-234-567 80'}).status_code == 200
+    with database(database_url) as db:
+        alert_id = db.scalar(select(models.FraudAlert.id))
+        original_scalar = db.scalar
+
+        def concurrent_review(statement, *args, **kwargs):
+            alert = original_scalar(statement, *args, **kwargs)
+            with database(database_url) as reviewer:
+                reviewer.execute(update(models.FraudAlert).where(models.FraudAlert.id == alert_id).values(
+                    status='in_review', resolution_code=None, updated_at=utcnow()))
+                reviewer.commit()
+            return alert
+
+        monkeypatch.setattr(db, 'scalar', concurrent_review)
+        upsert_alert(db, FraudSignal('document_identifier_reuse', 1, 'high', 'learner', 2, 1, None, 'snils'), None)
+        db.commit()
+    with database(database_url) as db:
+        assert db.get(models.FraudAlert, alert_id).status == 'in_review'
+        assert db.scalar(select(func.count()).select_from(models.AuditEvent).where(
+            models.AuditEvent.action == 'fraud_alert.reopened')) == 0
 
 
 def test_no_fingerprint_key_keeps_normal_learner_editing_available(app, keycloak, database_url):

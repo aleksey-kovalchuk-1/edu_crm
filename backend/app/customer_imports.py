@@ -197,6 +197,7 @@ class CustomerImportRunner:
         self.apply = apply
         self.resolved_learner_ids = resolved_learner_ids or {}
         self.seen_application_numbers = set()
+        self.preview_document_index = {}
         self.current_row_number = None
         self.companies = {key(row.name): row for row in db.scalars(select(VendorCompany))}
         self.products = {(row.company_id, key(row.name)): row for row in db.scalars(select(ITProduct)) if row.company_id}
@@ -212,6 +213,7 @@ class CustomerImportRunner:
         created = updated = 0
         for number, raw in rows:
             self.current_row_number = number
+            self.current_match_explicitly_resolved = False
             self.current_entity = None
             self.row_signals = []
             self.row_warnings = []
@@ -326,6 +328,7 @@ class CustomerImportRunner:
             chosen_id = self.resolved_learner_ids.get(str(self.current_row_number))
             selected = next((row for row in matches if row.id == chosen_id), None)
             if selected is not None:
+                self.current_match_explicitly_resolved = True
                 self.row_signals.extend(evaluate_shared_contact({row.id for row in matches}, selected.id, self.current_row_number))
                 return selected
             raise ImportRowError('Неоднозначное совпадение слушателей; требуется ручное разрешение',
@@ -357,10 +360,6 @@ class CustomerImportRunner:
         if match is not None and (key(match.last_name) != key(validated['last_name']) or
                                   key(match.first_name) != key(validated['first_name'])):
             match = None
-        if not self.apply:
-            self.row_signals.extend(preview_document_matches(
-                self.db, validated, self.request, learner=match if isinstance(match, Learner) else None,
-                row_number=self.current_row_number))
         if match is None:
             if self.apply:
                 match = Learner(last_name=validated['last_name'], first_name=validated['first_name'])
@@ -372,6 +371,10 @@ class CustomerImportRunner:
                 match = SimpleNamespace(id=-len(self.learners)-1, phone=validated.get('phone'), email=validated.get('email'),
                                         last_name=validated['last_name'], first_name=validated['first_name'])
             self.learners.append(match)
+            if not self.apply:
+                self.row_signals.extend(preview_document_matches(
+                    self.db, validated, self.request, incoming_learner_id=match.id,
+                    row_number=self.current_row_number, in_file_index=self.preview_document_index))
             if shared_ids:
                 self.row_warnings.append('Контакт уже встречается у другой анкеты; проверьте совпадение')
                 self.row_signals.extend(evaluate_shared_contact(shared_ids, match.id, self.current_row_number))
@@ -382,6 +385,11 @@ class CustomerImportRunner:
             apply_fields(match, validated, self.request)
             self.current_entity = ('learner', match.id)
             self.row_signals.extend(sync_fingerprints(self.db, match, self.request))
+        else:
+            self.row_signals.extend(preview_document_matches(
+                self.db, validated, self.request, learner=match if isinstance(match, Learner) else None,
+                incoming_learner_id=match.id, row_number=self.current_row_number,
+                in_file_index=self.preview_document_index))
         shared_signals = evaluate_shared_contact(shared_ids, match.id, self.current_row_number)
         if shared_signals:
             self.row_warnings.append('Контакт уже встречается у другой анкеты; проверьте совпадение')
@@ -420,7 +428,7 @@ class CustomerImportRunner:
         shared_ids = {row.id for row in self.learners if
                       (values.get('phone') and phone_key(row.phone) == phone_key(values['phone'])) or
                       (values.get('email') and email_key(row.email) == email_key(values['email']))}
-        explicitly_resolved = self.resolved_learner_ids.get(str(self.current_row_number)) == getattr(learner, 'id', None)
+        explicitly_resolved = self.current_match_explicitly_resolved
         if learner is not None and not explicitly_resolved and (
                 key(learner.last_name) != key(values['last_name']) or
                 key(learner.first_name) != key(values['first_name'])):

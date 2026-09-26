@@ -1,5 +1,5 @@
 """Persist review signals without source values or personal identifiers."""
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from .audit import record_event
 from .models import FraudAlert, utcnow
@@ -21,13 +21,16 @@ def upsert_alert(db, signal, batch_id):
     if existing is not None:
         if (existing.status == 'cleared' and existing.resolution_code == 'data_corrected'
                 and existing.reviewed_by_user_id is None):
-            existing.status = 'open'
-            existing.resolution_code = None
-            existing.reviewed_by_user_id = None
-            existing.reviewed_at = None
-            existing.updated_at = utcnow()
-            record_event(db, None, None, 'fraud_alert.reopened', entity_type='fraud_alert', entity_id=existing.id,
-                         summary='Повторный сигнал после исправления данных', payload={'rule_code': signal.rule_code})
+            transitioned = db.execute(update(FraudAlert).where(
+                FraudAlert.id == existing.id, FraudAlert.updated_at == existing.updated_at,
+                FraudAlert.status == 'cleared', FraudAlert.resolution_code == 'data_corrected',
+                FraudAlert.reviewed_by_user_id.is_(None)).values(
+                    status='open', resolution_code=None, reviewed_at=None, updated_at=utcnow())
+                .returning(FraudAlert.id).execution_options(synchronize_session=False)).scalar_one_or_none()
+            db.expire(existing)
+            if transitioned is not None:
+                record_event(db, None, None, 'fraud_alert.reopened', entity_type='fraud_alert', entity_id=existing.id,
+                             summary='Повторный сигнал после исправления данных', payload={'rule_code': signal.rule_code})
         return existing
     alert = FraudAlert(dedupe_key=key, rule_code=signal.rule_code, rule_version=signal.rule_version,
                        evidence_kind=signal.evidence_kind,
