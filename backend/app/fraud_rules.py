@@ -11,6 +11,7 @@ class FraudSignal:
     entity_id: int | None
     related_entity_id: int | None
     row_number: int | None
+    evidence_kind: str | None = None
 
 
 def evaluate_application(existing, proposed_learner_id, course, stream_number, row_number):

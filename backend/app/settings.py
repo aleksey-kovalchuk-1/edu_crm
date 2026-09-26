@@ -1,4 +1,6 @@
 import os
+import base64
+import binascii
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -30,6 +32,9 @@ class Settings:
     public_base_url: str
     session_encryption_key: str
     learner_data_encryption_key: str = ''
+    fraud_match_key: str = ''
+    fraud_match_key_version: int = 1
+    fraud_match_coverage_complete: bool = False
     fraud_batch_row_limit: int = 500
     fraud_hourly_import_limit: int = 10
     session_ttl_hours: int = 8
@@ -138,6 +143,21 @@ def load_settings(environ=None):
         if learner_key == encryption_key:
             raise SettingsError('LEARNER_DATA_ENCRYPTION_KEY must differ from SESSION_ENCRYPTION_KEY')
 
+    fraud_key = (environ.get('FRAUD_MATCH_KEY') or '').strip()
+    if fraud_key:
+        try:
+            decoded = base64.b64decode(fraud_key, altchars=b'-_', validate=True)
+        except (ValueError, binascii.Error) as error:
+            raise SettingsError('FRAUD_MATCH_KEY must encode 32 random bytes') from error
+        if len(decoded) != 32:
+            raise SettingsError('FRAUD_MATCH_KEY must encode 32 random bytes')
+        other_keys = [encryption_key, learner_key]
+        if any(other and decoded == base64.urlsafe_b64decode(other) for other in other_keys):
+            raise SettingsError('FRAUD_MATCH_KEY must differ from encryption keys')
+    fraud_coverage = _boolean(environ, 'FRAUD_MATCH_COVERAGE_COMPLETE', False)
+    if fraud_coverage and not fraud_key:
+        raise SettingsError('FRAUD_MATCH_COVERAGE_COMPLETE requires FRAUD_MATCH_KEY')
+
     allowed_origins = tuple(
         normalize_origin(origin, 'ALLOWED_ORIGINS')
         for origin in (environ.get('ALLOWED_ORIGINS') or '').split(',')
@@ -152,6 +172,9 @@ def load_settings(environ=None):
         public_base_url=normalize_origin(environ['PUBLIC_BASE_URL'], 'PUBLIC_BASE_URL'),
         session_encryption_key=encryption_key,
         learner_data_encryption_key=learner_key,
+        fraud_match_key=fraud_key,
+        fraud_match_key_version=_positive_int(environ, 'FRAUD_MATCH_KEY_VERSION', 1),
+        fraud_match_coverage_complete=fraud_coverage,
         fraud_batch_row_limit=_positive_int(environ, 'FRAUD_BATCH_ROW_LIMIT', 500),
         fraud_hourly_import_limit=_positive_int(environ, 'FRAUD_HOURLY_IMPORT_LIMIT', 10),
         session_ttl_hours=_positive_int(environ, 'SESSION_TTL_HOURS', 8),

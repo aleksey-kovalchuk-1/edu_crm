@@ -9,6 +9,7 @@ keycloak_env="$dir/keycloak.env"
 api_env="$dir/api.env"
 
 if [[ -f "$keycloak_env" && -f "$api_env" ]]; then
+  umask 077
   if ! grep -q '^LEARNER_DATA_ENCRYPTION_KEY=' "$api_env"; then
     umask 077
     learner_key="$(openssl rand -base64 32 | tr '+/' '-_')"
@@ -16,6 +17,11 @@ if [[ -f "$keycloak_env" && -f "$api_env" ]]; then
     echo "Added a separate learner-data key to $api_env; existing secrets were kept."
   else
     echo "Secrets already exist in $dir; nothing to do."
+  fi
+  if ! grep -q '^FRAUD_MATCH_KEY=' "$api_env"; then
+    fraud_key="$(openssl rand -base64 32 | tr '+/' '-_')"
+    printf '\nFRAUD_MATCH_KEY=%s\nFRAUD_MATCH_KEY_VERSION=1\n' "$fraud_key" >> "$api_env"
+    echo "Added a separate document-match key to $api_env; coverage remains disabled until backfill."
   fi
   exit 0
 fi
@@ -36,6 +42,7 @@ admin_client_secret="$(random_text 40)"
 # A Fernet key is URL-safe base64 of 32 random bytes.
 session_key="$(openssl rand -base64 32 | tr '+/' '-_')"
 learner_key="$(openssl rand -base64 32 | tr '+/' '-_')"
+fraud_key="$(openssl rand -base64 32 | tr '+/' '-_')"
 
 cat > "$keycloak_env" <<EOF
 KC_BOOTSTRAP_ADMIN_USERNAME=admin
@@ -53,6 +60,8 @@ OIDC_CLIENT_SECRET=$client_secret
 KEYCLOAK_ADMIN_CLIENT_SECRET=$admin_client_secret
 SESSION_ENCRYPTION_KEY=$session_key
 LEARNER_DATA_ENCRYPTION_KEY=$learner_key
+FRAUD_MATCH_KEY=$fraud_key
+FRAUD_MATCH_KEY_VERSION=1
 EOF
 
 echo "Created $keycloak_env and $api_env (local development only; never commit them)."
