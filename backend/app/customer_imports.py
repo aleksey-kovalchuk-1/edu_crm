@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from sqlalchemy import select
 
 from .errors import AppError, ErrorCode
-from .fraud_rules import evaluate_application
+from .fraud_rules import FraudSignal, evaluate_application, evaluate_learner_match_conflict, evaluate_shared_contact
 from .importer import ImportFileError, MAX_DATA_ROWS, MAX_FILE_BYTES, normalize_header, parse_date, read_upload
 from .learner_routes import LearnerIn, apply_fields
 from .models import CourseApplication, ITProduct, Learner, VendorCompany, VendorContact
@@ -208,6 +208,7 @@ class CustomerImportRunner:
         for number, raw in rows:
             self.current_row_number = number
             self.current_entity = None
+            self.row_signals = []
             self.row_warnings = []
             entry = {'row_number': number, 'status': 'ok', 'action': None, 'errors': [], 'warnings': [], 'candidate_ids': [], 'signals': []}
             if raw is None:
@@ -223,6 +224,7 @@ class CustomerImportRunner:
                     else:
                         action, count = self.application(raw)
                     entry['action'] = action
+                    entry['signals'] = [asdict(signal) for signal in self.row_signals]
                     if self.apply and self.current_entity is not None:
                         entity_type, entity_id = self.current_entity
                         record_links.append({'row_number': number, 'entity_type': entity_type,
@@ -233,7 +235,7 @@ class CustomerImportRunner:
                         updated += count
                 except ImportRowError as error:
                     entry.update(status='error', errors=[str(error)], candidate_ids=error.candidate_ids,
-                                 signals=[asdict(signal) for signal in error.signals])
+                                 signals=[asdict(signal) for signal in [*self.row_signals, *error.signals]])
                 entry['warnings'].extend(self.row_warnings)
             report.append(entry)
         statuses = [entry['status'] for entry in report]
@@ -319,9 +321,11 @@ class CustomerImportRunner:
             chosen_id = self.resolved_learner_ids.get(str(self.current_row_number))
             selected = next((row for row in matches if row.id == chosen_id), None)
             if selected is not None:
+                self.row_signals.extend(evaluate_shared_contact({row.id for row in matches}, selected.id, self.current_row_number))
                 return selected
             raise ImportRowError('Неоднозначное совпадение слушателей; требуется ручное разрешение',
-                                 candidate_ids=[row.id for row in matches if row.id > 0])
+                                 candidate_ids=[row.id for row in matches if row.id > 0],
+                                 signals=evaluate_learner_match_conflict([row.id for row in matches], self.current_row_number))
         return matches[0] if matches else None
 
     def learner(self, raw):
@@ -342,6 +346,12 @@ class CustomerImportRunner:
             field = '.'.join(str(part) for part in error.errors()[0]['loc'])
             raise ImportRowError(f'Некорректный формат поля «{field}»') from error
         match = self.match_learner(validated.get('phone'), validated.get('email'))
+        shared_ids = {row.id for row in self.learners if
+                      (validated.get('phone') and phone_key(row.phone) == phone_key(validated['phone'])) or
+                      (validated.get('email') and email_key(row.email) == email_key(validated['email']))}
+        if match is not None and (key(match.last_name) != key(validated['last_name']) or
+                                  key(match.first_name) != key(validated['first_name'])):
+            match = None
         if match is None:
             if self.apply:
                 match = Learner(last_name=validated['last_name'], first_name=validated['first_name'])
@@ -349,14 +359,22 @@ class CustomerImportRunner:
                 self.db.add(match)
                 self.db.flush()
             else:
-                match = SimpleNamespace(id=-len(self.learners)-1, phone=validated.get('phone'), email=validated.get('email'))
+                match = SimpleNamespace(id=-len(self.learners)-1, phone=validated.get('phone'), email=validated.get('email'),
+                                        last_name=validated['last_name'], first_name=validated['first_name'])
             self.learners.append(match)
+            if shared_ids:
+                self.row_warnings.append('Контакт уже встречается у другой анкеты; проверьте совпадение')
+                self.row_signals.extend(evaluate_shared_contact(shared_ids, match.id, self.current_row_number))
             if self.apply:
                 self.current_entity = ('learner', match.id)
             return 'created', 1
         if self.apply:
             apply_fields(match, validated, self.request)
             self.current_entity = ('learner', match.id)
+        shared_signals = evaluate_shared_contact(shared_ids, match.id, self.current_row_number)
+        if shared_signals:
+            self.row_warnings.append('Контакт уже встречается у другой анкеты; проверьте совпадение')
+            self.row_signals.extend(shared_signals)
         return 'updated', 1
 
     def application(self, raw):
@@ -369,7 +387,8 @@ class CustomerImportRunner:
         if len(number) > 100 or len(course) > 200 or len(stream) > 100:
             raise ImportRowError('Слишком длинный номер заявки, курс или поток')
         if number in self.seen_application_numbers:
-            raise ImportRowError('Номер заявки повторяется в файле')
+            raise ImportRowError('Номер заявки повторяется в файле', signals=[
+                FraudSignal('batch_repetition', 1, 'medium', None, None, None, self.current_row_number)])
         email = str(values.get('email') or '').strip()
         if email and ('@' not in email or email.startswith('@') or email.endswith('@')):
             raise ImportRowError('Некорректный формат почты')

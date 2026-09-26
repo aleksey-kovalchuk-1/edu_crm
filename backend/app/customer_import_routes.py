@@ -1,10 +1,12 @@
 """Preview/apply customer imports and read-only course application cards."""
 import json
+from dataclasses import asdict
+from datetime import timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, Request, UploadFile
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from .audit import record_event
@@ -14,13 +16,22 @@ from .customer_imports import CustomerImportRunner, read_customer_file
 from .db import get_db
 from .errors import AppError, ErrorCode
 from .fraud_alerts import upsert_alert
-from .fraud_rules import FraudSignal
-from .models import CourseApplication, CustomerImportBatch, CustomerImportRowLink
+from .fraud_rules import FraudSignal, evaluate_import_velocity
+from .models import CourseApplication, CustomerImportBatch, CustomerImportRowLink, utcnow
 
 router = APIRouter(prefix='/api/v1', tags=['Данные заказчика'])
 importer = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
 viewer = require_roles(*ALL_ROLES)
 Kind = Literal['vendors', 'learners', 'applications']
+
+
+def velocity_signals(db, request, user_id, rows):
+    recent = db.scalar(select(func.count()).select_from(CustomerImportBatch).where(
+        CustomerImportBatch.created_by_user_id == user_id,
+        CustomerImportBatch.created_at >= utcnow() - timedelta(hours=1))) or 0
+    settings = request.app.state.settings
+    return evaluate_import_velocity(rows, recent + 1, settings.fraud_batch_row_limit,
+                                    settings.fraud_hourly_import_limit)
 
 
 class ApplicationOut(BaseModel):
@@ -72,9 +83,11 @@ async def preview(kind: Kind, request: Request, file: UploadFile = File(...),
     content = await file.read(10 * 1024 * 1024 + 1)
     parsed = read_customer_file(kind, file.filename or '', content, selected_mapping=parse_mapping(mapping))
     report = CustomerImportRunner(db, request, apply=False).run(kind, parsed.rows)
+    batch_signals = velocity_signals(db, request, auth.user.id, len(parsed.rows))
     db.rollback()
     return {**report, 'template_version': parsed.template_version,
-            'mapping': parsed.mapping, 'unmapped_headers': parsed.unmapped_headers}
+            'mapping': parsed.mapping, 'unmapped_headers': parsed.unmapped_headers,
+            'batch_signals': [asdict(signal) for signal in batch_signals]}
 
 
 def parse_mapping(value):
@@ -129,6 +142,7 @@ async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...
     if not parsed.rows:
         raise AppError(ErrorCode.VALIDATION_ERROR, 'В файле нет строк для применения')
     report = CustomerImportRunner(db, request, apply=True, resolved_learner_ids=resolutions).run(kind, parsed.rows)
+    batch_signals = velocity_signals(db, request, auth.user.id, len(parsed.rows))
     batch = CustomerImportBatch(kind=kind, template_version=parsed.template_version,
                                 created_by_user_id=auth.user.id, **report['summary'])
     db.add(batch)
@@ -138,9 +152,13 @@ async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...
     for row in report['rows']:
         for safe_signal in row['signals']:
             upsert_alert(db, FraudSignal(**safe_signal), batch.id)
+    for signal in batch_signals:
+        upsert_alert(db, signal, batch.id)
     # Do not retain the uploaded filename or rows; either can contain personal data.
     record_event(db, request, auth.user, f'customer_import.{kind}', summary='Применён импорт данных заказчика',
-                 payload={'kind': kind, 'summary': report['summary']})
+                 payload={'kind': kind, 'summary': report['summary'],
+                          'resolved_learner_ids': resolutions})
     db.commit()
     return {**report, 'batch_id': batch.id, 'template_version': parsed.template_version,
-            'mapping': parsed.mapping, 'unmapped_headers': parsed.unmapped_headers}
+            'mapping': parsed.mapping, 'unmapped_headers': parsed.unmapped_headers,
+            'batch_signals': [asdict(signal) for signal in batch_signals]}
