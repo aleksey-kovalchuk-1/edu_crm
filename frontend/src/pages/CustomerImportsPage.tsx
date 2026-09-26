@@ -1,6 +1,6 @@
 import { useState } from "react";
 import {
-  useApplyCustomerImport, useCustomerImportHistory, useLearners, usePreviewCustomerImport,
+  useApplyCustomerImport, useCustomerImportHistory, useCustomerImportHistoryDetail, useLearners, usePreviewCustomerImport,
   type ImportKind, type ImportReport,
 } from "../api/customerData";
 import { useSession } from "../app/AuthGate";
@@ -13,14 +13,40 @@ const KINDS: { value: ImportKind; label: string; accept: string }[] = [
   { value: "applications", label: "Заявки на курсы", accept: ".json" },
 ];
 const MANUAL_FIELDS: Record<ImportKind, { value: string; label: string }[]> = {
-  vendors: ["company", "products", "full_name", "phone", "email", "channels"].map((value) => ({ value, label: value })),
-  learners: ["last_name", "first_name", "middle_name", "phone", "email", "snils", "passport_series", "passport_number",
-    "passport_issued_by", "passport_issued_at", "passport_department_code", "gender", "birth_date", "registration_region",
-    "registration_locality", "registration_street", "registration_house", "registration_apartment", "postal_code",
-    "dative_first_name", "dative_last_name", "dative_middle_name", "education", "diploma_profession", "diploma_institution",
-    "diploma_last_name", "diploma_number", "diploma_series", "diploma_registration_number", "diploma_issued_at"].map((value) => ({ value, label: value })),
-  applications: [],
+  vendors: [
+    { value: "company", label: "Компания" }, { value: "products", label: "Продукты" },
+    { value: "full_name", label: "ФИО контакта" }, { value: "phone", label: "Телефон" },
+    { value: "email", label: "Почта" }, { value: "channels", label: "Способ связи" },
+  ],
+  learners: [
+    { value: "last_name", label: "Фамилия" }, { value: "first_name", label: "Имя" },
+    { value: "middle_name", label: "Отчество" }, { value: "phone", label: "Телефон" },
+    { value: "email", label: "Почта" }, { value: "snils", label: "СНИЛС" },
+    { value: "passport_series", label: "Серия паспорта" }, { value: "passport_number", label: "Номер паспорта" },
+    { value: "passport_issued_by", label: "Кем выдан паспорт" }, { value: "passport_issued_at", label: "Дата выдачи паспорта" },
+    { value: "passport_department_code", label: "Код подразделения" }, { value: "gender", label: "Пол" },
+    { value: "birth_date", label: "Дата рождения" }, { value: "registration_region", label: "Регион регистрации" },
+    { value: "registration_locality", label: "Населённый пункт" }, { value: "registration_street", label: "Улица" },
+    { value: "registration_house", label: "Дом" }, { value: "registration_apartment", label: "Квартира" },
+    { value: "postal_code", label: "Индекс" }, { value: "dative_first_name", label: "Имя в дательном падеже" },
+    { value: "dative_last_name", label: "Фамилия в дательном падеже" },
+    { value: "dative_middle_name", label: "Отчество в дательном падеже" },
+    { value: "education", label: "Образование" }, { value: "diploma_profession", label: "Профессия по диплому" },
+    { value: "diploma_institution", label: "Учебное заведение" }, { value: "diploma_last_name", label: "Фамилия в дипломе" },
+    { value: "diploma_number", label: "Номер диплома" }, { value: "diploma_series", label: "Серия диплома" },
+    { value: "diploma_registration_number", label: "Регистрационный номер диплома" },
+    { value: "diploma_issued_at", label: "Дата выдачи диплома" },
+  ],
+  applications: [
+    { value: "external_number", label: "Номер заявки" }, { value: "course", label: "Курс" },
+    { value: "last_name", label: "Фамилия" }, { value: "first_name", label: "Имя" },
+    { value: "middle_name", label: "Отчество" }, { value: "phone", label: "Телефон" },
+    { value: "email", label: "Почта" }, { value: "stream_number", label: "Номер потока" },
+  ],
 };
+function fieldLabel(kind: ImportKind, field: string) {
+  return MANUAL_FIELDS[kind].find((item) => item.value === field)?.label ?? field;
+}
 const CARD_PATH = { vendor_contact: "/vendors", learner: "/learners", course_application: "/applications" };
 const SIGNAL_LABELS: Record<string, string> = {
   application_number_conflict: "Конфликт номера заявки",
@@ -54,9 +80,11 @@ function CustomerImportWorkspace() {
   const [manual, setManual] = useState<Record<string, string>>({});
   const [approvedMapping, setApprovedMapping] = useState<Record<string, string> | undefined>();
   const [mappingReviewed, setMappingReviewed] = useState(true);
+  const [historyId, setHistoryId] = useState<number | null>(null);
   const preview = usePreviewCustomerImport();
   const apply = useApplyCustomerImport();
   const history = useCustomerImportHistory();
+  const historyDetail = useCustomerImportHistoryDetail(historyId);
   const learners = useLearners();
   const chosen = KINDS.find((item) => item.value === kind)!;
   const unresolved = report?.rows.some((row) => row.candidate_ids.length && !resolved[String(row.row_number)]);
@@ -111,7 +139,7 @@ function CustomerImportWorkspace() {
       {report.batch_signals?.length ? <p className="form-note">Сигналы пакета: {report.batch_signals.map(signalText).join("; ")}.</p> : null}
       {report.mapping ? <p>{Object.keys(report.mapping).length} {columnWord(Object.keys(report.mapping).length)} распознано. Шаблон: {report.template_version}.</p> : null}
       {report.mapping ? <details><summary>Сопоставление столбцов</summary><ul>{Object.entries(report.mapping).map(([field, header]) =>
-        <li key={field}>{header} → {field}</li>)}</ul></details> : null}
+        <li key={field}>{header} → {fieldLabel(kind, field)}</li>)}</ul></details> : null}
       {Object.keys(report.mapping_conflicts ?? {}).length ? <p className="form-note">
         Несколько столбцов подходят для одного поля. Проверьте выбор и подтвердите сопоставление. Если заголовки одинаковые, переименуйте один из них в файле.
       </p> : null}
@@ -147,8 +175,19 @@ function CustomerImportWorkspace() {
     </section> : null}
     <section className="panel"><h2>История загрузок</h2>
       {history.data?.length ? <ul>{history.data.map((batch) => <li key={batch.id}>
-        Пакет {batch.id}: {KINDS.find((item) => item.value === batch.kind)?.label ?? batch.kind}, {batch.summary.rows} строк
+        <button type="button" className="text-button" onClick={() => setHistoryId(batch.id)}>
+          Пакет {batch.id}: {KINDS.find((item) => item.value === batch.kind)?.label ?? batch.kind}, {batch.summary.rows} строк
+        </button>
       </li>)}</ul> : <p className="muted">Пока нет загрузок.</p>}
+      {historyDetail.isPending && historyId !== null ? <p className="muted">Загрузка истории…</p> : null}
+      {historyDetail.error ? <ErrorAlert error={historyDetail.error} /> : null}
+      {historyDetail.data ? <div className="form-note">
+        <p>Пакет {historyDetail.data.id}: создано {historyDetail.data.summary.created}, обновлено {historyDetail.data.summary.updated}.</p>
+        {historyDetail.data.record_links.length ? <ul>{historyDetail.data.record_links.map((link) => <li key={`${link.row_number}-${link.entity_type}-${link.entity_id}`}>
+          <a href={`${CARD_PATH[link.entity_type]}?id=${link.entity_id}`}>Карточка строки {link.row_number}</a>
+          {link.action === "created" ? " — создана" : " — обновлена"}
+        </li>)}</ul> : <p>Связанных карточек нет.</p>}
+      </div> : null}
     </section>
   </div>;
 }

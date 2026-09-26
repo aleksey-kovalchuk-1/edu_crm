@@ -17,6 +17,12 @@ const RULES: Record<string, string> = {
 const STATUS: Record<AlertStatus, string> = {
   open: "Открыт", in_review: "На проверке", cleared: "Проверен", confirmed: "Подтверждён проверкой",
 };
+const NEXT_STATUS: Record<AlertStatus, AlertStatus[]> = {
+  open: ["in_review", "cleared", "confirmed"],
+  in_review: ["open", "cleared", "confirmed"],
+  cleared: ["in_review"],
+  confirmed: ["in_review"],
+};
 const REASONS: { value: ResolutionCode; label: string }[] = [
   { value: "legitimate_shared_contact", label: "Допустимый общий контакт" },
   { value: "data_corrected", label: "Данные исправлены" },
@@ -58,7 +64,7 @@ function FraudAlertsWorkspace() {
     <section className="panel">
       <h2>Сигналы для проверки</h2>
       <p className="muted">Сигнал указывает на противоречие в данных и требует проверки человеком.</p>
-      {documentState !== "active" ? <p className="form-note">Сравнение документов: {documentState === "needs_backfill"
+      {documentState && documentState !== "active" ? <p className="form-note">Сравнение документов: {documentState === "needs_backfill"
         ? "нужен перенос ранее созданных анкет" : "ключ не настроен"}.</p> : null}
       <div className="customer-toolbar">
         <label>Статус <select value={status} onChange={(event) => setStatus(event.target.value)}>
@@ -71,7 +77,7 @@ function FraudAlertsWorkspace() {
       {queryFallback([queue]) ?? (queue.data?.length ? <div className="table-wrap"><table className="data-table"><thead><tr>
         <th scope="col">Сигнал</th><th scope="col">Приоритет</th><th scope="col">Статус</th><th scope="col">Создан</th>
       </tr></thead><tbody>{queue.data.map((item) => <tr key={item.id}>
-        <td><button type="button" className="table-link" onClick={() => setSelectedId(item.id)}>
+        <td><button type="button" className="table-link" onClick={() => { setSelectedId(item.id); setDecision(""); setReason(""); }}>
           Сигнал {item.id}: {RULES[item.rule_code] ?? item.rule_code}</button></td>
         <td>{PRIORITY[item.priority]}</td><td>{STATUS[item.status]}</td>
         <td>{new Date(item.created_at).toLocaleString("ru-RU")}</td>
@@ -88,7 +94,7 @@ function FraudAlertsWorkspace() {
           <p><Link to={`${CARD_PATH[alert.entity_type]}?id=${alert.related_entity_id}`}>Открыть связанную карточку #{alert.related_entity_id}</Link></p> : null}
         <div className="customer-toolbar">
           <label>Решение <select value={decision} onChange={(event) => setDecision(event.target.value as AlertStatus | "")}>
-            <option value="">Выберите</option>{Object.entries(STATUS).filter(([code]) => code !== alert.status)
+            <option value="">Выберите</option>{Object.entries(STATUS).filter(([code]) => NEXT_STATUS[alert.status].includes(code as AlertStatus))
               .map(([code, label]) => <option key={code} value={code}>{label}</option>)}
           </select></label>
           <label>Причина <select value={reason} onChange={(event) => setReason(event.target.value as ResolutionCode | "")}>

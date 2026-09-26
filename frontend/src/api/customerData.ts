@@ -47,6 +47,7 @@ export interface ImportReport {
   record_links?: { row_number: number; entity_type: "vendor_contact" | "learner" | "course_application"; entity_id: number; action: "created" | "updated" }[];
 }
 export interface ImportBatch { id: number; kind: ImportKind; template_version: string; created_at: string; summary: ImportReport["summary"] }
+export interface ImportBatchDetail extends ImportBatch { record_links: NonNullable<ImportReport["record_links"]> }
 
 const query = (params: Record<string, string | number | boolean | undefined>) => {
   const entries = Object.entries(params).filter(([, value]) => value !== undefined && value !== "");
@@ -141,4 +142,9 @@ export function useApplyCustomerImport() {
 export const useCustomerImportHistory = () => useQuery({
   queryKey: keys.importHistory,
   queryFn: () => apiRequest<ImportBatch[]>("/customer-imports/history"),
+});
+export const useCustomerImportHistoryDetail = (id: number | null) => useQuery({
+  queryKey: [...keys.importHistory, id],
+  queryFn: () => apiRequest<ImportBatchDetail>(`/customer-imports/history/${id}`),
+  enabled: id !== null,
 });
