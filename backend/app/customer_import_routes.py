@@ -13,7 +13,7 @@ from .catalog_routes import like_pattern, not_found
 from .customer_imports import CustomerImportRunner, read_customer_file
 from .db import get_db
 from .errors import AppError, ErrorCode
-from .models import CourseApplication
+from .models import CourseApplication, CustomerImportBatch, CustomerImportRowLink
 
 router = APIRouter(prefix='/api/v1', tags=['Данные заказчика'])
 importer = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
@@ -87,6 +87,29 @@ def parse_mapping(value):
     return parsed
 
 
+def batch_out(batch):
+    return {'id': batch.id, 'kind': batch.kind, 'template_version': batch.template_version,
+            'created_by_user_id': batch.created_by_user_id, 'created_at': batch.created_at,
+            'summary': {field: getattr(batch, field) for field in
+                        ('rows', 'valid', 'invalid', 'skipped', 'created', 'updated')}}
+
+
+@router.get('/customer-imports/history')
+def import_history(auth: AuthContext = Depends(importer), db: Session = Depends(get_db)):
+    batches = db.scalars(select(CustomerImportBatch).order_by(CustomerImportBatch.id.desc()).limit(100)).all()
+    return [batch_out(batch) for batch in batches]
+
+
+@router.get('/customer-imports/history/{batch_id}')
+def import_history_detail(batch_id: int, auth: AuthContext = Depends(importer), db: Session = Depends(get_db)):
+    batch = db.scalar(select(CustomerImportBatch).options(selectinload(CustomerImportBatch.record_links)).where(CustomerImportBatch.id == batch_id))
+    if batch is None:
+        raise not_found()
+    return {**batch_out(batch), 'record_links': [
+        {'row_number': link.row_number, 'entity_type': link.entity_type,
+         'entity_id': link.entity_id, 'action': link.action} for link in batch.record_links]}
+
+
 @router.post('/customer-imports/{kind}/apply')
 async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...),
                        resolved_learner_ids: str = Form('{}'),
@@ -104,8 +127,15 @@ async def apply_import(kind: Kind, request: Request, file: UploadFile = File(...
     if not parsed.rows:
         raise AppError(ErrorCode.VALIDATION_ERROR, 'В файле нет строк для применения')
     report = CustomerImportRunner(db, request, apply=True, resolved_learner_ids=resolutions).run(kind, parsed.rows)
+    batch = CustomerImportBatch(kind=kind, template_version=parsed.template_version,
+                                created_by_user_id=auth.user.id, **report['summary'])
+    db.add(batch)
+    db.flush()
+    for link in report['record_links']:
+        db.add(CustomerImportRowLink(batch_id=batch.id, **link))
     # Do not retain the uploaded filename or rows; either can contain personal data.
     record_event(db, request, auth.user, f'customer_import.{kind}', summary='Применён импорт данных заказчика',
                  payload={'kind': kind, 'summary': report['summary']})
     db.commit()
-    return report
+    return {**report, 'batch_id': batch.id, 'template_version': parsed.template_version,
+            'mapping': parsed.mapping, 'unmapped_headers': parsed.unmapped_headers}
