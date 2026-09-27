@@ -50,6 +50,12 @@ class CurrentUser(BaseModel):
     # verification state without a separate fetch after login or after verifying a number.
     phone: str
     phone_verified_at: datetime | None
+    first_name: str
+    middle_name: str
+    last_name: str
+    timezone: str
+    telegram: str
+    whatsapp: str
 
 
 class MeResponse(BaseModel):
@@ -309,6 +315,8 @@ def me(auth: AuthContext = Depends(current_auth)):
         user=CurrentUser(
             id=auth.user.id, email=auth.user.email, full_name=auth.user.full_name, roles=sorted(auth.user.roles),
             phone=auth.user.phone, phone_verified_at=auth.user.phone_verified_at,
+            first_name=auth.user.first_name, middle_name=auth.user.middle_name, last_name=auth.user.last_name,
+            timezone=auth.user.timezone, telegram=auth.user.telegram, whatsapp=auth.user.whatsapp,
         ),
         csrf_token=auth.session.csrf_token,
     )

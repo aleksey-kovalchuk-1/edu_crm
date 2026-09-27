@@ -304,3 +304,12 @@ def test_audit_payloads_never_contain_the_raw_phone_number_or_code(client, keycl
         assert PHONE not in blob
         assert subscriber_digits not in blob
         assert code not in blob
+
+
+def test_landline_number_is_rejected_before_any_sms(client, keycloak, sent):
+    login(client, keycloak)
+    response = client.post('/api/v1/profile/phone', json={'phone': '+7 495 123-45-67'})
+    assert response.status_code == 422
+    assert response.json()['details'][0]['field'] == 'phone'
+    assert 'мобильный' in response.json()['details'][0]['message']
+    assert sent.calls == []
