@@ -72,7 +72,7 @@ services:
     env_file:
       - path: deploy/local/api.env
         required: true
-    environment:
+    environment: &api-environment
       DATABASE_URL: postgresql+psycopg://crm:${POSTGRES_PASSWORD:-local-demo-only}@db:5432/edu_crm
       SEED_DEMO: ${SEED_DEMO:-true}
       INITIAL_SUPERADMIN_EMAIL: ${INITIAL_SUPERADMIN_EMAIL:-}
@@ -101,6 +101,21 @@ services:
       timeout: 3s
       retries: 15
       start_period: 20s
+
+  # Date-based in-app notifications (tasks due today/overdue, licences expiring): one pass every 15 minutes.
+  # Same image and settings as the API, but its own entrypoint: migrations and seeding stay with the API,
+  # which must be healthy (migrated) first. See docs/superpowers/specs/2026-09-27-notifications-design.md.
+  notifier:
+    build: ./backend
+    restart: unless-stopped
+    entrypoint: [python, -m, app.notification_scheduler]
+    env_file:
+      - path: deploy/local/api.env
+        required: true
+    environment: *api-environment
+    depends_on:
+      api:
+        condition: service_healthy
 
   web:
     build: ./frontend
