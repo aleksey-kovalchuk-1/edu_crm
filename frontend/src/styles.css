@@ -4087,3 +4087,25 @@ dialog.wide {
   font-size: var(--text-xs);
   text-decoration: none;
 }
+
+/* Sender address queue and shared addresses (Настройки → Организация). */
+.sender-queue {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+.sender-queue li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.sender-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
