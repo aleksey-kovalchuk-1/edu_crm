@@ -55,12 +55,14 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [x] Charts export to PNG / PDF (D-222): Аналитика and Обзор charts.
 - [ ] Notifications: in-app centre + email for "assigned to you", "overdue", "new comment",
       "review requested"; Настройки → Уведомления (currently a placeholder) becomes their settings.
-- [ ] Fill the other placeholder settings pages: Организация, Безопасность, Резервное
+- [ ] Fill the remaining placeholder settings pages: Организация, Резервное
       копирование (show the backups `scripts/db-backup.sh` already makes).
 - [ ] Data scopes admin screen; supervisor reassigns responsible people (T-025).
 - [ ] JSON export of results (T-034).
 - [x] Create manager and administrator accounts from Пользователи и роли (superadmin only).
-- [ ] Promote existing users to supervisor/admin from Пользователи и роли (currently creation and first approval only).
+- [x] Change an existing user's manager/administrator role and assign either role to a pending
+      registration from Пользователи и роли (superadmin only; supervisor/superadmin protected).
+- [x] Reset an existing or pending user's temporary password from Безопасность (superadmin only).
 
 ## 3. Integrations
 

@@ -1,17 +1,25 @@
+import type { FormEvent } from "react";
 import { CheckCircle2 } from "lucide-react";
-import { useApprovePendingRegistration, usePendingRegistrations } from "../../api/admin";
+import { useChangeUserRole, usePendingRegistrations, type AssignableRole } from "../../api/admin";
 import { AdminUsersPanel } from "../../components/AdminUsersPanel";
 import { ErrorAlert, queryFallback, RefreshError } from "../../components/QueryState";
 import { CreateAccountPanel } from "./CreateAccountPanel";
 
 /**
  * A "pending registration" is a Keycloak account that can already sign in but has no CRM role
- * yet — approving one grants the single baseline `crm-user` role (D-214/D-215, docs/api/admin.md).
+ * yet — Irina may grant either the manager or administrator role.
  */
 function PendingRegistrations() {
   const pending = usePendingRegistrations();
-  const approve = useApprovePendingRegistration();
+  const changeRole = useChangeUserRole();
   const data = pending.data;
+
+  function grantAccess(event: FormEvent<HTMLFormElement>, keycloakId: string) {
+    event.preventDefault();
+    const value = new FormData(event.currentTarget).get("role");
+    if (value !== "crm-user" && value !== "crm-admin") return;
+    changeRole.mutate({ keycloakId, role: value as AssignableRole });
+  }
 
   return (
     <section className="panel" aria-labelledby="pending-registrations-title">
@@ -21,7 +29,7 @@ function PendingRegistrations() {
           <p>Учётные записи Keycloak, у которых пока нет ни одной роли CRM.</p>
         </div>
       </div>
-      {approve.error && <ErrorAlert error={approve.error} />}
+      {changeRole.error && <ErrorAlert error={changeRole.error} />}
       {queryFallback([pending]) ??
         (data && (
           <>
@@ -54,15 +62,19 @@ function PendingRegistrations() {
                         </td>
                         <td className="muted">{p.username}</td>
                         <td className="row-actions">
-                          <button
-                            type="button"
-                            className="secondary"
-                            disabled={approve.isPending}
-                            onClick={() => approve.mutate(p.keycloak_id)}
-                          >
-                            <CheckCircle2 size={16} />
-                            Одобрить
-                          </button>
+                          <form aria-label={`Доступ пользователя ${p.username}`} onSubmit={(event) => grantAccess(event, p.keycloak_id)}>
+                            <label>
+                              Роль
+                              <select name="role" defaultValue="crm-user">
+                                <option value="crm-user">Менеджер</option>
+                                <option value="crm-admin">Администратор</option>
+                              </select>
+                            </label>
+                            <button type="submit" className="secondary" disabled={changeRole.isPending}>
+                              <CheckCircle2 size={16} />
+                              Выдать доступ
+                            </button>
+                          </form>
                         </td>
                       </tr>
                     ))}
@@ -81,7 +93,7 @@ export function SettingsUsersPage() {
     <>
       <CreateAccountPanel />
       <PendingRegistrations />
-      <AdminUsersPanel />
+      <AdminUsersPanel editable />
     </>
   );
 }
