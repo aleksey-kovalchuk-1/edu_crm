@@ -66,7 +66,8 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
     accounts = _accounts(client)
     existing = {}
     for spec in EXISTING:
-        matches = [a for a in accounts if a.username in {spec.old_username, spec.username}]
+        matches = [a for a in accounts if a.username in {spec.old_username, spec.username}
+                   or (a.username == spec.email and a.email == spec.email)]
         if len(matches) != 1:
             raise ValueError(f'expected one account for {spec.username}, found {len(matches)}')
         existing[spec.username] = matches[0]
@@ -84,7 +85,7 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
     for username in NEW_ADMINS:
         email = f'{username}@educrm-demo.ru'
         matches = [a for a in accounts if a.username == username or a.email == email]
-        if len(matches) > 1 or (matches and (matches[0].username != username or
+        if len(matches) > 1 or (matches and (matches[0].username not in {username, email} or
                                     matches[0].email != email or set(matches[0].roles) & CRM_ROLES != {'crm-admin'})):
             raise ValueError(f'conflicting existing administrator account: {username}')
         new_admins[username] = matches[0] if matches else None
@@ -98,6 +99,8 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
         ):
             renamed += 1
         role_changes += len(spec.roles - set(account.roles)) + len((set(account.roles) & CRM_ROLES) - spec.roles)
+    renamed += sum(account is not None and account.username != username
+                   for username, account in new_admins.items())
     result = {'renamed': renamed, 'created': sum(a is None for a in new_admins.values()),
               'role_changes': role_changes}
     if not apply:
@@ -106,6 +109,12 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
     changing = any(result.values())
     if changing and credentials_out is None:
         raise ValueError('credentials_out is required when applying account changes')
+    if changing:
+        realm = client.get_realm_login_settings()
+        if realm['registrationEmailAsUsername']:
+            raise ValueError('disable Keycloak email-as-username before changing demonstration accounts')
+        if renamed and not realm['editUsernameAllowed']:
+            raise ValueError('temporarily enable Keycloak editUsernameAllowed for existing login renames')
     credential_file = None
     credentials = {}
     try:
@@ -128,6 +137,10 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
                 client.assign_realm_role(account.id, role)
             for role in sorted(current_roles - spec.roles):
                 client.remove_realm_role(account.id, role)
+            actual = client.get_user(account.id)
+            if (actual.username != spec.username or actual.email != spec.email
+                    or set(actual.roles) & CRM_ROLES != spec.roles):
+                raise ValueError(f'Keycloak did not save the expected login and roles for {spec.username}')
             if changed:
                 password = password_factory()
                 credentials[spec.username] = password
@@ -157,6 +170,10 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
                 try:
                     client.assign_realm_role(user_id, 'crm-admin')
                     client.set_user_enabled(user_id, True)
+                    actual = client.get_user(user_id)
+                    if (actual.username != username or actual.email != f'{username}@educrm-demo.ru'
+                            or set(actual.roles) & CRM_ROLES != {'crm-admin'} or not actual.enabled):
+                        raise KeycloakAdminError('Keycloak did not save the new administrator account')
                 except KeycloakAdminError:
                     try:
                         client.delete_user(user_id)
@@ -168,6 +185,18 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
                     full_name=f'Администратор {username[-1]}', roles=['crm-admin'], is_active=True,
                 ))
             else:
+                if account.username != username:
+                    password = password_factory()
+                    credentials[username] = password
+                    _write_credentials(credential_file, credentials)
+                    client.update_user(account.id, username=username, email=account.email,
+                                       first_name='Администратор', last_name=username[-1])
+                    client.set_temporary_password(account.id, password)
+                    client.logout_user(account.id)
+                actual = client.get_user(account.id)
+                if (actual.username != username or actual.email != f'{username}@educrm-demo.ru'
+                        or set(actual.roles) & CRM_ROLES != {'crm-admin'} or not actual.enabled):
+                    raise ValueError(f'Keycloak did not save the expected administrator {username}')
                 local = db.scalar(select(User).where(User.keycloak_sub == account.id))
                 if local is None:
                     db.add(User(keycloak_sub=account.id, email=account.email,

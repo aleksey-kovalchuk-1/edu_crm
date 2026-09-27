@@ -45,6 +45,8 @@ class FakeKeycloak:
         self.logged_out_users = []
         self.fail_role_assignment = False
         self.realm_password_policy = "length(12) and notUsername and notEmail and passwordHistory(3)"
+        self.registration_email_as_username = False
+        self.edit_username_allowed = True
         # Malformed-response simulation for the admin API, settable per test:
         #   'not_json'    -> GET /users returns 200 with a non-JSON body.
         #   'wrong_shape' -> GET /users returns 200 with a JSON object instead of a JSON array.
@@ -173,7 +175,8 @@ class FakeKeycloak:
                 return httpx.Response(409)
             user_id = f'kc-created-{len(self.admin_users) + 1}'
             self.add_admin_user(
-                id=user_id, email=body['email'], username=body['username'], roles=[],
+                id=user_id, email=body['email'],
+                username=body['email'] if self.registration_email_as_username else body['username'], roles=[],
                 first_name=body.get('firstName', ''), last_name=body.get('lastName', ''),
                 enabled=body.get('enabled', True),
             )
@@ -186,8 +189,16 @@ class FakeKeycloak:
             if request.method == 'DELETE':
                 del self.admin_users[user_id]
             else:
-                self.admin_users[user_id].update(json.loads(request.content))
+                body = json.loads(request.content)
+                if not self.edit_username_allowed and body.get('username', self.admin_users[user_id]['username']) != self.admin_users[user_id]['username']:
+                    return httpx.Response(400, json={'field': 'username', 'errorMessage': 'error-user-attribute-read-only'})
+                if self.registration_email_as_username:
+                    body['username'] = body.get('email', self.admin_users[user_id]['email'])
+                self.admin_users[user_id].update(body)
             return httpx.Response(204)
+        if suffix.startswith('users/') and request.method == 'GET' and '/' not in suffix[len('users/'):]:
+            user = self.admin_users.get(suffix[len('users/'):])
+            return httpx.Response(200, json=user) if user else httpx.Response(404)
         if suffix.startswith('users/') and suffix.endswith('/logout') and request.method == 'POST':
             user_id = suffix[len('users/'):-len('/logout')]
             if user_id not in self.admin_users:
@@ -230,7 +241,11 @@ class FakeKeycloak:
             role_name = suffix[len('roles/'):]
             return httpx.Response(200, json={'id': role_name, 'name': role_name})
         if suffix == '' and request.method == 'GET':
-            return httpx.Response(200, json={'passwordPolicy': self.realm_password_policy})
+            return httpx.Response(200, json={
+                'passwordPolicy': self.realm_password_policy,
+                'registrationEmailAsUsername': self.registration_email_as_username,
+                'editUsernameAllowed': self.edit_username_allowed,
+            })
         return httpx.Response(404)
 
     def http_client(self):
