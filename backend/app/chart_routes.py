@@ -22,6 +22,7 @@ from .auth import ALL_ROLES, AuthContext, require_roles
 from .catalog_routes import university_scope
 from .db import get_db
 from .models import AnnualMetric, Launch, WorkflowStatus, WorkflowTemplate
+from .organization import organization_name
 from .report_routes import FONTS_DIR, register_pdf_fonts
 
 router = APIRouter(prefix='/api/v1', tags=['Графики'])
@@ -273,6 +274,8 @@ def download_chart(
 ):
     filename, title, build = CHARTS[chart]
     fig = build(db, auth.user)
+    # Organization line above the chart title (the title sits at y=42).
+    fig.ops.insert(0, Text(32, 20, organization_name(db), 11, MUTED))
     if format == 'png':
         content, media_type = render_png(fig), 'image/png'
     else:

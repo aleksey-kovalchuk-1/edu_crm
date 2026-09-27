@@ -77,7 +77,7 @@ def test_test_send_reports_logged_only_when_no_provider_configured(client, keycl
 
 def test_test_send_uses_the_callers_own_email_never_a_supplied_address(client, keycloak, app):
     sent = []
-    app.state.email_sender = lambda settings, to, subject, body, from_address=None: sent.append((to, subject, body))
+    app.state.email_sender = lambda settings, to, subject, body, from_address=None, from_name=None: sent.append((to, subject, body))
     login(client, keycloak, roles=('crm-user',))
     response = client.post('/api/v1/email-senders/test')
     assert response.status_code == 200
@@ -87,7 +87,7 @@ def test_test_send_uses_the_callers_own_email_never_a_supplied_address(client, k
 
 
 def test_test_send_reports_delivered_true_when_a_sender_is_injected(client, keycloak, app):
-    app.state.email_sender = lambda settings, to, subject, body, from_address=None: None
+    app.state.email_sender = lambda settings, to, subject, body, from_address=None, from_name=None: None
     login(client, keycloak, roles=('crm-user',))
     response = client.post('/api/v1/email-senders/test')
     assert response.json()['delivered'] is True
@@ -96,7 +96,7 @@ def test_test_send_reports_delivered_true_when_a_sender_is_injected(client, keyc
 def test_test_send_surfaces_a_send_failure_as_a_service_error(client, keycloak, app):
     from app.email import EmailSendError
 
-    def failing_sender(settings, to, subject, body, from_address=None):
+    def failing_sender(settings, to, subject, body, from_address=None, from_name=None):
         raise EmailSendError('provider down')
 
     app.state.email_sender = failing_sender
@@ -107,7 +107,7 @@ def test_test_send_surfaces_a_send_failure_as_a_service_error(client, keycloak, 
 
 def test_test_send_uses_the_selected_sender_identity_as_the_from_address(client, keycloak, app, database_url):
     captured = []
-    app.state.email_sender = lambda settings, to, subject, body, from_address=None: captured.append(from_address)
+    app.state.email_sender = lambda settings, to, subject, body, from_address=None, from_name=None: captured.append(from_address)
     me = login(client, keycloak, roles=('crm-supervisor',))
     sender_id = _active_shared(database_url)
     with database(database_url) as db:
@@ -134,7 +134,7 @@ def test_recreating_a_deactivated_sender_reactivates_the_same_row(client, keyclo
 
 
 def test_test_send_is_rate_limited_to_once_per_minute(client, keycloak, app):
-    app.state.email_sender = lambda settings, to, subject, body, from_address=None: None
+    app.state.email_sender = lambda settings, to, subject, body, from_address=None, from_name=None: None
     login(client, keycloak, roles=('crm-user',))
     first = client.post('/api/v1/email-senders/test')
     assert first.status_code == 200, first.text
