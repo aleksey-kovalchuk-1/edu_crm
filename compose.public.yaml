@@ -5,6 +5,7 @@
 services:
   api:
     environment:
+      SEED_DEMO: 'false'
       PUBLIC_BASE_URL: https://unicrm.tech
       OIDC_ISSUER: https://unicrm.tech/auth/realms/edu-crm
       COOKIE_SECURE: 'true'

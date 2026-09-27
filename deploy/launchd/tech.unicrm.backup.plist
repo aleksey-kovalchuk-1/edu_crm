@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>tech.unicrm.backup</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/alex/dev/edu-crm/scripts/scheduled-backup.sh</string></array>
+  <key>StartCalendarInterval</key>
+  <dict><key>Hour</key><integer>3</integer><key>Minute</key><integer>30</integer></dict>
+  <key>RunAtLoad</key><true/>
+  <key>StandardOutPath</key><string>/Users/alex/Library/Logs/edu-crm-backup.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/alex/Library/Logs/edu-crm-backup.err.log</string>
+</dict>
+</plist>
