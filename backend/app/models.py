@@ -1,5 +1,5 @@
 from datetime import date, datetime, timezone
-from sqlalchemy import BigInteger, CheckConstraint, Column, ForeignKey, Index, SmallInteger, String, Date, DateTime, Boolean, MetaData, Table, Text, UniqueConstraint, false, true
+from sqlalchemy import text, BigInteger, CheckConstraint, Column, ForeignKey, Index, SmallInteger, String, Date, DateTime, Boolean, MetaData, Table, Text, UniqueConstraint, false, true
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
@@ -409,6 +409,8 @@ class User(Base):
     # Saved contacts only — no messaging integration exists (spec 2026-09-27, section 1).
     telegram: Mapped[str] = mapped_column(String(32), default='', server_default='')
     whatsapp: Mapped[str] = mapped_column(String(16), default='', server_default='')
+    # NULL: not paused; a far-future value means "until turned off" (app/notifications.py FOREVER).
+    notifications_paused_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     roles: Mapped[list[str]] = mapped_column(ARRAY(String(32)), default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
@@ -730,6 +732,37 @@ class OrganizationProfile(Base):
     email: Mapped[str] = mapped_column(String(254))
     updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+
+
+class Notification(Base):
+    """One in-app notification for one recipient (spec 2026-09-27-notifications)."""
+    __tablename__ = 'notifications'
+    __table_args__ = (
+        Index('ix_notifications_user_created', 'user_id', 'created_at'),
+        # Repeated scheduler runs cannot duplicate a date-based notification.
+        Index('ix_notifications_user_dedupe', 'user_id', 'dedupe_key', unique=True,
+              postgresql_where=text('dedupe_key IS NOT NULL')),
+    )
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    event_type: Mapped[str] = mapped_column(String(40))
+    title: Mapped[str] = mapped_column(String(200))
+    body: Mapped[str] = mapped_column(String(500), default='', server_default='')
+    link_type: Mapped[str] = mapped_column(String(20))
+    link_id: Mapped[int]
+    university_id: Mapped[int | None]
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    dedupe_key: Mapped[str | None] = mapped_column(String(120))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class NotificationPreference(Base):
+    """Only the checkboxes a user changed; defaults live in app/notifications.py EVENT_TYPES."""
+    __tablename__ = 'notification_preferences'
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), primary_key=True)
+    event_type: Mapped[str] = mapped_column(String(40), primary_key=True)
+    enabled: Mapped[bool] = mapped_column(Boolean)
 
 
 class AuditEvent(Base):
