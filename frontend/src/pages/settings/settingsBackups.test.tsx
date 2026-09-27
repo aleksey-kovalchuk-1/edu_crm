@@ -63,4 +63,21 @@ describe("settings backups", () => {
     renderApp("/settings/backups");
     await waitFor(() => expect(api.callsTo("GET", "/backups/status")).toHaveLength(0));
   });
+
+  it("says the backup service is not responding when a request waits too long", async () => {
+    mockApi({ ...asSuperadmin, "GET /backups/status": () => backupStatusFixture({
+      pending_request: true, pending_since: new Date(Date.now() - 20 * 60_000).toISOString(),
+    }) });
+    renderApp("/settings/backups");
+    await screen.findByText(/Служба копирования не отвечает/);
+    expect(screen.queryByText(/в течение минуты/)).toBeNull();
+  });
+
+  it("does not crash on a copy entry without files", async () => {
+    mockApi({ ...asSuperadmin, "GET /backups/status": () => backupStatusFixture({
+      pairs: [{ label: "daily-20260926", database: null, attachments: null }],
+    }) });
+    renderApp("/settings/backups");
+    await screen.findByText("Ежедневная");
+  });
 });

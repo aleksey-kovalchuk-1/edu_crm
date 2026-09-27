@@ -1,5 +1,5 @@
 import { errorText } from "../../api/client";
-import { useBackupStatus, useRequestBackup, type BackupFile, type BackupRun } from "../../api/backups";
+import { isStuck, useBackupStatus, useRequestBackup, type BackupFile, type BackupRun } from "../../api/backups";
 import { useSession } from "../../app/AuthGate";
 import { formatDateTime } from "../../lib/format";
 import { ROLES } from "../../lib/user";
@@ -84,7 +84,13 @@ export function SettingsBackupsPage() {
             Создать копию сейчас
           </button>
         </div>
-        {data.pending_request && <p role="status" className="muted">Копия запрошена — служба копирования начнёт её в течение минуты.</p>}
+        {data.pending_request && !running && (isStuck(data) ? (
+          <p role="alert" className="danger">
+            Служба копирования не отвечает: запрос ждёт больше 5 минут. Проверьте агент копирования на сервере.
+          </p>
+        ) : (
+          <p role="status" className="muted">Копия запрошена — служба копирования начнёт её в течение минуты.</p>
+        ))}
         {running && <p role="status" className="muted">Выполняется создание копии…</p>}
         {request.isError && <p className="danger" role="alert">{errorText(request.error)}</p>}
       </section>
@@ -99,7 +105,7 @@ export function SettingsBackupsPage() {
                 {data.pairs.map((pair) => (
                   <tr key={pair.label}>
                     <td>{pair.label.startsWith("manual-") ? "Ручная" : "Ежедневная"}</td>
-                    <td>{formatDateTime((pair.database ?? pair.attachments)!.created_at)}</td>
+                    <td>{pair.database ?? pair.attachments ? formatDateTime((pair.database ?? pair.attachments)!.created_at) : "—"}</td>
                     <FileCell file={pair.database} />
                     <FileCell file={pair.attachments} />
                   </tr>

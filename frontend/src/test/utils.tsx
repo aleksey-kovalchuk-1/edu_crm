@@ -319,7 +319,7 @@ export const sessionFixture = (
 });
 
 export const backupStatusFixture = (overrides: Record<string, unknown> = {}) => ({
-  available: true, reason: null, stale: false, pending_request: false,
+  available: true, reason: null, stale: false, pending_request: false, pending_since: null,
   last_run: { trigger: "scheduled", label: "daily-20260927", started_at: "2026-09-27T00:30:00Z",
     finished_at: "2026-09-27T00:31:00Z", result: "success", verified: true, error: null },
   last_success_at: "2026-09-27T00:31:00Z",

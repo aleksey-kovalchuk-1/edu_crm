@@ -62,6 +62,7 @@ class StatusOut(BaseModel):
     pairs: list[PairOut]
     retention: RetentionOut | None
     pending_request: bool
+    pending_since: datetime | None  # when the waiting request (or its claim) appeared
 
 
 def _dirs(request):
@@ -95,9 +96,26 @@ def _parse(status_dir, now):
         return 'damaged', {}
 
 
+def _mtime(path):
+    try:
+        return datetime.fromtimestamp(path.lstat().st_mtime, timezone.utc)
+    except FileNotFoundError:
+        return None
+
+
+def _pending(request_dir, now):
+    """(pending, since): a waiting request.json, or a claim the host agent took and has not finished."""
+    requested = _mtime(request_dir / 'request.json')
+    claimed = _mtime(request_dir / 'processing.json')
+    if claimed is not None and now - claimed > RUN_TIMEOUT:
+        claimed = None
+    times = [t for t in (requested, claimed) if t is not None]
+    return bool(times), (min(times) if times else None)
+
+
 def _is_running(request_dir, fields, now):
-    claim = request_dir / 'processing.json'
-    if claim.exists() and now - datetime.fromtimestamp(claim.stat().st_mtime, timezone.utc) <= RUN_TIMEOUT:
+    claimed = _mtime(request_dir / 'processing.json')
+    if claimed is not None and now - claimed <= RUN_TIMEOUT:
         return True
     run = fields.get('last_run')
     return bool(run and run.result == 'running')
@@ -109,15 +127,15 @@ def backup_status(request: Request):
     status_dir, request_dir = _dirs(request)
     empty = dict(last_run=None, last_success_at=None, stale=True, pairs=[], retention=None)
     if status_dir is None:
-        return StatusOut(available=False, reason='not_configured', pending_request=False, **empty)
+        return StatusOut(available=False, reason='not_configured', pending_request=False, pending_since=None, **empty)
     now = utcnow()
-    pending = (request_dir / 'request.json').exists()
+    pending, since = _pending(request_dir, now)
     reason, fields = _parse(status_dir, now)
     if reason:
-        return StatusOut(available=False, reason=reason, pending_request=pending, **empty)
+        return StatusOut(available=False, reason=reason, pending_request=pending, pending_since=since, **empty)
     last_success = fields['last_success_at']
     stale = last_success is None or now - datetime.fromisoformat(str(last_success).replace('Z', '+00:00')) > STALE_AFTER
-    return StatusOut(available=True, reason=None, stale=stale, pending_request=pending, **fields)
+    return StatusOut(available=True, reason=None, stale=stale, pending_request=pending, pending_since=since, **fields)
 
 
 class ManualOut(BaseModel):

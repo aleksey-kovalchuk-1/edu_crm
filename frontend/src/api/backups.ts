@@ -23,7 +23,13 @@ export interface BackupStatus {
   pairs: BackupPair[];
   retention: { days: number; min_pairs: number; verification_configured: boolean } | null;
   pending_request: boolean;
+  pending_since: string | null;
 }
+
+/** A request the host agent has not picked up within this time means the agent is not responding. */
+export const REQUEST_TIMEOUT_MS = 5 * 60_000;
+export const isStuck = (data: BackupStatus) =>
+  data.pending_request && data.pending_since !== null && Date.now() - new Date(data.pending_since).getTime() > REQUEST_TIMEOUT_MS;
 
 const statusKey = ["backups", "status"] as const;
 
@@ -35,7 +41,9 @@ export const useBackupStatus = (enabled: boolean) =>
     enabled,
     refetchInterval: (query) => {
       const data = query.state.data;
-      return data && (data.pending_request || data.last_run?.result === "running") ? 10_000 : false;
+      // Stop polling a request nobody picked up; the page says the service is not responding.
+      if (!data || isStuck(data)) return false;
+      return data.pending_request || data.last_run?.result === "running" ? 10_000 : false;
     },
   });
 
