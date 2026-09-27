@@ -714,6 +714,24 @@ class Contract(Base):
     manager: Mapped['User | None'] = relationship(foreign_keys=[manager_user_id])
 
 
+class OrganizationProfile(Base):
+    """The single organization card (Настройки → Организация); always row id 1 (migration 0026)."""
+    __tablename__ = 'organization_profile'
+    __table_args__ = (CheckConstraint('id = 1', name='single_row'),)
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(russian_text(200))
+    legal_name: Mapped[str] = mapped_column(russian_text(500))
+    ogrn: Mapped[str] = mapped_column(String(13))
+    registration_date: Mapped[date] = mapped_column(Date)
+    legal_address: Mapped[str] = mapped_column(String(500))
+    postal_address: Mapped[str] = mapped_column(String(500))
+    contact_address: Mapped[str] = mapped_column(String(500))
+    phone: Mapped[str] = mapped_column(String(20))
+    email: Mapped[str] = mapped_column(String(254))
+    updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    updated_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+
+
 class AuditEvent(Base):
     """Append-only record of a user action; the application never updates or deletes these rows."""
     __tablename__ = 'audit_events'
