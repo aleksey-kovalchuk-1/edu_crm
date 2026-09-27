@@ -63,10 +63,13 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 
 ## 3. Integrations
 
-- [ ] **Rostelecom LMS + Laravel CMS connector (F-001, IMPORTANT)** — port the tested mock
-      connector from `ai/integration-candidate` (`connectors.py`, `connector_routes.py`, migration
-      `integration_links`, `docs/api/integrations.md`); swap in the real contract when the case
-      owner provides it (open questions listed in the 2026-09-22 handover report §3).
+- [x] Design the LMS and website mock boundary for the no-API-access scenario, including
+      staging, deduplication, review, access control and real-contract questions
+      (`docs/design/lms-cms-mocks.md`, 2026-09-27).
+- [ ] **Rostelecom LMS + Laravel CMS connector (F-001, IMPORTANT)** — build and test source
+      adapters against approved anonymized examples when their contracts are available. The
+      divergent `ai/integration-candidate` prototype has invented fields and must not be
+      deployed as a real connector or merged wholesale.
 - [ ] Real SMS and email providers behind the existing injectable senders (D-157, D-210).
 - [ ] Superset profile on the current schema, read-only analytics views (T-074).
 
