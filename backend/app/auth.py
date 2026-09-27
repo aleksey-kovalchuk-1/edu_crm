@@ -217,6 +217,7 @@ def _authenticate(request, db, *, revalidate):
         session, user = _revalidate(request, db, session_id, now)
     if request.method in UNSAFE_METHODS:
         _check_csrf(request, session)
+    db.info['actor_user_id'] = user.id  # who acted, for notifications created at commit (app/notification_events.py)
     return AuthContext(user=user, session=session)
 
 

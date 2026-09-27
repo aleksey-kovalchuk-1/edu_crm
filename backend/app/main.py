@@ -20,6 +20,7 @@ from .keycloak_admin import KeycloakAdminClient
 from .models import AnnualMetric, ITProduct, Launch, StageEvent, StatusChange, TaskPlanRun, TaskPlanTemplate, University, WorkflowStatus
 from .plan_routes import resolve_assignee, run_generation, snapshot_template
 from .plan_routes import router as plan_router
+from .notification_events import install as install_notification_events
 from .organization_routes import router as organization_router
 from .profile_routes import router as profile_router
 from .report_routes import router as report_router
@@ -103,6 +104,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     )
     app.state.settings = settings
     app.state.session_factory = sessionmaker(bind=engine)
+    install_notification_events(app.state.session_factory)
     app.state.oidc = OIDCClient(
         issuer=settings.oidc_issuer,
         internal_base_url=settings.oidc_internal_base_url,
