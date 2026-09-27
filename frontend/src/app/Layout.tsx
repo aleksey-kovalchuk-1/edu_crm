@@ -30,6 +30,7 @@ const CREATE_LABELS: Record<CreateKind, string> = {
 };
 
 export function Layout() {
+  const isDemoMode = import.meta.env.VITE_DEMO_MODE === "true";
   const location = useLocation();
   const { user } = useSession();
   const logout = useSignOut();
@@ -98,14 +99,16 @@ export function Layout() {
             />
           </nav>
           <div className="sidebar-bottom">
-            <div className="sidebar-note">
-              <span className="status-dot" /> Демонстрационный контур
-              <p>
-                Единое пространство
-                <br />
-                для работы с образованием
-              </p>
-            </div>
+            {isDemoMode && (
+              <div className="sidebar-note">
+                <span className="status-dot" /> Демонстрационный контур
+                <p>
+                  Единое пространство
+                  <br />
+                  для работы с образованием
+                </p>
+              </div>
+            )}
             <div className="profile">
               <Link
                 to={paths.settingsProfile}
@@ -181,7 +184,7 @@ export function Layout() {
             */}
             <Outlet key={`${location.pathname}#${navResets}`} />
             <footer>
-              UniCRM <span>Рабочий шаблон · Данные вымышлены</span>
+              UniCRM {isDemoMode && <span>Рабочий шаблон · Данные вымышлены</span>}
             </footer>
           </main>
         </div>

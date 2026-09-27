@@ -15,5 +15,8 @@ services:
       KC_HOSTNAME: https://unicrm.tech/auth
 
   web:
+    build:
+      args:
+        VITE_DEMO_MODE: 'false'
     volumes:
       - ./frontend/nginx.public.conf:/etc/nginx/conf.d/default.conf:ro
