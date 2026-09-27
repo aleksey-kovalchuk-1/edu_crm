@@ -255,4 +255,28 @@ def _task_events(db, changes, actor):
                 _task_notify(db, task, recipients - {None}, 'task_commented', 'Добавили комментарий к вашей задаче', actor)
 
 
-HANDLERS = [_university_events, _launch_events, _workflow_events, _task_events]
+def contract_recipients(db, contract):
+    return set(university_managers(db, contract.university_id)) | ({contract.manager_user_id} - {None})
+
+
+def _contract_events(db, changes, actor):
+    from_import = db.info.get('notification_source') == 'import'
+    for kind, model, data in changes:
+        if model != 'Contract':
+            continue
+        contract = db.get(Contract, data['id'])
+        if contract is None:
+            continue
+        if kind == 'new':
+            if from_import:
+                continue  # owner decision: imported contracts do not announce a signing
+            event_type, title = 'contract_signed', 'Подписали договор по вашему вузу'
+        else:
+            event_type, title = 'contract_transfer_changed', 'Изменили статус передачи лицензий или материалов'
+        for user_id in sorted(contract_recipients(db, contract)):
+            # Contracts link to the university page: there is no «Договоры» navigation item.
+            notify(db, user_id=user_id, event_type=event_type, title=title, body=f'Договор {contract.contract_number}',
+                   link_type='contract', link_id=contract.id, university_id=contract.university_id, actor_user_id=actor)
+
+
+HANDLERS = [_university_events, _launch_events, _workflow_events, _task_events, _contract_events]
