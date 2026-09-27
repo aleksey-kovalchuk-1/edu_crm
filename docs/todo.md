@@ -17,7 +17,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [ ] Protect `main` (P-003) so the live site is only ever deployed from reviewed code.
 - [x] Write a one-command deploy script (`scripts/deploy-public.sh`: encrypted database and
       attachment backups → rebuild api/web with both compose files → health + login redirect).
-- [~] Activate the customer's ten named universities and deactivate the six demonstration rows
+- [x] Activate the customer's ten named universities and deactivate the six demonstration rows
       without deleting linked task and interaction history. New universities remain addable in Settings.
 - [ ] Add `CLAUDE.md` (stack, commands, conventions, "the laptop stack *is* production").
 
@@ -75,8 +75,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [ ] Security headers: CSP, `Referrer-Policy`, `Permissions-Policy`, HSTS on the public nginx
       config (only `X-Content-Type-Options` today) (T-070).
 - [ ] Login rate limiting; clean up abandoned `login_states` rows (I-009).
-- [ ] Automatic daily database + attachments backup with retention, and a tested restore
-      (scripts exist; nothing schedules them).
+- [x] Automatic daily encrypted database + attachments backup on the production Mac, 30-day
+      retention with seven complete days kept, and a tested restore (2026-09-27).
 - [ ] Uptime check for unicrm.tech (the site depends on this laptop being awake and online).
 - [ ] Load test: 50 concurrent users, 10 parallel reports (T-071).
 - [ ] Test-client deprecation warnings (I-005); pin local Python to 3.12 like Docker/CI (I-006).
