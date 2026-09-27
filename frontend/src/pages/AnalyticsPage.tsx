@@ -33,7 +33,10 @@ export function AnalyticsPage() {
   const universities = useUniversities();
   const periodInvalid = Boolean(period.from && period.to && period.from > period.to);
   const periodMissing = !period.from || !period.to;
-  const ready = !periodInvalid && !periodMissing && Boolean(browserZone);
+  const monthCount = periodMissing ? 0 : (Number(period.to.slice(0, 4)) - Number(period.from.slice(0, 4))) * 12
+    + Number(period.to.slice(5, 7)) - Number(period.from.slice(5, 7)) + 1;
+  const periodTooLong = monthCount > 120;
+  const ready = !periodInvalid && !periodMissing && !periodTooLong && Boolean(browserZone);
   const params = {
     period_from: period.from,
     period_to: period.to,
@@ -82,6 +85,7 @@ export function AnalyticsPage() {
           {" · "}{selectedUniversities.length ? `Выбрано вузов: ${selectedUniversities.length}` : "Все вузы"}
         </p>
         {periodInvalid && <p className="danger inline-error" role="alert">Конец периода раньше начала.</p>}
+        {periodTooLong && <p className="danger inline-error" role="alert">Период не может превышать 10 лет.</p>}
         {periodMissing && <p className="danger inline-error" role="alert">Укажите начало и конец периода.</p>}
         {!browserZone && <p className="danger inline-error" role="alert">Не удалось определить часовой пояс браузера.</p>}
         {browserZone && <p className="muted analytics-time-zone">Часовой пояс браузера: {browserZone}. После настройки профиля будет использоваться его часовой пояс.</p>}

@@ -21,6 +21,7 @@ from .workflows import stage_group
 
 router = APIRouter(prefix='/api/v1/analytics', tags=['Аналитика'])
 any_role = require_roles(*ALL_ROLES)
+MAX_ANALYTICS_MONTHS = 120
 
 
 def validation_error(field: str, message: str) -> AppError:
@@ -33,6 +34,9 @@ def analytics_snapshot(
 ) -> dict:
     if period_from > period_to:
         raise validation_error('period_to', 'Конец периода раньше начала')
+    month_count = (period_to.year - period_from.year) * 12 + period_to.month - period_from.month + 1
+    if month_count > MAX_ANALYTICS_MONTHS:
+        raise validation_error('period_to', 'Период не может превышать 10 лет')
     try:
         time_zone = ZoneInfo(time_zone_name)
     except (ZoneInfoNotFoundError, ValueError) as error:
@@ -57,15 +61,16 @@ def analytics_snapshot(
         previous = aliased(WorkflowStatus)
         current = aliased(WorkflowStatus)
         changes = db.execute(
-            select(StatusChange.launch_id, previous.position, current.position, StatusChange.created_at)
+            select(StatusChange.launch_id, StatusChange.from_status_id, StatusChange.to_status_id,
+                   previous.position, current.position, StatusChange.created_at)
             .outerjoin(previous, previous.id == StatusChange.from_status_id)
             .join(current, current.id == StatusChange.to_status_id)
             .where(StatusChange.launch_id.in_(launches_by_id))
             .order_by(StatusChange.created_at, StatusChange.id)
         )
-        for launch_id, previous_position, current_position, changed_at in changes:
+        for launch_id, from_id, to_id, previous_position, current_position, changed_at in changes:
             changes_by_launch[launch_id].append((previous_position, current_position, changed_at))
-            if period_from <= changed_at.astimezone(time_zone).date() <= period_to:
+            if from_id != to_id and period_from <= changed_at.astimezone(time_zone).date() <= period_to:
                 reached.append((launches_by_id[launch_id].university_id, stage_group(current_position)))
 
     implementations = []

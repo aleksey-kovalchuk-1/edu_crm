@@ -165,7 +165,8 @@ class RankingChart(Flowable):
                     c.rect(center + dx, bottom, 21, height, fill=1, stroke=0)
                 c.setFont('DejaVuSans-Bold', 9)
                 c.setFillColor(INK)
-                c.drawCentredString(center + dx + 10, bottom + height + 7, str(value))
+                label = '0*' if value == 0 and color == BLUE else str(value)
+                c.drawCentredString(center + dx + 10, bottom + height + 7, label)
             words = row['name'].split()
             lines = []
             line = ''
@@ -188,7 +189,9 @@ class RankingChart(Flowable):
         c.drawString(left + 215, 30, '■  Студенты')
         c.setFillColor(MUTED)
         c.setFont('DejaVuSans', 8)
-        c.drawString(left, 12, 'Высота столбцов рассчитана отдельно для каждой категории.')
+        c.drawString(left, 18, 'Высота столбцов рассчитана отдельно для каждой категории.')
+        if any(row['students'] == 0 for row in self.ranking):
+            c.drawString(left, 5, '* 0 может означать незаполненные данные о студентах.')
 
 
 def build_analytics_pdf(snapshot: dict) -> bytes:
@@ -234,8 +237,9 @@ def build_analytics_pdf(snapshot: dict) -> bytes:
     if snapshot['ranking']:
         story.append(Spacer(1, 8))
         for row in snapshot['ranking']:
+            students_label = '0*' if row['students'] == 0 else str(row['students'])
             story.append(plain_text(
-                f"{escape(row['name'])}: {row['programs']} внедрённых программ, {row['students']} студентов",
+                f"{escape(row['name'])}: {row['programs']} внедрённых программ, {students_label} студентов",
                 size=8, leading=11,
             ))
     document.build(story)

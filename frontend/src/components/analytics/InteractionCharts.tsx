@@ -71,13 +71,13 @@ export function UniversityRanking({ ranking }: { ranking: AnalyticsSnapshot["ran
       <div className="analytics-ranking" style={{ minWidth: Math.max(280, ranking.length * 118) }}>
         <div className="analytics-ranking-plot" role="list" aria-label="Рейтинг вузов по внедрённым программам и студентам" style={{ gridTemplateColumns: `repeat(${ranking.length}, minmax(112px, 1fr))` }}>
           {ranking.map((row) => (
-            <div className="analytics-ranking-group" role="listitem" aria-label={`${row.name}: ${row.programs} внедрённых программ, ${row.students} студентов`} key={row.id}>
+            <div className="analytics-ranking-group" role="listitem" aria-label={`${row.name}: ${row.programs} внедрённых программ, ${row.students} студентов${row.students === 0 ? " (возможно, данные не заполнены)" : ""}`} key={row.id}>
               <div className="analytics-ranking-bars">
-                <div className="analytics-ranking-bar analytics-program-bar" style={{ height: `${Math.max(2, row.programs / maximumPrograms * 100)}%` }}>
+                <div className="analytics-ranking-bar analytics-program-bar" style={{ height: `${row.programs ? Math.max(2, row.programs / maximumPrograms * 100) : 0}%` }}>
                   <strong>{row.programs}</strong>
                 </div>
-                <div className="analytics-ranking-bar analytics-students-bar" style={{ height: `${Math.max(2, row.students / maximumStudents * 100)}%` }}>
-                  <strong>{row.students}</strong>
+                <div className="analytics-ranking-bar analytics-students-bar" style={{ height: `${row.students ? Math.max(2, row.students / maximumStudents * 100) : 0}%` }}>
+                  <strong>{row.students === 0 ? "0*" : row.students}</strong>
                 </div>
               </div>
               <span className="analytics-ranking-name">{row.name}</span>
@@ -89,6 +89,7 @@ export function UniversityRanking({ ranking }: { ranking: AnalyticsSnapshot["ran
           <span><i className="analytics-students-swatch" />Студенты</span>
         </div>
         <p className="analytics-ranking-note">Высота столбцов рассчитана отдельно для каждой категории; точные значения указаны над ними.</p>
+        {ranking.some((row) => row.students === 0) && <p className="analytics-ranking-note">* 0 может означать незаполненные данные о студентах.</p>}
       </div>
     </div>
   );
