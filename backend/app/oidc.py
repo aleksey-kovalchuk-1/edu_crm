@@ -45,6 +45,8 @@ class Identity:
     email: str
     full_name: str
     roles: tuple[str, ...]
+    given_name: str = ''
+    family_name: str = ''
 
 
 class OIDCClient:
@@ -133,6 +135,8 @@ class OIDCClient:
             full_name=claims.get('name') or claims.get('preferred_username') or email or claims['sub'],
             # Keycloak also puts built-in roles (default-roles-*, offline_access) in the claim; only CRM roles matter.
             roles=tuple(sorted({role for role in roles if role in CRM_ROLES})),
+            given_name=claims.get('given_name') or '',
+            family_name=claims.get('family_name') or '',
         )
 
     def _post(self, path, data):

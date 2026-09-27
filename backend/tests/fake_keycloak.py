@@ -67,13 +67,15 @@ class FakeKeycloak:
         payload = {'iss': ISSUER, 'aud': CLIENT_ID, 'azp': CLIENT_ID, 'iat': now, 'exp': now + 300, **claims}
         return jwt.encode(payload, key or self.private_key, algorithm=algorithm, headers={'kid': kid or self.kid})
 
-    def issue_code(self, *, nonce, code_challenge, subject='kc-user-1', email='anna.demo@demo.local', name='Анна Демо', roles=('crm-user',)):
+    def issue_code(self, *, nonce, code_challenge, subject='kc-user-1', email='anna.demo@demo.local', name='Анна Демо',
+                   roles=('crm-user',), given_name=None, family_name=None):
         code = secrets.token_urlsafe(16)
-        self.codes[code] = {
-            'claims': {'sub': subject, 'email': email, 'name': name, 'roles': list(roles)},
-            'nonce': nonce,
-            'code_challenge': code_challenge,
-        }
+        claims = {'sub': subject, 'email': email, 'name': name, 'roles': list(roles)}
+        if given_name is not None:
+            claims['given_name'] = given_name
+        if family_name is not None:
+            claims['family_name'] = family_name
+        self.codes[code] = {'claims': claims, 'nonce': nonce, 'code_challenge': code_challenge}
         return code
 
     def set_roles(self, subject, roles):
