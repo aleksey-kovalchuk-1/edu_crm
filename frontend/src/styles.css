@@ -4133,3 +4133,19 @@ dialog.wide {
     gap: 2px;
   }
 }
+
+/* Product name with the organization name as a second line (sidebar and login screen). */
+.brand-text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  min-width: 0;
+}
+.brand-org {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--color-text-subtle);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
