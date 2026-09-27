@@ -41,7 +41,7 @@ export const useNotifications = (enabled: boolean) =>
     enabled,
   });
 
-function useNotificationMutation<T>(fn: (vars: T) => Promise<unknown>) {
+function useNotificationMutation<T = void>(fn: (vars: T) => Promise<unknown>) {
   const client = useQueryClient();
   return useMutation({
     mutationFn: fn,
@@ -52,7 +52,7 @@ function useNotificationMutation<T>(fn: (vars: T) => Promise<unknown>) {
 export const useMarkRead = () =>
   useNotificationMutation((id: number) => apiRequest<void>(`/notifications/${id}/read`, "POST"));
 export const useMarkAllRead = () =>
-  useNotificationMutation((_: void) => apiRequest<void>("/notifications/read-all", "POST"));
+  useNotificationMutation(() => apiRequest<void>("/notifications/read-all", "POST"));
 
 export const useNotificationPreferences = () =>
   useQuery({
