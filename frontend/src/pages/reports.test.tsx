@@ -127,7 +127,11 @@ describe("new interaction form", () => {
 
 describe("chart downloads", () => {
   it("offers PDF for the new analytics and overview pipeline", async () => {
-    mockApi();
+    mockApi({ "GET /analytics/interactions": () => ({
+      period_from: "2026-01-01", period_to: "2026-09-30", time_zone: "Europe/Moscow", universities: ["Все вузы"],
+      stages: [{ name: "Первый контакт", count: 1 }], monthly: [], ranking: [],
+      has_stage_data: true, has_implementation_data: false,
+    }) });
     renderApp("/analytics");
     const pdf = await screen.findByRole("link", { name: "Скачать PDF" });
     expect(pdf.getAttribute("href")).toContain("/api/v1/analytics/interactions.pdf?");

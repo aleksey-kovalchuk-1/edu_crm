@@ -1,10 +1,12 @@
 import { useState } from "react";
 import { Download } from "lucide-react";
+import { Link } from "react-router";
 import { analyticsPdfUrl, useInteractionAnalytics } from "../api/analytics";
 import { useUniversities } from "../api/catalogs";
 import { useSession } from "../app/AuthGate";
 import { MonthlyLine, StageFunnel, UniversityRanking } from "../components/analytics/InteractionCharts";
-import { MultiSelect } from "../components/MultiSelect";
+import { demoSnapshot } from "../components/analytics/demoSnapshot";
+import { UniversityFilter } from "../components/analytics/UniversityFilter";
 import { RefreshError } from "../components/QueryState";
 
 function todayInZone(timeZone: string): string {
@@ -49,6 +51,8 @@ export function AnalyticsPage() {
   };
   const analytics = useInteractionAnalytics(params, ready);
   const data = ready ? analytics.data : undefined;
+  const showDemo = Boolean(data && !data.has_stage_data && !data.has_implementation_data && data.ranking.length === 0);
+  const charts = data ? (showDemo ? demoSnapshot(data.stages.map((stage) => stage.name)) : data) : undefined;
 
   return (
     <div className="analytics-page">
@@ -56,15 +60,15 @@ export function AnalyticsPage() {
         <div className="section-head">
           <div>
             <h2 id="analytics-filters-title">Параметры аналитики</h2>
-            <p>Период и вузы применяются ко всем трём графикам и PDF.</p>
           </div>
-          {ready ? (
+          {ready && analytics.isSuccess && !showDemo ? (
             <a className="secondary analytics-pdf-link" href={analyticsPdfUrl(params)} download>
               <Download size={16} aria-hidden="true" />
               Скачать PDF
             </a>
           ) : (
-            <button className="secondary analytics-pdf-link" type="button" disabled>Скачать PDF</button>
+            <button className="secondary analytics-pdf-link" type="button" disabled
+              title={showDemo ? "PDF доступен после появления реальных данных" : undefined}>Скачать PDF</button>
           )}
         </div>
         <div className="analytics-filters">
@@ -76,10 +80,8 @@ export function AnalyticsPage() {
               <input type="date" aria-label="Период по" value={period.to} onChange={(event) => setPeriod((current) => ({ ...current, to: event.target.value }))} />
             </div>
           </div>
-          <MultiSelect
-            label="Вузы"
-            allLabel="Все вузы"
-            options={(universities.data ?? []).map((university) => ({ value: university.id, label: university.short_name || university.name }))}
+          <UniversityFilter
+            options={universities.data ?? []}
             value={selectedUniversities}
             onChange={setSelectedUniversities}
           />
@@ -94,6 +96,19 @@ export function AnalyticsPage() {
         {!timeZone && <p className="danger inline-error" role="alert">Не удалось определить часовой пояс. Укажите его в профиле.</p>}
         {profileZone ? <p className="muted analytics-time-zone">Часовой пояс профиля: {profileZone}.</p>
           : browserZone && <p className="muted analytics-time-zone">Часовой пояс браузера: {browserZone}. Укажите часовой пояс в профиле для точного расчёта.</p>}
+        {showDemo && (
+          <div className="analytics-demo-notice" role="status">
+            <strong>Нет данных за выбранный период</strong>
+            <p>Ниже показан демонстрационный пример с вымышленными показателями. Он не зависит от выбранных фильтров; PDF появится только для реальных данных.</p>
+            <p>Чтобы получить реальные графики:</p>
+            <ol>
+              <li>Создайте взаимодействие с действующим вузом и укажите число студентов.</li>
+              <li>Переводите взаимодействие по этапам — так заполнится воронка.</li>
+              <li>Переведите его в «Обучение» — дата перехода заполнит график внедрений и рейтинг.</li>
+            </ol>
+            <Link to="/interactions">Открыть взаимодействия</Link>
+          </div>
+        )}
         <RefreshError queries={[universities]} />
       </section>
 
@@ -101,28 +116,31 @@ export function AnalyticsPage() {
       <section className="panel analytics-chart-panel" aria-labelledby="analytics-stages-title">
         <div className="section-head"><div>
           <h2 id="analytics-stages-title">Вузы по этапам</h2>
+          {showDemo && <span className="analytics-demo-tag">Демо</span>}
           <p>Вуз учитывается на достигнутом этапе и на всех предыдущих.</p>
         </div></div>
         {!ready || analytics.isPending || analytics.isError ? <p className="muted">{!ready ? "Проверьте период." : analytics.isError ? "Не удалось загрузить данные." : "Загружаем аналитику…"}</p>
-          : data?.has_stage_data ? <StageFunnel stages={data.stages} /> : <EmptyChart />}
+          : showDemo || data?.has_stage_data ? <StageFunnel stages={charts!.stages} /> : <EmptyChart />}
       </section>
 
       <section className="panel analytics-chart-panel" aria-labelledby="analytics-months-title">
         <div className="section-head"><div>
           <h2 id="analytics-months-title">Внедрённые программы по месяцам</h2>
+          {showDemo && <span className="analytics-demo-tag">Демо</span>}
           <p>Датой внедрения считается переход взаимодействия в «Обучение».</p>
         </div></div>
         {!ready || analytics.isPending || analytics.isError ? <p className="muted">{!ready ? "Проверьте период." : analytics.isError ? "Не удалось загрузить данные." : "Загружаем аналитику…"}</p>
-          : data?.has_implementation_data ? <MonthlyLine months={data.monthly} /> : <EmptyChart />}
+          : showDemo || data?.has_implementation_data ? <MonthlyLine months={charts!.monthly} /> : <EmptyChart />}
       </section>
 
       <section className="panel analytics-chart-panel" aria-labelledby="analytics-ranking-title">
         <div className="section-head"><div>
           <h2 id="analytics-ranking-title">Рейтинг вузов</h2>
+          {showDemo && <span className="analytics-demo-tag">Демо</span>}
           <p>Топ‑5 по числу внедрённых программ; при равенстве — по числу студентов.</p>
         </div></div>
         {!ready || analytics.isPending || analytics.isError ? <p className="muted">{!ready ? "Проверьте период." : analytics.isError ? "Не удалось загрузить данные." : "Загружаем аналитику…"}</p>
-          : data?.ranking.length ? <UniversityRanking ranking={data.ranking} /> : <EmptyChart />}
+          : charts?.ranking.length ? <UniversityRanking ranking={charts.ranking} /> : <EmptyChart />}
       </section>
     </div>
   );

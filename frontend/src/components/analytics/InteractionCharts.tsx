@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { AnalyticsSnapshot } from "../../api/analytics";
 
 const MONTHS = ["Янв", "Фев", "Мар", "Апр", "Май", "Июн", "Июл", "Авг", "Сен", "Окт", "Ноя", "Дек"];
@@ -25,7 +26,19 @@ export function StageFunnel({ stages }: { stages: AnalyticsSnapshot["stages"] })
 }
 
 export function MonthlyLine({ months }: { months: AnalyticsSnapshot["monthly"] }) {
-  const width = Math.max(660, months.length * 86 + 100);
+  const container = useRef<HTMLDivElement>(null);
+  const [availableWidth, setAvailableWidth] = useState(0);
+  useEffect(() => {
+    const node = container.current;
+    if (!node) return;
+    const measure = () => setAvailableWidth(Math.max(0, node.clientWidth - 48));
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, []);
+  const width = Math.max(660, months.length * 86 + 100, availableWidth);
   const height = 284;
   const left = 72;
   const top = 28;
@@ -38,7 +51,7 @@ export function MonthlyLine({ months }: { months: AnalyticsSnapshot["monthly"] }
   const ticks = [...new Set([0, Math.ceil(max / 2), max])];
 
   return (
-    <div className="analytics-chart-scroll">
+    <div className="analytics-chart-scroll" ref={container} tabIndex={0} role="region" aria-label="Месячный график, горизонтальная прокрутка">
       <svg className="analytics-line-chart" viewBox={`0 0 ${width} ${height}`} width={width} height={height} role="img" aria-label={`Внедрённые программы по месяцам: ${months.map((month) => `${monthLabel(month.month)} — ${month.count}`).join(", ")}`}>
         {ticks.map((tick) => (
           <g key={tick}>
@@ -67,11 +80,11 @@ export function UniversityRanking({ ranking }: { ranking: AnalyticsSnapshot["ran
   const maximumPrograms = Math.max(1, ...ranking.map((row) => row.programs));
   const maximumStudents = Math.max(1, ...ranking.map((row) => row.students));
   return (
-    <div className="analytics-chart-scroll">
+    <div className="analytics-chart-scroll" tabIndex={0} role="region" aria-label="Рейтинг вузов, горизонтальная прокрутка">
       <div className="analytics-ranking" style={{ minWidth: Math.max(280, ranking.length * 118) }}>
         <div className="analytics-ranking-plot" role="list" aria-label="Рейтинг вузов по внедрённым программам и студентам" style={{ gridTemplateColumns: `repeat(${ranking.length}, minmax(112px, 1fr))` }}>
           {ranking.map((row) => (
-            <div className="analytics-ranking-group" role="listitem" aria-label={`${row.name}: ${row.programs} внедрённых программ, ${row.students} студентов${row.students === 0 ? " (возможно, данные не заполнены)" : ""}`} key={row.id}>
+            <div className="analytics-ranking-group" role="listitem" aria-label={`${row.name}: внедрённые программы — ${row.programs}, студенты — ${row.students}${row.students === 0 ? " (возможно, данные не заполнены)" : ""}`} key={row.id}>
               <div className="analytics-ranking-bars">
                 <div className="analytics-ranking-bar analytics-program-bar" style={{ height: `${row.programs ? Math.max(2, row.programs / maximumPrograms * 100) : 0}%` }}>
                   <strong>{row.programs}</strong>
