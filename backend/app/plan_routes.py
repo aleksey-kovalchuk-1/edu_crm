@@ -20,6 +20,7 @@ from .models import (
     Launch, Task, TaskChecklistItem, TaskEvent, TaskMember, TaskPlanRun, TaskPlanTemplate,
     TaskPlanTemplateStep, TaskPlanTemplateStepChecklistItem, University, UniversityManager, User, utcnow,
 )
+from .owner_links import match_owner_user
 from .task_routes import task_out
 from .task_policy import TaskAction, can, visible_tasks_query
 from .workflows import STAGE_GROUPS, launch_in_scope, stage_group
@@ -257,11 +258,13 @@ def resolve_assignee(db, step, university_id, launch, plan_creator_id):
     if step['assignee_rule'] == 'interaction_owner':
         if launch is None:
             return None, 'Не выбрано взаимодействие, по которому определяется ответственный'
-        matches = db.scalars(select(User.id).where(
-            User.is_active.is_(True), func.lower(func.trim(User.full_name)) == launch.owner.strip().lower(),
-        )).all()
-        if len(matches) == 1:
-            return matches[0], None
+        if launch.owner_user_id is not None:
+            linked = db.get(User, launch.owner_user_id)
+            if linked is not None and linked.is_active:
+                return linked.id, None
+        matched = match_owner_user(db, launch.owner)
+        if matched is not None:
+            return matched, None
         return None, 'Не удалось однозначно сопоставить ответственного по взаимодействию с пользователем CRM'
     return None, 'Этот шаг назначается только вручную'
 
