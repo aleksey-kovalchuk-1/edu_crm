@@ -259,7 +259,7 @@ export const settingsPages: PageMeta[] = [
     name: "Безопасность",
     icon: ShieldCheck,
     heading: "Безопасность",
-    subtitle: "Активные сеансы и политика паролей.",
+    subtitle: "Сброс паролей сотрудников и завершение прежних сеансов.",
     create: null,
     hidden: true,
   },

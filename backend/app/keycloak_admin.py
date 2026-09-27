@@ -30,6 +30,10 @@ class KeycloakAdminConflict(KeycloakAdminError):
     """The requested username or email already exists."""
 
 
+class KeycloakAdminNotFound(KeycloakAdminError):
+    """The requested Keycloak account does not exist."""
+
+
 class AdminUser:
     def __init__(self, id, email, username, roles, first_name='', last_name='', enabled=True):
         self.id = id
@@ -244,6 +248,8 @@ class KeycloakAdminClient:
             raise KeycloakAdminError(f'{path} returned 401')
         if response.status_code == 409:
             raise KeycloakAdminConflict(f'{path} returned 409')
+        if response.status_code == 404:
+            raise KeycloakAdminNotFound(f'{path} returned 404')
         if response.status_code >= 400:
             raise KeycloakAdminError(f'{path} returned {response.status_code}')
         return response

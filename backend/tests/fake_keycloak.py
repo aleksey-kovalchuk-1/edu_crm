@@ -44,6 +44,7 @@ class FakeKeycloak:
         self.admin_users = {}  # id -> {"id", "email", "username", "roles": [...]}
         self.logged_out_users = []
         self.fail_role_assignment = False
+        self.fail_role_removal = False
         self.realm_password_policy = "length(12) and notUsername and notEmail and passwordHistory(3)"
         self.registration_email_as_username = False
         self.edit_username_allowed = True
@@ -219,6 +220,8 @@ class FakeKeycloak:
             ])
         if suffix.startswith('users/') and suffix.endswith('/role-mappings/realm') and request.method in ('POST', 'DELETE'):
             if self.fail_role_assignment and request.method == 'POST':
+                return httpx.Response(503)
+            if self.fail_role_removal and request.method == 'DELETE':
                 return httpx.Response(503)
             user_id = suffix[len('users/'):-len('/role-mappings/realm')]
             roles = json.loads(request.content)
