@@ -94,6 +94,42 @@ def error_response(code, message=None, details=None, headers=None, status=None):
     return JSONResponse(status_code=status or default_status, content=jsonable_encoder(body), headers=headers)
 
 
+def _russian_message(error):
+    """pydantic's English defaults, in Russian: every form in this CRM shows these texts under the field."""
+    kind, ctx, msg = error.get('type', ''), error.get('ctx') or {}, error.get('msg', '')
+    if kind == 'missing' or (kind == 'string_too_short' and ctx.get('min_length') == 1):
+        return 'Заполните поле'
+    if kind == 'string_too_short':
+        return f"Не менее {ctx.get('min_length')} символов"
+    if kind == 'string_too_long':
+        return f"Не более {ctx.get('max_length')} символов"
+    if kind == 'too_long':
+        return f"Не более {ctx.get('max_length')} элементов"
+    if kind == 'value_error' and 'email address' in msg:
+        return 'Укажите корректный email'
+    if kind == 'value_error':
+        return msg.removeprefix('Value error, ')  # own validators already raise Russian text
+    if kind.startswith('date_'):
+        return 'Укажите корректную дату'
+    if kind.startswith('datetime_'):
+        return 'Укажите корректные дату и время'
+    if kind.startswith('int_'):
+        return 'Укажите целое число'
+    if kind == 'greater_than_equal':
+        return f"Значение не меньше {ctx.get('ge')}"
+    if kind == 'greater_than':
+        return f"Значение больше {ctx.get('gt')}"
+    if kind == 'less_than_equal':
+        return f"Значение не больше {ctx.get('le')}"
+    if kind in ('literal_error', 'enum'):
+        return 'Выберите значение из списка'
+    if kind == 'extra_forbidden':
+        return 'Это поле нельзя изменить'
+    if kind.startswith('bool_'):
+        return 'Укажите «да» или «нет»'
+    return msg
+
+
 def _validation_details(errors):
     details = []
     for error in errors:
@@ -101,7 +137,7 @@ def _validation_details(errors):
         location = [str(part) for part in error.get('loc', ())]
         if location and location[0] in {'body', 'query', 'path', 'header', 'cookie'}:
             location = location[1:]
-        details.append({'field': '.'.join(location) or None, 'message': error.get('msg', ''), 'type': error.get('type')})
+        details.append({'field': '.'.join(location) or None, 'message': _russian_message(error), 'type': error.get('type')})
     return details
 
 

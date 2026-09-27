@@ -16,7 +16,8 @@ from .organization import format_phone, organization_name, validate_ogrn
 from .phone import PhoneFormatError, normalize_phone
 
 router = APIRouter(prefix='/api/v1/organization', tags=['Организация'])
-any_role = require_roles(*ALL_ROLES)
+# crm-superadmin is outside ALL_ROLES by design; it can edit the card, so it must be able to read it too.
+any_role = require_roles(*ALL_ROLES, ROLE_SUPERADMIN)
 org_admin = require_roles(ROLE_ADMIN, ROLE_SUPERADMIN)
 
 Short = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
