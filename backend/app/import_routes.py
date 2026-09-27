@@ -183,6 +183,7 @@ def apply_import(import_id: int, data: MappingIn, request: Request, auth: AuthCo
     if record.status == 'applied':
         raise AppError(ErrorCode.CONFLICT, 'Эта загрузка уже применена')
     mapping = _checked_mapping(record, data.mapping)
+    db.info['notification_source'] = 'import'  # imported contracts do not create "Подписали договор"
     report = CatalogWriter(db, apply=True).run(record, mapping)
     record.status = 'applied'
     record.mapping = mapping
