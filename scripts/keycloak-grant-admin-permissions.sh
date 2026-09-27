@@ -34,7 +34,7 @@ fi
 # Step 1: grant the roles to the service-account user itself.
 docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh add-roles -r edu-crm \
   --uusername "$service_account_username" --cclientid realm-management \
-  --rolename view-users --rolename manage-users --rolename view-realm
+  --rolename view-users --rolename manage-users --rolename view-realm --rolename view-events
 
 # Step 2: also add the same roles to the edu-crm-admin client's own scope-mappings. Required
 # because fullScopeAllowed=false restricts which of the user's roles are actually minted into
@@ -46,7 +46,7 @@ realm_management_id=$(docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh
 
 scope_roles_json="["
 first=true
-for role_name in view-users manage-users view-realm; do
+for role_name in view-users manage-users view-realm view-events; do
   role_id=$(docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh get \
     "clients/$realm_management_id/roles/$role_name" -r edu-crm --fields id --format csv --noquotes \
     | tail -n1 | tr -d '\r')
