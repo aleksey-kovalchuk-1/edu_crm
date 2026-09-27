@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """Expire only complete, old scheduled backup days; never touch manual releases."""
 
+from __future__ import annotations
+
 import argparse
 import re
 from collections import defaultdict
