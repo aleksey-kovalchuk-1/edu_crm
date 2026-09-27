@@ -88,7 +88,7 @@
 - Consumes: `analytics_snapshot` from Task 2.
 - Produces: `GET /api/v1/analytics/interactions.pdf`, vector charts in a downloadable PDF with the same values and scoped labels as JSON.
 
-- [ ] Write failing tests for PDF auth/scope, filter and date parity with JSON, all three chart titles/values, embedded Cyrillic fonts, and period-based filename.
-- [ ] Implement ReportLab drawing using bundled DejaVu fonts; show the three empty states where appropriate.
-- [ ] Render a representative PDF to PNG and inspect legibility; run backend suite and frontend suite once more.
-- [ ] Update API documentation and commit; leave the branch local for user review and deployment approval.
+- [x] Write failing tests for PDF auth/scope, filter and date parity with JSON, all three chart titles/values, embedded Cyrillic fonts, and period-based filename.
+- [x] Implement ReportLab drawing using bundled DejaVu fonts; show the three empty states where appropriate.
+- [x] Render a representative PDF to PNG and inspect legibility; run backend suite and frontend suite once more.
+- [x] Update API documentation and commit; leave the branch local for user review and deployment approval.
