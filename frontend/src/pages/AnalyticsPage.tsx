@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Download } from "lucide-react";
 import { analyticsPdfUrl, useInteractionAnalytics } from "../api/analytics";
 import { useUniversities } from "../api/catalogs";
+import { useSession } from "../app/AuthGate";
 import { MonthlyLine, StageFunnel, UniversityRanking } from "../components/analytics/InteractionCharts";
 import { MultiSelect } from "../components/MultiSelect";
 import { RefreshError } from "../components/QueryState";
@@ -24,9 +25,12 @@ function EmptyChart() {
 }
 
 export function AnalyticsPage() {
+  const { user } = useSession();
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone || "";
+  const profileZone = user.timezone?.trim() || "";
+  const timeZone = profileZone || browserZone;
   const [period, setPeriod] = useState(() => {
-    const today = todayInZone(browserZone || "UTC");
+    const today = todayInZone(timeZone || "UTC");
     return { from: `${today.slice(0, 4)}-01-01`, to: today };
   });
   const [selectedUniversities, setSelectedUniversities] = useState<number[]>([]);
@@ -36,11 +40,11 @@ export function AnalyticsPage() {
   const monthCount = periodMissing ? 0 : (Number(period.to.slice(0, 4)) - Number(period.from.slice(0, 4))) * 12
     + Number(period.to.slice(5, 7)) - Number(period.from.slice(5, 7)) + 1;
   const periodTooLong = monthCount > 120;
-  const ready = !periodInvalid && !periodMissing && !periodTooLong && Boolean(browserZone);
+  const ready = !periodInvalid && !periodMissing && !periodTooLong && Boolean(timeZone);
   const params = {
     period_from: period.from,
     period_to: period.to,
-    time_zone: browserZone,
+    time_zone: timeZone,
     university_id: selectedUniversities,
   };
   const analytics = useInteractionAnalytics(params, ready);
@@ -87,8 +91,9 @@ export function AnalyticsPage() {
         {periodInvalid && <p className="danger inline-error" role="alert">Конец периода раньше начала.</p>}
         {periodTooLong && <p className="danger inline-error" role="alert">Период не может превышать 10 лет.</p>}
         {periodMissing && <p className="danger inline-error" role="alert">Укажите начало и конец периода.</p>}
-        {!browserZone && <p className="danger inline-error" role="alert">Не удалось определить часовой пояс браузера.</p>}
-        {browserZone && <p className="muted analytics-time-zone">Часовой пояс браузера: {browserZone}. После настройки профиля будет использоваться его часовой пояс.</p>}
+        {!timeZone && <p className="danger inline-error" role="alert">Не удалось определить часовой пояс. Укажите его в профиле.</p>}
+        {profileZone ? <p className="muted analytics-time-zone">Часовой пояс профиля: {profileZone}.</p>
+          : browserZone && <p className="muted analytics-time-zone">Часовой пояс браузера: {browserZone}. Укажите часовой пояс в профиле для точного расчёта.</p>}
         <RefreshError queries={[universities]} />
       </section>
 
