@@ -42,6 +42,9 @@ class Settings:
     cookie_secure: bool = True
     allowed_origins: tuple[str, ...] = ()
     attachments_dir: str = '/data/attachments'
+    # Backup status report (read-only mount) and manual-request folder; empty means not configured here.
+    backup_status_dir: str = ''
+    backup_request_dir: str = ''
     # SMS provider for CRM-owned phone verification (D-not-yet-numbered; see docs/design/phone-verification.md).
     # Unset in local dev/CI on purpose: app/sms.py falls back to a logging-only sender so the code is
     # visible (API container log) without any real gateway account. Real credentials are supplied only
@@ -182,6 +185,8 @@ def load_settings(environ=None):
         cookie_secure=_boolean(environ, 'COOKIE_SECURE', True),
         allowed_origins=allowed_origins,
         attachments_dir=(environ.get('ATTACHMENTS_DIR') or '').strip() or '/data/attachments',
+        backup_status_dir=(environ.get('BACKUP_STATUS_DIR') or '').strip(),
+        backup_request_dir=(environ.get('BACKUP_REQUEST_DIR') or '').strip(),
         sms_provider_url=(environ.get('SMS_PROVIDER_URL') or '').strip(),
         sms_provider_api_key=(environ.get('SMS_PROVIDER_API_KEY') or '').strip(),
         sms_sender=(environ.get('SMS_SENDER') or '').strip() or 'CRM',
