@@ -53,6 +53,9 @@ EVENT_TYPES = {
 
 # Links for contracts point at the university page: there is no «Договоры» navigation item.
 LINK_TYPES = ('university', 'launch', 'task', 'contract')
+# Sent to someone who is losing access: created without the visibility check and listed without a link
+# once the record is no longer visible (the text only names what the person already knew).
+UNSCOPED_EVENTS = frozenset({'university_unassigned', 'task_unassigned'})
 
 
 def is_enabled(db, user_id, event_type) -> bool:
@@ -87,7 +90,9 @@ def notify(db, *, user_id, event_type, title, body, link_type, link_id, universi
     user = db.get(User, user_id)
     if user is None or not user.is_active or is_paused(user, now):
         return False
-    if not is_enabled(db, user_id, event_type) or not can_see(db, user, link_type, link_id, university_id):
+    if not is_enabled(db, user_id, event_type):
+        return False
+    if event_type not in UNSCOPED_EVENTS and not can_see(db, user, link_type, link_id, university_id):
         return False
     values = dict(user_id=user_id, event_type=event_type, title=title[:200], body=body[:500], link_type=link_type,
                   link_id=link_id, university_id=university_id, actor_user_id=actor_user_id, dedupe_key=dedupe_key,

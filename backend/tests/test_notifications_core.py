@@ -71,7 +71,9 @@ def test_notify_skips_the_actor_inactive_disabled_paused_and_invisible(database_
         other = University(name='Чужой вуз', city='Москва', contact='')
         db.add(other)
         db.flush()
-        assert _notify(db, anna, other, event_type='university_unassigned', link_id=other.id, university_id=other.id) is False
+        assert _notify(db, anna, other, link_id=other.id, university_id=other.id) is False  # cannot see it
+        # ...but being removed from it is still announced (the person is losing access by definition).
+        assert _notify(db, anna, other, event_type='university_unassigned', link_id=other.id, university_id=other.id) is True
         anna.notifications_paused_until = FOREVER
         assert _notify(db, anna, university, event_type='university_unassigned') is False
         anna.notifications_paused_until = utcnow() - timedelta(minutes=1)  # expired pause does not block
