@@ -45,6 +45,11 @@ class FakeKeycloak:
         self.logged_out_users = []
         self.fail_role_assignment = False
         self.realm_password_policy = "length(12) and notUsername and notEmail and passwordHistory(3)"
+        self.realm_events_enabled = False
+        self.admin_sessions = set()   # Keycloak session ids that are still active
+        self.admin_events = []        # stored login events ({'time', 'type', 'userId', ...})
+        self.events_forbidden = False  # service account lacks view-events
+        self.fail_session_delete = False
         # Malformed-response simulation for the admin API, settable per test:
         #   'not_json'    -> GET /users returns 200 with a non-JSON body.
         #   'wrong_shape' -> GET /users returns 200 with a JSON object instead of a JSON array.
@@ -249,7 +254,23 @@ class FakeKeycloak:
             role_name = suffix[len('roles/'):]
             return httpx.Response(200, json={'id': role_name, 'name': role_name})
         if suffix == '' and request.method == 'GET':
-            return httpx.Response(200, json={'passwordPolicy': self.realm_password_policy})
+            return httpx.Response(200, json={'passwordPolicy': self.realm_password_policy, 'bruteForceProtected': True,
+                                             'failureFactor': 30, 'eventsEnabled': self.realm_events_enabled})
+        if suffix.startswith('sessions/') and request.method == 'DELETE':
+            if self.fail_session_delete:
+                return httpx.Response(503)
+            sid = suffix[len('sessions/'):]
+            if sid not in self.admin_sessions:
+                return httpx.Response(404)
+            self.admin_sessions.discard(sid)
+            return httpx.Response(204)
+        if suffix == 'events' and request.method == 'GET':
+            if self.events_forbidden:
+                return httpx.Response(403)
+            user = request.url.params.get('user')
+            types = set(request.url.params.get_list('type'))
+            rows = [e for e in self.admin_events if e.get('userId') == user and (not types or e['type'] in types)]
+            return httpx.Response(200, json=rows[: int(request.url.params.get('max', '100'))])
         return httpx.Response(404)
 
     def http_client(self):

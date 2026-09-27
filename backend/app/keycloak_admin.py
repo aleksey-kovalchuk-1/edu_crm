@@ -30,6 +30,14 @@ class KeycloakAdminConflict(KeycloakAdminError):
     """The requested username or email already exists."""
 
 
+class KeycloakAdminForbidden(KeycloakAdminError):
+    """The service account lacks the permission (e.g. view-events is not granted)."""
+
+
+class KeycloakAdminNotFound(KeycloakAdminError):
+    """The addressed object does not exist (any more)."""
+
+
 class AdminUser:
     def __init__(self, id, email, username, roles, first_name='', last_name='', enabled=True):
         self.id = id
@@ -143,6 +151,29 @@ class KeycloakAdminClient:
         response = self._request('GET', f'/roles/{role_name}/users', params={'max': 1000})
         return len(self._json_list(response))
 
+    def delete_session(self, session_id):
+        """Ends one Keycloak (SSO) session; one that has already ended counts as done."""
+        try:
+            self._request('DELETE', f'/sessions/{session_id}')
+        except KeycloakAdminNotFound:
+            pass
+
+    def list_user_events(self, user_id, *, types=('LOGIN', 'LOGIN_ERROR', 'LOGOUT', 'UPDATE_PASSWORD'), max_results=50):
+        """Stored login events of one user, newest first; needs realm event storage and view-events."""
+        params = [('user', user_id), ('max', str(max_results))] + [('type', t) for t in types]
+        return self._json_list(self._request('GET', '/events', params=params))
+
+    def get_realm_security(self):
+        body = self._json(self._request('GET', ''))
+        if not isinstance(body, dict):
+            raise KeycloakAdminError(f'expected a JSON object for realm info, got {type(body).__name__}')
+        return {
+            'password_policy': body.get('passwordPolicy', '') or '',
+            'brute_force_protected': bool(body.get('bruteForceProtected')),
+            'failure_factor': body.get('failureFactor'),
+            'events_enabled': bool(body.get('eventsEnabled')),
+        }
+
     def get_password_policy(self):
         response = self._request('GET', '')
         body = self._json(response)
@@ -232,6 +263,10 @@ class KeycloakAdminClient:
             raise KeycloakAdminError(f'{path} returned 401')
         if response.status_code == 409:
             raise KeycloakAdminConflict(f'{path} returned 409')
+        if response.status_code == 403:
+            raise KeycloakAdminForbidden(f'{path} returned 403')
+        if response.status_code == 404:
+            raise KeycloakAdminNotFound(f'{path} returned 404')
         if response.status_code >= 400:
             raise KeycloakAdminError(f'{path} returned {response.status_code}')
         return response
