@@ -2,13 +2,16 @@
 
 from collections import defaultdict
 from datetime import date
+from urllib.parse import quote
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Query
+from fastapi.responses import Response
 from sqlalchemy import select
 from sqlalchemy.orm import Session, aliased
 
 from .analytics_metrics import first_implementation_at, funnel_counts, monthly_implementations, top_universities
+from .analytics_pdf import build_analytics_pdf, date_label
 from .auth import ALL_ROLES, AuthContext, require_roles
 from .catalog_routes import university_scope
 from .db import get_db
@@ -96,3 +99,22 @@ def interaction_analytics(
     auth: AuthContext = Depends(any_role), db: Session = Depends(get_db),
 ):
     return analytics_snapshot(db, auth.user, period_from, period_to, university_id, time_zone)
+
+
+@router.get('/interactions.pdf', summary='PDF аналитики взаимодействий')
+def interaction_analytics_pdf(
+    period_from: date,
+    period_to: date,
+    time_zone: str = Query(min_length=1, max_length=100),
+    university_id: list[int] = Query(default=[]),
+    auth: AuthContext = Depends(any_role), db: Session = Depends(get_db),
+):
+    snapshot = analytics_snapshot(db, auth.user, period_from, period_to, university_id, time_zone)
+    filename = f'Аналитика_UniCRM_{date_label(snapshot["period_from"])}-{date_label(snapshot["period_to"])}.pdf'
+    return Response(
+        content=build_analytics_pdf(snapshot), media_type='application/pdf',
+        headers={
+            'Content-Disposition': f'attachment; filename="Analytics_UniCRM.pdf"; filename*=UTF-8\'\'{quote(filename)}',
+            'Cache-Control': 'no-store',
+        },
+    )

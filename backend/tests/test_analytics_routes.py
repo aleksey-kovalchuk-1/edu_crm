@@ -1,8 +1,12 @@
 """Interaction analytics use recorded history and enforce the viewer's university scope."""
+from io import BytesIO
 from datetime import datetime, timezone
+from urllib.parse import unquote
 
+from pypdf import PdfReader
 from sqlalchemy import select
 
+from app.analytics_pdf import build_analytics_pdf
 from app.models import StatusChange, University
 from helpers import database, login
 
@@ -106,3 +110,78 @@ def test_manager_scope_applies_to_counts_and_rejects_private_university(client, 
     selected = client.get(PATH, params={**PERIOD, 'university_id': shared_id})
     assert selected.status_code == 200
     assert selected.json()['universities'] == ['Общий вуз']
+
+
+def pdf_text(response):
+    return '\n'.join(page.extract_text() for page in PdfReader(BytesIO(response.content)).pages)
+
+
+def test_pdf_uses_same_scoped_values_and_selected_header_as_json(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    university_id = create_university(client, 'Вуз Восток')
+    launch_id = create_interaction(client, university_id, students=26)
+    assert client.patch(f'/api/v1/launches/{launch_id}', json={'stage': 8}).status_code == 200
+    set_history_dates(database_url, launch_id, [
+        datetime(2026, 1, 15, tzinfo=timezone.utc),
+        datetime(2026, 2, 3, tzinfo=timezone.utc),
+    ])
+    params = {**PERIOD, 'university_id': university_id}
+    snapshot = client.get(PATH, params=params).json()
+    response = client.get(f'{PATH}.pdf', params=params)
+
+    assert response.status_code == 200, response.text
+    assert response.headers['content-type'] == 'application/pdf'
+    assert 'Аналитика_UniCRM_01.01.2026-31.03.2026.pdf' in unquote(response.headers['content-disposition'])
+    assert response.headers['cache-control'] == 'no-store'
+    reader = PdfReader(BytesIO(response.content))
+    text = pdf_text(response)
+    for label in ('Вузы по этапам', 'Внедрённые программы по месяцам', 'Рейтинг вузов',
+                  '01.01.2026 – 31.03.2026', 'Вуз Восток', 'Дата формирования:',
+                  'Янв 2026', 'Фев 2026', 'Мар 2026', 'Студенты'):
+        assert label in text
+    assert snapshot['monthly'] == [
+        {'month': '2026-01', 'count': 0}, {'month': '2026-02', 'count': 1}, {'month': '2026-03', 'count': 0},
+    ]
+    assert '26' in text
+    assert any('/FontFile2' in str(font.get_object().get('/FontDescriptor'))
+               for page in reader.pages for font in page['/Resources']['/Font'].values())
+
+
+def test_pdf_enforces_auth_scope_and_displays_all_three_empty_states(client, keycloak, database_url):
+    assert client.get(f'{PATH}.pdf', params=PERIOD).status_code == 401
+    login(client, keycloak, roles=('crm-supervisor',))
+    private_id = create_university(client, 'Закрытый вуз')
+    shared_id = create_university(client, 'Доступный вуз')
+    with database(database_url) as db:
+        db.get(University, shared_id).team_visible_to_managers = True
+        db.commit()
+    login(client, keycloak, roles=('crm-user',), subject='kc-manager-pdf', name='Менеджер', email='manager-pdf@example.test')
+    assert client.get(f'{PATH}.pdf', params={**PERIOD, 'university_id': private_id}).status_code == 404
+    assert client.get(f'{PATH}.pdf', params={**PERIOD, 'period_from': '2026-04-01'}).status_code == 422
+    response = client.get(f'{PATH}.pdf', params={**PERIOD, 'university_id': shared_id})
+    assert response.status_code == 200
+    text = pdf_text(response)
+    assert 'Доступный вуз' in text
+    assert 'Закрытый вуз' not in text
+    assert text.count('Нет данных за выбранный период') == 3
+    all_accessible = pdf_text(client.get(f'{PATH}.pdf', params=PERIOD))
+    assert 'Все вузы' in all_accessible
+    assert 'Закрытый вуз' not in all_accessible
+
+
+def test_pdf_keeps_every_month_of_a_long_period():
+    months = [{'month': f'{year}-{month:02d}', 'count': int(year == 2027 and month == 1)}
+              for year in (2026, 2027) for month in range(1, 13)]
+    snapshot = {
+        'period_from': '2026-01-01', 'period_to': '2027-12-31', 'time_zone': 'Europe/Moscow',
+        'universities': ['Все вузы'],
+        'stages': [{'name': name, 'count': 0} for name in
+                   ('Первый контакт', 'Документы', 'Внедрение', 'Обучение', 'Сопровождение')],
+        'monthly': months, 'ranking': [{'id': 1, 'name': 'ИТМО', 'programs': 1, 'students': 14}],
+        'has_stage_data': False, 'has_implementation_data': True,
+    }
+    reader = PdfReader(BytesIO(build_analytics_pdf(snapshot)))
+    text = '\n'.join(page.extract_text() for page in reader.pages)
+    assert len(reader.pages) == 4  # Funnel, two monthly chart pages, ranking.
+    assert 'Янв 2026' in text and 'Дек 2027' in text
+    assert 'ИТМО: 1 внедрённых программ, 14 студентов' in text
