@@ -17,9 +17,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [ ] Protect `main` (P-003) so the live site is only ever deployed from reviewed code.
 - [x] Write a one-command deploy script (`scripts/deploy-public.sh`: encrypted database and
       attachment backups → rebuild api/web with both compose files → health + login redirect).
-- [ ] Replace the six demonstration universities with the customer's ten confirmed Rostelecom
-      partner universities after receiving their exact names; review linked demo tasks before
-      changing any existing records. New universities can already be added in Settings.
+- [~] Activate the customer's ten named universities and deactivate the six demonstration rows
+      without deleting linked task and interaction history. New universities remain addable in Settings.
 - [ ] Add `CLAUDE.md` (stack, commands, conventions, "the laptop stack *is* production").
 
 ## 1. Design and UX (F-002)
