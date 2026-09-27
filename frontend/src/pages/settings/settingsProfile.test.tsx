@@ -52,6 +52,16 @@ describe("settings profile — personal data", () => {
     await screen.findByText("Имя пользователя Telegram: 5–32 символа");
   });
 
+  it("shows a contact as saved only after it is saved, then shows the server-normalized value", async () => {
+    mockApi({ "PATCH /profile": () => profileFixture({ telegram: "anna_demo" }) });
+    renderApp("/settings/profile");
+    fireEvent.change(await screen.findByLabelText("Telegram"), { target: { value: "@anna_demo" } });
+    expect(screen.queryByText("Сохранён · не подключён")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await screen.findByText("Сохранён · не подключён");
+    expect((screen.getByLabelText("Telegram") as HTMLInputElement).value).toBe("anna_demo");
+  });
+
   it("labels saved contacts honestly: saved, not connected", async () => {
     mockApi({ "GET /profile": () => profileFixture({ telegram: "anna_demo" }) });
     renderApp("/settings/profile");
@@ -168,5 +178,22 @@ describe("settings profile — sender address", () => {
     renderApp("/settings/profile");
     await screen.findByText(/Отклонён/);
     screen.getByText(/Чужой домен/);
+  });
+
+  it("labels a deactivated own address as deactivated and still allows a new request", async () => {
+    mockApi({
+      "GET /email-senders": () => [
+        { id: 4, email_address: "old@uni-demo.ru", display_name: "Анна", is_active: false,
+          status: "active", is_shared: false, rejection_reason: "", usable: false },
+        { id: 5, email_address: "stale@uni-demo.ru", display_name: "Анна", is_active: false,
+          status: "pending_approval", is_shared: false, rejection_reason: "", usable: false },
+      ],
+    });
+    renderApp("/settings/profile");
+    await screen.findByText(/old@uni-demo.ru/);
+    expect(screen.getAllByText(/Деактивирован/)).toHaveLength(2);
+    expect(screen.queryByText(/Подтверждён/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Отозвать заявку" })).toBeNull();
+    screen.getByLabelText("Новый адрес");
   });
 });

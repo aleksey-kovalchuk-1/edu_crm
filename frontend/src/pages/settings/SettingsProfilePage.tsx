@@ -51,7 +51,16 @@ function PersonalDataForm({ profile }: { profile: Profile }) {
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setSaved(false);
-    update.mutate(form, { onSuccess: () => setSaved(true) });
+    update.mutate(form, {
+      onSuccess: (saved) => {
+        // Show what the server stored (e.g. "@anna" → "anna", "8 (999)…" → "+7999…").
+        setForm({
+          first_name: saved.first_name, middle_name: saved.middle_name, last_name: saved.last_name,
+          timezone: saved.timezone, telegram: saved.telegram, whatsapp: saved.whatsapp,
+        });
+        setSaved(true);
+      },
+    });
   }
 
   function field(key: (typeof FIELD_KEYS)[number], label: string, props: Record<string, unknown> = {}) {
@@ -96,11 +105,12 @@ function PersonalDataForm({ profile }: { profile: Profile }) {
         <div className="form-row">
           <div>
             {field("telegram", "Telegram", { maxLength: 40, placeholder: "@username" })}
-            <small className="field-hint">{contactStatus(form.telegram)}</small>
+            {/* Status of the SAVED value: typing a handle does not make it saved. */}
+            <small className="field-hint">{contactStatus(profile.telegram)}</small>
           </div>
           <div>
             {field("whatsapp", "WhatsApp", { maxLength: 32, type: "tel", placeholder: "+7XXXXXXXXXX" })}
-            <small className="field-hint">{contactStatus(form.whatsapp)}</small>
+            <small className="field-hint">{contactStatus(profile.whatsapp)}</small>
           </div>
         </div>
         <small className="field-hint">
