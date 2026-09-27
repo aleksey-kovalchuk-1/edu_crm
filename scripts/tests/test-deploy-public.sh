@@ -22,9 +22,11 @@ case "$*" in
   *'exec -T api tar -C /data/attachments -czf - .'*)
     if [[ "${FAIL_ATTACHMENT:-}" == 1 ]]; then exit 7; fi
     tar -C "$FAKE_ATTACHMENTS" -czf - . ;;
-  *'build api web') : ;;
+  *'build api web notifier') : ;;
   *'up -d --no-deps api') : ;;
+  *'up -d --no-deps notifier') : ;;
   *'up -d --no-deps web') : ;;
+  *'ps --status running --services notifier') printf 'notifier\n' ;;
   'compose exec -T keycloak bash -s')
     if [[ "${FAIL_BRAND_UPDATE:-}" == 1 ]]; then exit 7; fi
     if [[ "${BAD_BRAND_READBACK:-}" == 1 ]]; then
@@ -56,6 +58,7 @@ EOF
 chmod +x "$tmp/bin/docker" "$tmp/bin/curl"
 export PATH="$tmp/bin:$PATH" FAKE_DOCKER_LOG="$tmp/docker.log" FAKE_CURL_LOG="$tmp/curl.log"
 export FAKE_ATTACHMENTS="$tmp/attachments" DEPLOY_CONFIG_FILE="$tmp/deploy.env" DEPLOY_HEALTH_ATTEMPTS=1
+export BACKUP_STATUS_DIR="$tmp/status"
 
 "$root/scripts/deploy-public.sh" synthetic-success >/dev/null
 dump="$(find "$tmp/backups" -name '*.dump.age' -print -quit)"
@@ -64,11 +67,17 @@ test -n "$dump" && test -n "$archive"
 test "$(age -d -i "$tmp/identity" "$dump")" = 'synthetic database'
 test "$(age -d -i "$tmp/identity" "$archive" | tar -tzf - | rg -c 'member.txt')" = 1
 test -z "$(find "$tmp/backups" -name '*.dump' -o -name '*.tar.gz' -o -name '*.partial*')"
+python3 - "$tmp/status/status.json" <<'PY'
+import json, sys
+entry = json.load(open(sys.argv[1]))['backups'][0]
+assert entry['source'] == 'synthetic-success' and entry['database_bytes'] > 0
+assert entry['attachments_bytes'] > 0 and entry['verified'] is False
+PY
 python3 - "$tmp/docker.log" <<'PY'
 from pathlib import Path
 import sys
 lines = Path(sys.argv[1]).read_text().splitlines()
-markers = ('pg_dump', 'tar -C /data/attachments', 'build api web', 'up -d --no-deps api', 'up -d --no-deps web', 'exec -T keycloak bash -s')
+markers = ('pg_dump', 'tar -C /data/attachments', 'build api web notifier', 'up -d --no-deps api', 'up -d --no-deps notifier', 'up -d --no-deps web', 'exec -T keycloak bash -s')
 positions = [next(i for i, line in enumerate(lines) if marker in line) for marker in markers]
 assert positions == sorted(positions), lines
 PY

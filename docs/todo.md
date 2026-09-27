@@ -53,10 +53,10 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [ ] Link the existing interactions to catalog IT products (the live catalog is empty — fill
       Справочники or import them first); until then product/direction filters match nothing.
 - [x] Charts export to PNG / PDF (D-222): Аналитика and Обзор charts.
-- [ ] Notifications: in-app centre + email for "assigned to you", "overdue", "new comment",
-      "review requested"; Настройки → Уведомления (currently a placeholder) becomes their settings.
-- [ ] Fill the remaining placeholder settings pages: Организация, Резервное
-      копирование (show the backups `scripts/db-backup.sh` already makes).
+- [x] In-app notification centre and Настройки → Уведомления, including the date-based scheduler.
+- [ ] Email delivery of notifications needs a configured provider; production currently uses log-only delivery.
+- [x] Fill Настройки → Организация and Резервное копирование (status of complete encrypted pairs).
+- [ ] Optional manual backup trigger from the web UI; retain host-side execution and no recovery key in API.
 - [ ] Data scopes admin screen; supervisor reassigns responsible people (T-025).
 - [ ] JSON export of results (T-034).
 - [x] Create manager and administrator accounts from Пользователи и роли (superadmin only).
@@ -105,6 +105,7 @@ and density pass (D-220), reports module (D-221), chart PNG/PDF export (D-222).
    `main`, `scripts/deploy-public.sh`, `CLAUDE.md`.
 4. Then: slide-over task panel, notifications, LMS/CMS connector (F-001), security headers.
 
-**How to deploy** (the laptop stack *is* production): `scripts/db-backup.sh <label>`, then
-`docker compose -f compose.yaml -f compose.public.yaml up -d --build api web`, then check
-`/api/v1/health`, the page, and that `/api/v1/auth/login` redirects to `https://unicrm.tech/auth/…`.
+**How to deploy** (the laptop stack *is* production): `scripts/deploy-public.sh <label>` makes
+encrypted database and attachment copies, updates API/web/notifier, and checks local/public health
+and the login redirect. Existing Keycloak realms additionally need the idempotent middle-name and
+login-event setup scripts when the Settings features are first released.

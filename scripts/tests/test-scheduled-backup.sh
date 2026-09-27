@@ -28,12 +28,18 @@ EOF
 chmod +x "$tmp/bin/docker"
 export PATH="$tmp/bin:$PATH" FAKE_DOCKER_LOG="$tmp/docker.log"
 export FAKE_ATTACHMENTS="$tmp/attachments" BACKUP_CONFIG_FILE="$tmp/config.env"
+export BACKUP_STATUS_DIR="$tmp/status"
 "$root/scripts/scheduled-backup.sh" >/dev/null
 dump="$(find "$tmp/backups" -name '*.dump.age' -print -quit)"
 archive="$(find "$tmp/backups" -name '*.tar.gz.age' -print -quit)"
 test -n "$dump" && test -n "$archive"
 test "$(age -d -i "$tmp/identity" "$dump")" = 'synthetic database'
 test "$(age -d -i "$tmp/identity" "$archive" | tar -tzf - | rg -c 'item.txt')" = 1
+python3 - "$tmp/status/status.json" <<'PY'
+import json, sys
+entry = json.load(open(sys.argv[1]))['backups'][0]
+assert entry['source'].startswith('daily-') and entry['verified'] is True
+PY
 python3 - "$tmp/docker.log" <<'PY'
 from pathlib import Path
 import sys

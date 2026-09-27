@@ -22,6 +22,7 @@ if [[ "$(cd "$DEPLOY_CHECKOUT" && pwd -P)" != "$(pwd -P)" ]]; then
 fi
 export BACKUP_DIR BACKUP_AGE_RECIPIENT="${BACKUP_AGE_RECIPIENT:-}"
 export BACKUP_AGE_RECIPIENTS_FILE="${BACKUP_AGE_RECIPIENTS_FILE:-}"
+export BACKUP_STATUS_DIR="${BACKUP_STATUS_DIR:-./deploy/local/backup-status}"
 export COMPOSE_PROJECT_NAME=edu-crm
 
 command -v docker >/dev/null || { echo 'docker is required' >&2; exit 2; }
@@ -50,19 +51,27 @@ check_http() {
 }
 
 echo 'Creating encrypted database and attachment backups'
-scripts/db-backup.sh "$label"
-scripts/attachments-backup.sh "$label"
+dump="$(scripts/db-backup.sh "$label")"
+archive="$(scripts/attachments-backup.sh "$label")"
+python3 scripts/record-backup-status.py "${BACKUP_STATUS_DIR:-deploy/local/backup-status}/status.json" \
+  "$dump" "$archive" "$label"
 
-echo 'Building API and web images'
-docker compose -f compose.yaml -f compose.public.yaml build api web
+echo 'Building API, web, and notification images'
+docker compose -f compose.yaml -f compose.public.yaml --profile notifications build api web notifier
 echo 'Releasing API'
 docker compose -f compose.yaml -f compose.public.yaml up -d --no-deps api
 check_http 'http://127.0.0.1:8000/api/v1/health'
+echo 'Releasing notification scheduler'
+docker compose -f compose.yaml -f compose.public.yaml --profile notifications up -d --no-deps notifier
 echo 'Releasing web'
 docker compose -f compose.yaml -f compose.public.yaml up -d --no-deps web
 check_http 'http://127.0.0.1:8080/'
 check_http 'https://unicrm.tech/'
 check_http 'https://unicrm.tech/api/v1/health'
+if [[ "$(docker compose -f compose.yaml -f compose.public.yaml --profile notifications ps --status running --services notifier)" != 'notifier' ]]; then
+  echo 'notification scheduler is not running' >&2
+  exit 1
+fi
 
 # Realm imports do not update an existing realm. Keep branding and custom logins in sync.
 echo 'Updating the existing login branding and login mode'
