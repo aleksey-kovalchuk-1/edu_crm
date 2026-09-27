@@ -57,4 +57,15 @@ describe("notification bell", () => {
     fireEvent.click(await screen.findByRole("button", { name: "Уведомления" }));
     await screen.findByText("Новых уведомлений нет");
   });
+
+  it("reloads the list every time the panel opens, so it matches the badge", async () => {
+    const api = mockApi({ "GET /notifications/unread-count": () => ({ count: 1 }), "GET /notifications": () => [item()] });
+    renderApp("/");
+    const bell = await screen.findByRole("button", { name: /Уведомления/ });
+    fireEvent.click(bell);
+    await screen.findByRole("link", { name: /Вас назначили исполнителем задачи/ });
+    fireEvent.click(bell);
+    fireEvent.click(bell);
+    await waitFor(() => expect(api.callsTo("GET", "/notifications")).toHaveLength(2));
+  });
 });

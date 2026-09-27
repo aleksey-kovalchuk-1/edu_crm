@@ -39,6 +39,8 @@ export const useNotifications = (enabled: boolean) =>
     queryKey: notificationKeys.list,
     queryFn: () => apiRequest<NotificationItem[]>("/notifications?limit=50"),
     enabled,
+    // Always stale: every opening of the panel reloads it, so the list matches the badge.
+    staleTime: 0,
   });
 
 function useNotificationMutation<T = void>(fn: (vars: T) => Promise<unknown>) {

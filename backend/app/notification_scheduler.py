@@ -22,7 +22,14 @@ INTERVAL_SECONDS = 15 * 60
 FIRST_HOUR = clock(8, 0)
 DEFAULT_ZONE = ZoneInfo('Europe/Moscow')
 CLOSED = ('completed', 'cancelled')
-LICENCE_WARNINGS = {30: 'license_expires_30', 7: 'license_expires_7'}
+def licence_warning(days_left):
+    """A window, not an exact day: a contract added with 20 days left, or a day the notifier was down, still
+    warns. The dedupe key (which includes valid_until) keeps each warning to once per licence period."""
+    if 0 <= days_left <= 7:
+        return 'license_expires_7'
+    if 7 < days_left <= 30:
+        return 'license_expires_30'
+    return None
 
 
 def user_zone(user):
@@ -60,12 +67,13 @@ def _licence_notifications(db, user, today, now):
         ))
     ).all()
     for contract in contracts:
-        event_type = LICENCE_WARNINGS.get((contract.valid_until - today).days)
+        days = (contract.valid_until - today).days
+        event_type = licence_warning(days)
         if event_type is None:
             continue
-        days = (contract.valid_until - today).days
         created += notify(
-            db, user_id=user.id, event_type=event_type, title=f'Лицензия истекает через {days} дней',
+            db, user_id=user.id, event_type=event_type,
+            title='Лицензия истекает сегодня' if days == 0 else f'Лицензия истекает через {days} дн.',
             body=f'Договор {contract.contract_number} · до {contract.valid_until:%d.%m.%Y}', link_type='contract',
             link_id=contract.id, university_id=contract.university_id,
             dedupe_key=f'{event_type}:{contract.id}:{contract.valid_until.isoformat()}', now=now)
