@@ -1,6 +1,7 @@
 import json
 import importlib
 import stat
+import pytest
 
 from sqlalchemy import select
 
@@ -74,3 +75,42 @@ def test_reconcile_demo_accounts_preserves_subjects_and_task_history(database_ur
         assert reconcile_demo_accounts(db, client, apply=False) == {
             'renamed': 0, 'created': 0, 'role_changes': 0,
         }
+
+
+def test_reconcile_requires_realm_settings_that_preserve_custom_logins(database_url, tmp_path):
+    reconcile = importlib.import_module('app.reconcile_demo_accounts').reconcile_demo_accounts
+    fake = FakeKeycloak()
+    seed_accounts(fake, database_url)
+    fake.registration_email_as_username = True
+    with database(database_url) as db:
+        with pytest.raises(ValueError, match='email-as-username'):
+            reconcile(db, make_client(fake), apply=True, credentials_out=tmp_path / 'passwords.json')
+    assert fake.admin_users['pavel-id']['username'] == 'pavel.demo@educrm-demo.ru'
+    assert not (tmp_path / 'passwords.json').exists()
+
+
+def test_reconcile_repairs_keycloak_normalized_demo_logins(database_url, tmp_path):
+    reconcile = importlib.import_module('app.reconcile_demo_accounts').reconcile_demo_accounts
+    fake = FakeKeycloak()
+    seed_accounts(fake, database_url)
+    client = make_client(fake)
+    with database(database_url) as db:
+        reconcile(db, client, apply=True, credentials_out=tmp_path / 'first.json',
+                  password_factory=lambda: 'FirstTemporarySecret123456')
+        db.commit()
+    for account in fake.admin_users.values():
+        if account['email'].endswith('@educrm-demo.ru'):
+            account['username'] = account['email']
+    with database(database_url) as db:
+        assert reconcile(db, client, apply=False) == {
+            'renamed': 5, 'created': 0, 'role_changes': 0,
+        }
+        reconcile(db, client, apply=True, credentials_out=tmp_path / 'corrected.json',
+                  password_factory=lambda: 'CorrectedTemporarySecret123456')
+        db.commit()
+    assert {u.username for u in client.list_users() if u.email.endswith('@educrm-demo.ru')} == {
+        'irina_super_admin', 'admin_1', 'admin_2', 'manager_1', 'manager_2',
+    }
+    assert set(json.loads((tmp_path / 'corrected.json').read_text())) == {
+        'irina_super_admin', 'admin_1', 'admin_2', 'manager_1', 'manager_2',
+    }
