@@ -8,6 +8,7 @@ import {
   Plus,
 } from "lucide-react";
 import { useBrand } from "../api/organization";
+import { NotificationBell } from "../components/NotificationBell";
 import { useTaskCounters } from "../api/tasks";
 import { CreateModal } from "../components/forms/CreateModal";
 import { ErrorAlert } from "../components/QueryState";
@@ -160,6 +161,7 @@ export function Layout() {
               )}
             </div>
             <div className="topbar-right">
+              <NotificationBell />
               <Link
                 to={paths.settingsProfile}
                 className="avatar"
