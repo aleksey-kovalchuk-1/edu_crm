@@ -33,6 +33,7 @@ from .oidc import OIDCClient
 from .schemas import LaunchInput, LaunchProductInput, StageInput
 from .security import TokenCipher
 from .email import send_email
+from .owner_links import match_owner_user
 from .settings import load_settings, validate_database_url
 from .sms import send_sms
 
@@ -173,6 +174,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
         template = default_template(db)
         first_status = active_statuses(db, template.id)[0]
         record = Launch(**data.model_dump(), stage=first_status.position, workflow_template_id=template.id, status_id=first_status.id)
+        record.owner_user_id = match_owner_user(db, data.owner)
         db.add(record)
         db.flush()
         db.add(StageEvent(launch_id=record.id, stage=first_status.position))
