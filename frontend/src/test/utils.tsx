@@ -318,6 +318,18 @@ export const sessionFixture = (
   csrf_token: csrfToken,
 });
 
+export const backupStatusFixture = (overrides: Record<string, unknown> = {}) => ({
+  available: true, reason: null, stale: false, pending_request: false,
+  last_run: { trigger: "scheduled", label: "daily-20260927", started_at: "2026-09-27T00:30:00Z",
+    finished_at: "2026-09-27T00:31:00Z", result: "success", verified: true, error: null },
+  last_success_at: "2026-09-27T00:31:00Z",
+  pairs: [{ label: "daily-20260927",
+    database: { file: "edu_crm-20260927T003000Z-daily-20260927.dump.age", size_bytes: 2097152, created_at: "2026-09-27T00:30:00Z" },
+    attachments: { file: "attachments-20260927T003001Z-daily-20260927.tar.gz.age", size_bytes: 5242880, created_at: "2026-09-27T00:30:01Z" } }],
+  retention: { days: 30, min_pairs: 7, verification_configured: true },
+  ...overrides,
+});
+
 export const organizationFixture = (overrides: Record<string, unknown> = {}) => ({
   name: "ИТ Школа Ростелеком",
   legal_name: "Общество с ограниченной ответственностью «Ростелеком Информационные Технологии»",
@@ -398,6 +410,7 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     "GET /notifications/unread-count": () => ({ count: 0 }),
     "GET /notifications": () => [],
     "GET /security/sessions": () => [],
+    "GET /backups/status": () => backupStatusFixture(),
     "GET /security/login-history": () => ({ crm: [], keycloak: { available: false, reason: "disabled", events: [] } }),
     "GET /security/password-policy": () => ({
       available: true, rules: ["Не короче 12 символов"], brute_force: null,
