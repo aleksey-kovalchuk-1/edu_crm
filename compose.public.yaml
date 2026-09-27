@@ -10,6 +10,13 @@ services:
       OIDC_ISSUER: https://unicrm.tech/auth/realms/edu-crm
       COOKIE_SECURE: 'true'
 
+  notifier:
+    environment:
+      SEED_DEMO: 'false'
+      PUBLIC_BASE_URL: https://unicrm.tech
+      OIDC_ISSUER: https://unicrm.tech/auth/realms/edu-crm
+      COOKIE_SECURE: 'true'
+
   keycloak:
     environment:
       KC_HOSTNAME: https://unicrm.tech/auth
