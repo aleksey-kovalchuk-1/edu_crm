@@ -39,7 +39,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
       row with actions; remove the duplicate breadcrumb.
 - [ ] Top bar: global search, notification bell, global «+ Создать».
 - [x] Sidebar: dead workspace switcher removed (D-220).
-- [ ] Sidebar: show the «Демонстрационный контур» note only in demo mode (needs a demo flag).
+- [x] Sidebar and footer: show demo disclaimers only in demo builds, not on unicrm.tech.
 - [x] Density pass (D-220): Учебные заведения as a table, Договоры filters behind «Фильтры»,
       no page scrolls sideways on phones.
 - [ ] Dark theme (a second set of token values).
