@@ -50,6 +50,7 @@ class FakeKeycloak:
         self.admin_events = []        # stored login events ({'time', 'type', 'userId', ...})
         self.events_forbidden = False  # service account lacks view-events
         self.fail_session_delete = False
+        self.session_delete_calls = 0
         # Malformed-response simulation for the admin API, settable per test:
         #   'not_json'    -> GET /users returns 200 with a non-JSON body.
         #   'wrong_shape' -> GET /users returns 200 with a JSON object instead of a JSON array.
@@ -257,6 +258,7 @@ class FakeKeycloak:
             return httpx.Response(200, json={'passwordPolicy': self.realm_password_policy, 'bruteForceProtected': True,
                                              'failureFactor': 30, 'eventsEnabled': self.realm_events_enabled})
         if suffix.startswith('sessions/') and request.method == 'DELETE':
+            self.session_delete_calls += 1
             if self.fail_session_delete:
                 return httpx.Response(503)
             sid = suffix[len('sessions/'):]

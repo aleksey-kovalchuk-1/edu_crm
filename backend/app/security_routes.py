@@ -13,7 +13,7 @@ from .audit import record_event
 from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERADMIN, AuthContext, require_roles
 from .db import get_db
 from .errors import AppError, ErrorCode
-from .keycloak_admin import KeycloakAdminError, KeycloakAdminForbidden
+from .keycloak_admin import KeycloakAdminError, KeycloakAdminForbidden, KeycloakAdminUnavailable
 from .models import UserSession, utcnow
 from .password_policy import describe_policy
 
@@ -76,25 +76,35 @@ def list_sessions(auth: AuthContext = Depends(any_role), db: Session = Depends(g
             for s in _live_sessions(db, auth.user.id, utcnow())]
 
 
-def _end(request, auth, session, now):
-    """Revokes the CRM session; ends its Keycloak session when known and not shared with this device.
-    Returns whether the Keycloak session was ended."""
+ENDED, SHARED, NOT_ENDED = 'ended', 'shared', 'not_ended'
+MESSAGES = {
+    ENDED: 'Сеанс завершён.',
+    SHARED: 'Сеанс в CRM завершён. Вход в Keycloak общий с этим устройством и остаётся активным.',
+    NOT_ENDED: f'Сеанс в CRM завершён. {KEYCLOAK_SELF_EXPIRY}',
+}
+
+
+def _end(request, auth, session, now, *, keycloak_down=False):
+    """Revokes the CRM session and, when possible, its Keycloak session. Returns ENDED, SHARED (same
+    Keycloak session as this device: left alone) or NOT_ENDED; raises nothing."""
     session.revoked_at = now
     sid = session.keycloak_session_id
-    if not sid or sid == auth.session.keycloak_session_id:
-        return False
+    if sid and sid == auth.session.keycloak_session_id:
+        return SHARED
     keycloak_admin = request.app.state.keycloak_admin
-    if not keycloak_admin.is_configured():
-        return False
+    if not sid or keycloak_down or not keycloak_admin.is_configured():
+        return NOT_ENDED
+    keycloak_admin.delete_session(sid)
+    return ENDED
+
+
+def _end_quietly(request, auth, session, now, *, keycloak_down=False):
     try:
-        keycloak_admin.delete_session(sid)
+        return _end(request, auth, session, now, keycloak_down=keycloak_down), False
+    except KeycloakAdminUnavailable:
+        return NOT_ENDED, True
     except KeycloakAdminError:
-        return False
-    return True
-
-
-def _message(keycloak_ended):
-    return 'Сеанс завершён.' if keycloak_ended else f'Сеанс в CRM завершён. {KEYCLOAK_SELF_EXPIRY}'
+        return NOT_ENDED, False
 
 
 @router.delete('/sessions/{session_public_id}', response_model=TerminateOut, summary='Завершить сеанс')
@@ -106,19 +116,25 @@ def terminate_session(session_public_id: str, request: Request, auth: AuthContex
         raise AppError(ErrorCode.RECORD_NOT_FOUND)
     if session.id == auth.session.id:
         raise AppError(ErrorCode.CONFLICT, 'Для текущего устройства используйте «Выйти»')
-    ended = _end(request, auth, session, now)
+    result, _ = _end_quietly(request, auth, session, now)
     record_event(db, request, auth.user, 'security.session_terminate', entity_type='user', entity_id=auth.user.id,
-                 summary='Завершён сеанс на другом устройстве', payload={'keycloak_ended': ended})
+                 summary='Завершён сеанс на другом устройстве', payload={'keycloak_ended': result == ENDED})
     db.commit()
-    return TerminateOut(keycloak_ended=ended, message=_message(ended))
+    return TerminateOut(keycloak_ended=result == ENDED, message=MESSAGES[result])
 
 
 @router.post('/sessions/terminate-others', response_model=TerminateOthersOut, summary='Завершить все остальные сеансы')
 def terminate_others(request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
     now = utcnow()
     others = [s for s in _live_sessions(db, auth.user.id, now) if s.id != auth.session.id]
-    results = [_end(request, auth, s, now) for s in others]
-    all_ended = all(results)
+    results, keycloak_down = [], False
+    for session in others:
+        # After the first connection failure, stop calling Keycloak: a hanging Keycloak must not stretch
+        # this request past the proxy timeout while the CRM sessions are already ended.
+        result, down = _end_quietly(request, auth, session, now, keycloak_down=keycloak_down)
+        keycloak_down = keycloak_down or down
+        results.append(result)
+    all_ended = all(r != NOT_ENDED for r in results)
     record_event(db, request, auth.user, 'security.sessions_terminate_others', entity_type='user', entity_id=auth.user.id,
                  summary=f'Завершены остальные сеансы ({len(others)})', payload={'count': len(others)})
     db.commit()

@@ -14,11 +14,10 @@ kcadm() { docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh "$@"; }
 kcadm config credentials --server http://localhost:8080/auth --realm master \
   --user "$admin_user" --password "$admin_password" >/dev/null
 
-# The jboss-logging listener stays so events keep appearing in the Keycloak log as before.
+# Event listeners are left exactly as configured on the live realm (storage is independent of them).
 kcadm update realms/edu-crm \
   -s eventsEnabled=true \
   -s eventsExpiration=2592000 \
-  -s 'eventsListeners=["jboss-logging"]' \
   -s 'enabledEventTypes=["LOGIN","LOGIN_ERROR","LOGOUT","UPDATE_PASSWORD"]'
 
 service_account_username="service-account-edu-crm-admin"
