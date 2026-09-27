@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router";
+import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-router";
 import { AnalyticsPage } from "../pages/AnalyticsPage";
 import { ReportsPage } from "../pages/ReportsPage";
 import { CatalogsPage } from "../pages/CatalogsPage";
@@ -30,11 +30,15 @@ import { SettingsProfilePage } from "../pages/settings/SettingsProfilePage";
 import { SettingsSecurityPage } from "../pages/settings/SettingsSecurityPage";
 import { SettingsUsersPage } from "../pages/settings/SettingsUsersPage";
 import { AppProviders } from "./AppProviders";
+import { ConfirmSenderPage } from "../pages/ConfirmSenderPage";
 import { AuthGate } from "./AuthGate";
 import { Layout } from "./Layout";
 import { paths } from "./navigation";
 
 export function AppRoutes() {
+  const location = useLocation();
+  // Opened from an email by someone who may not be signed in; the token authorizes the one action.
+  if (location.pathname === paths.confirmSender) return <ConfirmSenderPage />;
   return (
     <AuthGate>
       <Routes>
