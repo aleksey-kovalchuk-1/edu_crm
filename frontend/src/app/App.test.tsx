@@ -16,7 +16,7 @@ describe("routing", () => {
     ["/universities", "Учебные заведения", "Колледж связи"],
     ["/interactions", "Взаимодействия", "ВЗ-0001"],
     ["/tasks", "Задачи", "Согласовать договор"],
-    ["/analytics", "Аналитика", "Показатели по годам"],
+    ["/analytics", "Аналитика", "Параметры аналитики"],
   ])("renders %s", async (path, title, content) => {
     mockApi();
     renderApp(path);
@@ -45,7 +45,7 @@ describe("routing", () => {
 
   it("shows API errors with their code", async () => {
     mockApi({
-      "GET /dashboard": () =>
+      "GET /analytics/interactions": () =>
         apiError(503, "SERVICE_UNAVAILABLE", "Сервис временно недоступен"),
     });
     renderApp("/analytics");
