@@ -87,9 +87,15 @@ services:
       WEB_CONCURRENCY: ${WEB_CONCURRENCY:-4}
       FORWARDED_ALLOW_IPS: '*'
       ATTACHMENTS_DIR: /data/attachments
+      # Настройки → Резервное копирование: the host backup script's report (read-only) and the folder where the
+      # API may drop a manual-backup request flag for the host agent. No backup files are mounted.
+      BACKUP_STATUS_DIR: /data/backup-status
+      BACKUP_REQUEST_DIR: /data/backup-requests
     volumes:
       # Files attached to status changes; include this volume in backups together with the database.
       - attachments_data:/data/attachments
+      - ./deploy/local/backup-status:/data/backup-status:ro
+      - ./deploy/local/backup-requests:/data/backup-requests
     depends_on:
       db:
         condition: service_healthy
