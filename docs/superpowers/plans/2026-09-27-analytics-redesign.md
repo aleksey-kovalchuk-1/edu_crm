@@ -55,10 +55,10 @@
 - Consumes: period dates, repeated `university_id`, IANA time-zone name, `university_scope`, Task 1 metrics.
 - Produces: `GET /api/v1/analytics/interactions`, `analytics_snapshot(db, user, filters)` for the PDF route.
 
-- [ ] Write failing API tests: `period_from > period_to` returns 422; inaccessible selected university returns 404; manager response excludes out-of-scope university/events; one period-boundary event and one genuine training transition produce the expected series.
-- [ ] Implement typed query filters and validate the time-zone name with `ZoneInfo` and date order before querying.
-- [ ] Build the scoped `Launch`/`University`/`StatusChange` snapshot, using event local dates for the funnel and first genuine training transition for month/rank data.
-- [ ] Run focused and full backend tests; commit the scoped API.
+- [x] Write failing API tests: `period_from > period_to` returns 422; inaccessible selected university returns 404; manager response excludes out-of-scope university/events; one period-boundary event and one genuine training transition produce the expected series.
+- [x] Implement typed query filters and validate the time-zone name with `ZoneInfo` and date order before querying.
+- [x] Build the scoped `Launch`/`University`/`StatusChange` snapshot, using event local dates for the funnel and first genuine training transition for month/rank data.
+- [x] Run focused and full backend tests; commit the scoped API.
 
 ### Task 3: Replace page content
 
