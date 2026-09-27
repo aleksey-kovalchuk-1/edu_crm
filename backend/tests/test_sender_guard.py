@@ -89,7 +89,7 @@ def test_test_send_uses_own_active_personal_sender(client, keycloak, database_ur
     me = login(client, keycloak)
     _select(database_url, me['user']['id'], _sender(database_url, 'mine@uni.test', owner=me['user']['id']))
     assert client.post('/api/v1/email-senders/test').status_code == 200
-    assert sent == [{'from_address': 'mine@uni.test'}]
+    assert sent == [{'from_address': 'mine@uni.test', 'from_name': 'mine@uni.test'}]  # display_name of the chosen sender
 
 
 def test_list_includes_the_selected_sender_even_when_unusable(client, keycloak, database_url):
