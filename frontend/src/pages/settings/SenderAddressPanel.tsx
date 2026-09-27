@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { errorText } from "../../api/client";
 import {
-  SENDER_STATUS_LABELS, useRequestSender, useSenders, useTestSend, useWithdrawRequest,
+  SENDER_STATUS_LABELS, useRequestSender, useSenders, useTestSend, useWithdrawRequest, type Sender,
 } from "../../api/emailSenders";
 import { useProfile, useUpdateProfile } from "../../api/profile";
 
@@ -21,7 +21,8 @@ export function SenderAddressPanel() {
   const selected = list.find((s) => s.id === selectedId);
   const usable = list.filter((s) => s.usable);
   const ownNotUsable = list.filter((s) => !s.is_shared && !s.usable);
-  const hasOpen = ownNotUsable.some((s) => s.status === "pending_approval" || s.status === "awaiting_confirmation");
+  const isOpen = (s: Sender) => s.is_active && (s.status === "pending_approval" || s.status === "awaiting_confirmation");
+  const hasOpen = ownNotUsable.some(isOpen);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -65,9 +66,11 @@ export function SenderAddressPanel() {
 
         {ownNotUsable.map((s) => (
           <p key={s.id} className="sender-request">
-            <strong>{s.email_address}</strong> — {SENDER_STATUS_LABELS[s.status]}
-            {s.status === "rejected" && s.rejection_reason && <span className="muted"> · Причина: {s.rejection_reason}</span>}
-            {(s.status === "pending_approval" || s.status === "awaiting_confirmation") && (
+            <strong>{s.email_address}</strong> — {s.is_active ? SENDER_STATUS_LABELS[s.status] : "Деактивирован"}
+            {s.is_active && s.status === "rejected" && s.rejection_reason && (
+              <span className="muted"> · Причина: {s.rejection_reason}</span>
+            )}
+            {isOpen(s) && (
               <button type="button" className="secondary" disabled={withdraw.isPending} onClick={() => withdraw.mutate(s.id)}>
                 Отозвать заявку
               </button>

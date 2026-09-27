@@ -90,3 +90,11 @@ def test_test_send_uses_own_active_personal_sender(client, keycloak, database_ur
     _select(database_url, me['user']['id'], _sender(database_url, 'mine@uni.test', owner=me['user']['id']))
     assert client.post('/api/v1/email-senders/test').status_code == 200
     assert sent == [{'from_address': 'mine@uni.test'}]
+
+
+def test_list_includes_the_selected_sender_even_when_unusable(client, keycloak, database_url):
+    me = login(client, keycloak)
+    sender_id = _sender(database_url, 'office@uni.test', is_active=False)
+    _select(database_url, me['user']['id'], sender_id)
+    listed = [s for s in client.get('/api/v1/email-senders').json() if s['id'] == sender_id]
+    assert len(listed) == 1 and listed[0]['usable'] is False and listed[0]['is_active'] is False

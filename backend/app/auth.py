@@ -17,7 +17,7 @@ from .db import get_db
 from .errors import AppError, ErrorCode
 from .models import LoginState, User, UserSession, utcnow
 from .oidc import OIDCError, OIDCUnavailable
-from .owner_links import rename_user
+from .owner_links import normalize_name, normalized_column, rename_user
 from .security import new_token, pkce_pair, safe_next_path, token_hash, tokens_match
 
 logger = logging.getLogger(__name__)
@@ -235,8 +235,17 @@ logout_auth.authenticates = True
 
 def _sync_name(db, request, user, identity):
     # A token without given_name/family_name (account with no names set) must not erase saved ones.
+    renamed = user.full_name != identity.full_name
     rename_user(db, request, user, first_name=identity.given_name or user.first_name,
                 last_name=identity.family_name or user.last_name, full_name=identity.full_name)
+    if renamed and db.scalar(select(User.id).where(
+        User.id != user.id, User.is_active.is_(True),
+        normalized_column(User.full_name) == normalize_name(identity.full_name),
+    ).limit(1)) is not None:
+        # A Keycloak-side rename cannot be refused; linked interactions keep working through
+        # owner_user_id, but text matching and report filters now see two people with one name.
+        logger.warning('User %s was renamed in Keycloak to %r, which another active CRM user already has',
+                       user.id, identity.full_name)
 
 
 def _revalidate(request, db, session_id, now):

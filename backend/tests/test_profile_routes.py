@@ -150,3 +150,22 @@ def test_me_exposes_profile_fields(client, keycloak):
     login(client, keycloak)
     user = client.get('/api/v1/auth/me').json()['user']
     assert {'first_name', 'middle_name', 'last_name', 'timezone', 'telegram', 'whatsapp', 'phone_verified_at'} <= user.keys()
+
+
+FULL_FORM = {'first_name': 'admin', 'middle_name': '', 'last_name': '', 'timezone': 'Asia/Omsk', 'telegram': '', 'whatsapp': ''}
+
+
+def test_single_word_name_user_can_save_the_real_form_body(client, keycloak):
+    # The form sends every field; a one-word full_name gives an empty last_name that must not block saving.
+    login(client, keycloak, name='admin')
+    response = client.patch(PROFILE, json=FULL_FORM)
+    assert response.status_code == 200, response.text
+    assert response.json()['timezone'] == 'Asia/Omsk'
+
+
+def test_clearing_a_name_is_rejected_in_russian(kc_client, keycloak):
+    _login_irina(kc_client, keycloak)
+    response = kc_client.patch(PROFILE, json={'first_name': '', 'last_name': 'Петрова'})
+    assert response.status_code == 422
+    detail = response.json()['details'][0]
+    assert detail['field'] == 'first_name' and detail['message'] == 'Укажите имя'

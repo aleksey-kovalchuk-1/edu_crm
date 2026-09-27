@@ -61,3 +61,13 @@ def test_token_without_given_name_keeps_saved_names(client, keycloak, database_u
     with database(database_url) as db:
         user = db.scalar(select(User).where(User.keycloak_sub == 'kc-n'))
         assert (user.first_name, user.last_name) == ('Олег', 'Сидоров')
+
+
+def test_login_sync_name_collision_is_logged_as_warning(client, keycloak, database_url, caplog):
+    with database(database_url) as db:
+        db.add(User(keycloak_sub='kc-other', email='o@x.test', full_name='Ирина Смирнова', roles=['crm-user'], is_active=True))
+        db.commit()
+    login(client, keycloak, roles=('crm-admin',), subject='kc-irina', name='Ирина Петрова')
+    with caplog.at_level('WARNING'):
+        login(client, keycloak, roles=('crm-admin',), subject='kc-irina', name='Ирина Смирнова')
+    assert any('Ирина Смирнова' in r.getMessage() and r.levelname == 'WARNING' for r in caplog.records)

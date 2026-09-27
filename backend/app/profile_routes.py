@@ -72,7 +72,9 @@ def _field_error(field, message):
     return AppError(ErrorCode.VALIDATION_ERROR, details=[{'field': field, 'message': message, 'type': 'value_error'}])
 
 
-Name = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=100)]
+# Empty is allowed here and checked only when the name actually changes: the form always sends every
+# field, and a one-word full_name (e.g. a username fallback) yields an empty last name nobody edited.
+Name = Annotated[str, StringConstraints(strip_whitespace=True, max_length=100)]
 
 
 class ProfilePatch(BaseModel):
@@ -168,6 +170,10 @@ def update_profile(data: ProfilePatch, request: Request, auth: AuthContext = Dep
     full_name = f'{first} {last}'.strip()
     name_changed = full_name != user.full_name
     names_changed = name_changed or (first, last, middle) != (current_first, current_last, user.middle_name)
+    if names_changed and not first:
+        raise _field_error('first_name', 'Укажите имя')
+    if names_changed and not last:
+        raise _field_error('last_name', 'Укажите фамилию')
     if names_changed and name_changed:
         taken = db.scalar(select(User.id).where(
             User.id != user.id, User.is_active.is_(True), normalized_column(User.full_name) == normalize_name(full_name),

@@ -95,6 +95,8 @@ def _reusable(row):
 def list_senders(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
     rows = db.scalars(select(EmailSenderIdentity).where(or_(
         EmailSenderIdentity.owner_user_id == auth.user.id,
+        # The stored selection is always listed, so the profile can show it as unavailable.
+        EmailSenderIdentity.id == auth.user.email_sender_identity_id,
         and_(EmailSenderIdentity.owner_user_id.is_(None), EmailSenderIdentity.is_active.is_(True),
              EmailSenderIdentity.status == 'active'),
     )).order_by(EmailSenderIdentity.display_name)).all()
