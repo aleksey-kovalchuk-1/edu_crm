@@ -1,8 +1,14 @@
-"""Sender address rules shared by selection and every send (spec 2026-09-27, section 2)."""
+"""Sender address rules shared by selection, every send, and the confirmation link (spec 2026-09-27,
+section 2)."""
+import secrets
+from datetime import timedelta
+
 from sqlalchemy import select
 
+from .email import EmailSendError, send_email
 from .errors import AppError, ErrorCode
-from .models import EmailSenderIdentity
+from .models import EmailSenderIdentity, utcnow
+from .security import token_hash
 
 SENDER_UNAVAILABLE = 'Выбранный адрес отправителя недоступен — выберите другой в профиле'
 
@@ -22,3 +28,35 @@ def usable_sender(db, user, identity_id):
     if not is_usable(identity, user):
         raise AppError(ErrorCode.CONFLICT, SENDER_UNAVAILABLE)
     return identity
+
+
+CONFIRMATION_TTL = timedelta(hours=48)
+RESEND_COOLDOWN_SECONDS = 60
+INVALID_LINK = 'Ссылка недействительна или устарела'
+
+
+def issue_confirmation(request, identity):
+    """A new single-use link (replacing any previous one) mailed to the address itself, from the system
+    sender. Returns (delivered, message), following the project's honesty rule for unconfigured mail."""
+    settings = request.app.state.settings
+    token = secrets.token_urlsafe(32)
+    now = utcnow()
+    identity.confirmation_token_hash = token_hash(token)
+    identity.confirmation_expires_at = now + CONFIRMATION_TTL
+    identity.confirmation_sent_at = now
+    link = f'{settings.public_base_url}/confirm-sender?token={token}'
+    # The whitespace after the link matters: the token must end where the URL does.
+    body = (
+        f'Этот адрес добавляют как адрес отправителя писем UniCRM («{identity.display_name}»).\n'
+        f'Чтобы подтвердить, откройте ссылку и нажмите «Подтвердить»: {link}\n'
+        'Ссылка действует 48 часов. Если вы не ожидали это письмо, просто проигнорируйте его.'
+    )
+    sender = getattr(request.app.state, 'email_sender', None) or send_email
+    try:
+        sender(settings, identity.email_address, 'Подтвердите адрес отправителя UniCRM', body,
+               from_address=settings.email_sender_address or None)
+    except EmailSendError as error:
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось отправить письмо подтверждения, попробуйте позже') from error
+    if settings.email_provider_url or sender is not send_email:
+        return True, f'Письмо подтверждения отправлено на {identity.email_address}.'
+    return False, 'Почтовый провайдер не настроен: письмо подтверждения записано только в журнал сервера.'

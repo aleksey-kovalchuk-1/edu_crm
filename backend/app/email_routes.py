@@ -1,12 +1,16 @@
-"""Sender-identity catalog for outgoing university correspondence (Настройки → Личный профиль).
-Every identity is admin-created and therefore inherently approved — see EmailSenderIdentity's
-docstring in models.py for why there is no separate self-service verification flow.
+"""Sender addresses for outgoing university correspondence (spec 2026-09-27, section 2).
+
+Personal addresses: the owner requests one, a crm-supervisor/crm-admin (never the requester) approves it,
+and a single-use link mailed to the address confirms the mailbox. Shared addresses: a supervisor/admin
+adds one and it is confirmed the same way. Only confirmed ('active'), active, owned-or-shared rows are
+usable — see app/sender_addresses.py, which every send and every selection goes through.
 """
+from datetime import datetime
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, EmailStr, StringConstraints
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.orm import Session
 
 from .audit import record_event
@@ -14,16 +18,20 @@ from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_r
 from .db import get_db
 from .email import EmailSendError, send_email
 from .errors import AppError, ErrorCode
-from .models import EmailSenderIdentity, utcnow
-from .sender_addresses import usable_sender
+from .models import EmailSenderIdentity, User, utcnow
+from .security import token_hash
+from .sender_addresses import INVALID_LINK, RESEND_COOLDOWN_SECONDS, is_usable, issue_confirmation, usable_sender
 
 router = APIRouter(prefix='/api/v1/email-senders', tags=['Отправители писем'])
 any_role = require_roles(*ALL_ROLES)
 sender_manager = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
 
 DisplayName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+Reason = Annotated[str, StringConstraints(strip_whitespace=True, max_length=500)]
 TEST_SEND_COOLDOWN_SECONDS = 60
 TEST_SEND_COOLDOWN_MESSAGE = 'Тестовое письмо уже отправлено, следующее можно запросить не раньше чем через минуту'
+OPEN_STATUSES = ('pending_approval', 'awaiting_confirmation')
+ADDRESS_TAKEN = [{'field': 'email_address', 'message': 'Этот адрес уже используется', 'type': 'value_error'}]
 
 
 class SenderIn(BaseModel):
@@ -36,48 +44,228 @@ class SenderOut(BaseModel):
     email_address: str
     display_name: str
     is_active: bool
+    status: str
+    is_shared: bool
+    rejection_reason: str
+    usable: bool
 
 
-def sender_out(row):
-    return SenderOut(id=row.id, email_address=row.email_address, display_name=row.display_name, is_active=row.is_active)
+class QueueItemOut(SenderOut):
+    requested_by: str
+    requested_at: datetime | None
 
 
-@router.get('', response_model=list[SenderOut], summary='Список доступных отправителей', dependencies=[Depends(any_role)])
-def list_senders(db: Session = Depends(get_db)):
-    rows = db.scalars(select(EmailSenderIdentity).where(EmailSenderIdentity.is_active.is_(True)).order_by(EmailSenderIdentity.display_name)).all()
-    return [sender_out(r) for r in rows]
+class RejectIn(BaseModel):
+    reason: Reason = ''
 
 
-@router.post('', response_model=SenderOut, status_code=201, summary='Добавить отправителя')
+class ConfirmIn(BaseModel):
+    token: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=200)]
+
+
+class ConfirmOut(BaseModel):
+    email_address: str
+
+
+class DeliveryOut(BaseModel):
+    delivered: bool
+    message: str
+
+
+def sender_out(row, user=None):
+    usable = is_usable(row, user) if user is not None else (row.is_active and row.status == 'active')
+    return SenderOut(
+        id=row.id, email_address=row.email_address, display_name=row.display_name, is_active=row.is_active,
+        status=row.status, is_shared=row.owner_user_id is None, rejection_reason=row.rejection_reason, usable=usable,
+    )
+
+
+def _event(db, request, actor, action, row, summary):
+    record_event(db, request, actor, action, entity_type='email_sender_identity', entity_id=row.id,
+                 summary=summary, payload={'email_address': row.email_address})
+
+
+def _reusable(row):
+    """An existing row with this address may be taken over only if nobody holds it any more: rejected or
+    withdrawn, or deactivated. A stale selection of a taken-over row fails the owner check on send."""
+    return row.status == 'rejected' or not row.is_active
+
+
+@router.get('', response_model=list[SenderOut], summary='Доступные мне адреса отправителей')
+def list_senders(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    rows = db.scalars(select(EmailSenderIdentity).where(or_(
+        EmailSenderIdentity.owner_user_id == auth.user.id,
+        and_(EmailSenderIdentity.owner_user_id.is_(None), EmailSenderIdentity.is_active.is_(True),
+             EmailSenderIdentity.status == 'active'),
+    )).order_by(EmailSenderIdentity.display_name)).all()
+    return [sender_out(r, auth.user) for r in rows]
+
+
+@router.post('/requests', response_model=SenderOut, status_code=201, summary='Заявка на личный адрес отправителя')
+def request_sender(data: SenderIn, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    open_request = db.scalar(select(EmailSenderIdentity.id).where(
+        EmailSenderIdentity.owner_user_id == auth.user.id, EmailSenderIdentity.status.in_(OPEN_STATUSES),
+        EmailSenderIdentity.is_active.is_(True)))
+    if open_request is not None:
+        raise AppError(ErrorCode.CONFLICT, 'У вас уже есть открытая заявка — дождитесь решения или отзовите её')
+    existing = db.scalar(select(EmailSenderIdentity).where(EmailSenderIdentity.email_address == data.email_address))
+    if existing is not None and not _reusable(existing):
+        raise AppError(ErrorCode.VALIDATION_ERROR, details=ADDRESS_TAKEN)
+    row = existing or EmailSenderIdentity(email_address=data.email_address, created_by_user_id=auth.user.id)
+    row.display_name = data.display_name
+    row.owner_user_id = auth.user.id
+    row.status = 'pending_approval'
+    row.is_active = True
+    row.rejection_reason = ''
+    row.requested_by_user_id = auth.user.id
+    row.requested_at = utcnow()
+    row.approved_by_user_id = None
+    row.approved_at = None
+    row.confirmation_token_hash = None
+    row.confirmation_expires_at = None
+    if existing is None:
+        db.add(row)
+    db.flush()
+    _event(db, request, auth.user, 'email_sender.request', row, f'Заявка на адрес отправителя {row.email_address}')
+    db.commit()
+    return sender_out(row, auth.user)
+
+
+@router.delete('/requests/{sender_id}', status_code=204, summary='Отозвать свою заявку')
+def withdraw_request(sender_id: int, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    row = db.scalar(select(EmailSenderIdentity).where(EmailSenderIdentity.id == sender_id).with_for_update())
+    if row is None or row.owner_user_id != auth.user.id or row.status not in OPEN_STATUSES:
+        raise AppError(ErrorCode.RECORD_NOT_FOUND)
+    row.status = 'rejected'
+    row.rejection_reason = 'Заявка отозвана'
+    row.confirmation_token_hash = None
+    row.confirmation_expires_at = None
+    _event(db, request, auth.user, 'email_sender.withdraw', row, f'Заявка на адрес {row.email_address} отозвана')
+    db.commit()
+
+
+@router.get('/queue', response_model=list[QueueItemOut], summary='Заявки на адреса отправителей',
+            dependencies=[Depends(sender_manager)])
+def queue(db: Session = Depends(get_db)):
+    rows = db.execute(
+        select(EmailSenderIdentity, User.full_name)
+        .outerjoin(User, User.id == EmailSenderIdentity.requested_by_user_id)
+        .where(EmailSenderIdentity.status.in_(OPEN_STATUSES), EmailSenderIdentity.is_active.is_(True))
+        .order_by(EmailSenderIdentity.requested_at.nulls_last(), EmailSenderIdentity.id)
+    ).all()
+    return [QueueItemOut(**sender_out(r).model_dump(), requested_by=name or '', requested_at=r.requested_at)
+            for r, name in rows]
+
+
+@router.post('/confirm', response_model=ConfirmOut, summary='Подтвердить адрес по ссылке из письма')
+def confirm(data: ConfirmIn, request: Request, db: Session = Depends(get_db)):
+    # No session: the token proves control of the mailbox. POST only, so link-prefetching mail scanners
+    # never confirm an address just by opening the link.
+    row = db.scalar(select(EmailSenderIdentity).where(
+        EmailSenderIdentity.confirmation_token_hash == token_hash(data.token)).with_for_update())
+    if (row is None or row.status != 'awaiting_confirmation' or not row.is_active
+            or row.confirmation_expires_at is None or row.confirmation_expires_at <= utcnow()):
+        db.rollback()
+        raise AppError(ErrorCode.CONFLICT, INVALID_LINK)
+    row.status = 'active'
+    row.confirmed_at = utcnow()
+    row.confirmation_token_hash = None
+    row.confirmation_expires_at = None
+    owner = db.get(User, row.owner_user_id) if row.owner_user_id else None
+    if owner is not None:
+        owner.email_sender_identity_id = row.id
+    _event(db, request, owner, 'email_sender.confirm', row, f'Подтверждён адрес отправителя {row.email_address}')
+    db.commit()
+    return ConfirmOut(email_address=row.email_address)
+
+
+@router.post('', response_model=SenderOut, status_code=201, summary='Добавить общий адрес отправителя')
 def create_sender(data: SenderIn, request: Request, auth: AuthContext = Depends(sender_manager), db: Session = Depends(get_db)):
     existing = db.scalar(select(EmailSenderIdentity).where(EmailSenderIdentity.email_address == data.email_address))
-    if existing is not None and existing.is_active:
-        raise AppError(ErrorCode.VALIDATION_ERROR, details=[{'field': 'email_address', 'message': 'Такой адрес уже добавлен', 'type': 'value_error'}])
-    if existing is not None:
+    if (existing is not None and existing.owner_user_id is None and not existing.is_active
+            and existing.status == 'active'):
+        # A previously confirmed shared address: reactivation keeps its confirmation (unchanged behavior).
         existing.is_active = True
         existing.display_name = data.display_name
-        existing.created_by_user_id = auth.user.id
-        record_event(db, request, auth.user, 'email_sender.reactivate', entity_type='email_sender_identity', entity_id=existing.id,
-                     summary=f'Восстановлен отправитель писем «{existing.display_name}» ({existing.email_address})', payload={'email_address': existing.email_address})
+        _event(db, request, auth.user, 'email_sender.reactivate', existing,
+               f'Восстановлен отправитель писем «{existing.display_name}» ({existing.email_address})')
         db.commit()
         return sender_out(existing)
-    row = EmailSenderIdentity(email_address=data.email_address, display_name=data.display_name, created_by_user_id=auth.user.id)
-    db.add(row)
+    if existing is not None and not _reusable(existing):
+        raise AppError(ErrorCode.VALIDATION_ERROR, details=[{'field': 'email_address', 'message': 'Такой адрес уже добавлен', 'type': 'value_error'}])
+    row = existing or EmailSenderIdentity(email_address=data.email_address)
+    row.display_name = data.display_name
+    row.owner_user_id = None
+    row.is_active = True
+    row.status = 'awaiting_confirmation'
+    row.rejection_reason = ''
+    row.created_by_user_id = auth.user.id
+    row.requested_by_user_id = auth.user.id
+    row.requested_at = utcnow()
+    row.approved_by_user_id = auth.user.id
+    row.approved_at = utcnow()
+    if existing is None:
+        db.add(row)
     db.flush()
-    record_event(db, request, auth.user, 'email_sender.create', entity_type='email_sender_identity', entity_id=row.id,
-                 summary=f'Добавлен отправитель писем «{row.display_name}» ({row.email_address})', payload={'email_address': row.email_address})
+    issue_confirmation(request, row)
+    _event(db, request, auth.user, 'email_sender.create', row,
+           f'Добавлен отправитель писем «{row.display_name}» ({row.email_address})')
     db.commit()
     return sender_out(row)
 
 
-@router.delete('/{sender_id}', status_code=204, summary='Деактивировать отправителя')
+def _open_row(db, sender_id, status):
+    row = db.scalar(select(EmailSenderIdentity).where(EmailSenderIdentity.id == sender_id).with_for_update())
+    if row is None or row.status != status or not row.is_active:
+        raise AppError(ErrorCode.CONFLICT, 'Заявка уже обработана или недоступна')
+    return row
+
+
+@router.post('/{sender_id}/approve', response_model=DeliveryOut, summary='Одобрить заявку и отправить письмо подтверждения')
+def approve(sender_id: int, request: Request, auth: AuthContext = Depends(sender_manager), db: Session = Depends(get_db)):
+    row = _open_row(db, sender_id, 'pending_approval')
+    if row.requested_by_user_id == auth.user.id:
+        raise AppError(ErrorCode.FORBIDDEN, 'Нельзя одобрить собственную заявку')
+    row.status = 'awaiting_confirmation'
+    row.approved_by_user_id = auth.user.id
+    row.approved_at = utcnow()
+    delivered, message = issue_confirmation(request, row)
+    _event(db, request, auth.user, 'email_sender.approve', row, f'Одобрен адрес отправителя {row.email_address}')
+    db.commit()
+    return DeliveryOut(delivered=delivered, message=message)
+
+
+@router.post('/{sender_id}/reject', status_code=204, summary='Отклонить заявку')
+def reject(sender_id: int, data: RejectIn, request: Request, auth: AuthContext = Depends(sender_manager), db: Session = Depends(get_db)):
+    row = _open_row(db, sender_id, 'pending_approval')
+    row.status = 'rejected'
+    row.rejection_reason = data.reason
+    _event(db, request, auth.user, 'email_sender.reject', row, f'Отклонён адрес отправителя {row.email_address}')
+    db.commit()
+
+
+@router.post('/{sender_id}/resend', response_model=DeliveryOut, summary='Повторить письмо подтверждения')
+def resend(sender_id: int, request: Request, auth: AuthContext = Depends(sender_manager), db: Session = Depends(get_db)):
+    row = _open_row(db, sender_id, 'awaiting_confirmation')
+    if row.confirmation_sent_at and (utcnow() - row.confirmation_sent_at).total_seconds() < RESEND_COOLDOWN_SECONDS:
+        raise AppError(ErrorCode.RATE_LIMITED, 'Письмо уже отправлено, повторить можно не раньше чем через минуту')
+    delivered, message = issue_confirmation(request, row)
+    _event(db, request, auth.user, 'email_sender.confirmation_resent', row,
+           f'Повторно отправлено подтверждение на {row.email_address}')
+    db.commit()
+    return DeliveryOut(delivered=delivered, message=message)
+
+
+@router.delete('/{sender_id}', status_code=204, summary='Деактивировать адрес отправителя')
 def deactivate_sender(sender_id: int, request: Request, auth: AuthContext = Depends(sender_manager), db: Session = Depends(get_db)):
     row = db.get(EmailSenderIdentity, sender_id)
     if row is None:
         raise AppError(ErrorCode.RECORD_NOT_FOUND)
     row.is_active = False
-    record_event(db, request, auth.user, 'email_sender.deactivate', entity_type='email_sender_identity', entity_id=row.id,
-                 summary=f'Деактивирован отправитель писем «{row.display_name}» ({row.email_address})', payload={})
+    row.confirmation_token_hash = None
+    row.confirmation_expires_at = None
+    _event(db, request, auth.user, 'email_sender.deactivate', row,
+           f'Деактивирован отправитель писем «{row.display_name}» ({row.email_address})')
     db.commit()
 
 

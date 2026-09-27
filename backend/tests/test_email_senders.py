@@ -1,4 +1,16 @@
-from helpers import login
+from sqlalchemy import update
+
+from app.models import EmailSenderIdentity, User
+from helpers import database, login
+
+
+def _active_shared(database_url, address='info@unicrm.tech', name='Общая почта'):
+    # A confirmed shared address, as every pre-0025 row is after the migration.
+    with database(database_url) as db:
+        row = EmailSenderIdentity(email_address=address, display_name=name, status='active')
+        db.add(row)
+        db.commit()
+        return row.id
 
 
 def test_only_supervisor_and_admin_can_create_a_sender_identity(client, keycloak):
@@ -9,7 +21,7 @@ def test_only_supervisor_and_admin_can_create_a_sender_identity(client, keycloak
     assert response.status_code == 403
 
 
-def test_supervisor_can_create_and_it_is_immediately_approved(client, keycloak):
+def test_supervisor_creates_a_shared_sender_awaiting_confirmation(client, keycloak):
     login(client, keycloak, roles=('crm-supervisor',))
     response = client.post('/api/v1/email-senders', json={
         'email_address': 'info@unicrm.tech', 'display_name': 'UniCRM — общая почта',
@@ -18,6 +30,7 @@ def test_supervisor_can_create_and_it_is_immediately_approved(client, keycloak):
     body = response.json()
     assert body['email_address'] == 'info@unicrm.tech'
     assert body['is_active'] is True
+    assert (body['status'], body['is_shared'], body['usable']) == ('awaiting_confirmation', True, False)
 
 
 def test_rejects_an_invalid_email_address(client, keycloak):
@@ -28,9 +41,8 @@ def test_rejects_an_invalid_email_address(client, keycloak):
     assert response.status_code == 422
 
 
-def test_any_signed_in_user_can_list_active_senders(client, keycloak):
-    login(client, keycloak, roles=('crm-admin',))
-    client.post('/api/v1/email-senders', json={'email_address': 'info@unicrm.tech', 'display_name': 'Общая почта'})
+def test_any_signed_in_user_can_list_active_senders(client, keycloak, database_url):
+    _active_shared(database_url)
     login(client, keycloak, roles=('crm-user',))
     response = client.get('/api/v1/email-senders')
     assert response.status_code == 200
@@ -94,27 +106,21 @@ def test_test_send_surfaces_a_send_failure_as_a_service_error(client, keycloak, 
 
 
 def test_test_send_uses_the_selected_sender_identity_as_the_from_address(client, keycloak, app, database_url):
-    from sqlalchemy import update
-    from app.models import User
-    from helpers import database
-
     captured = []
     app.state.email_sender = lambda settings, to, subject, body, from_address=None: captured.append(from_address)
     me = login(client, keycloak, roles=('crm-supervisor',))
-    created = client.post('/api/v1/email-senders', json={
-        'email_address': 'info@unicrm.tech', 'display_name': 'Общая почта',
-    }).json()
+    sender_id = _active_shared(database_url)
     with database(database_url) as db:
-        db.execute(update(User).where(User.id == me['user']['id']).values(email_sender_identity_id=created['id']))
+        db.execute(update(User).where(User.id == me['user']['id']).values(email_sender_identity_id=sender_id))
         db.commit()
     response = client.post('/api/v1/email-senders/test')
     assert response.status_code == 200, response.text
     assert captured == ['info@unicrm.tech']
 
 
-def test_recreating_a_deactivated_sender_reactivates_the_same_row(client, keycloak):
+def test_recreating_a_deactivated_sender_reactivates_the_same_row(client, keycloak, database_url):
     login(client, keycloak, roles=('crm-admin',))
-    created = client.post('/api/v1/email-senders', json={'email_address': 'info@unicrm.tech', 'display_name': 'Общая почта'}).json()
+    created = {'id': _active_shared(database_url)}
     client.delete(f"/api/v1/email-senders/{created['id']}")
     response = client.post('/api/v1/email-senders', json={'email_address': 'info@unicrm.tech', 'display_name': 'Общая почта (обновлено)'})
     assert response.status_code == 201, response.text
@@ -122,6 +128,7 @@ def test_recreating_a_deactivated_sender_reactivates_the_same_row(client, keyclo
     assert body['id'] == created['id']
     assert body['is_active'] is True
     assert body['display_name'] == 'Общая почта (обновлено)'
+    assert body['status'] == 'active'  # a confirmed address keeps its confirmation when reactivated
     listing = client.get('/api/v1/email-senders').json()
     assert any(s['id'] == created['id'] for s in listing)
 
@@ -139,3 +146,15 @@ def test_test_send_rejects_a_user_with_no_email_on_file(client, keycloak):
     login(client, keycloak, roles=('crm-user',), email='')
     response = client.post('/api/v1/email-senders/test')
     assert response.status_code == 409
+
+
+def test_readding_a_deactivated_unconfirmed_shared_sender_sends_a_new_link(client, keycloak, app):
+    sent = []
+    app.state.email_sender = lambda settings, to, subject, body, **kwargs: sent.append(to)
+    login(client, keycloak, roles=('crm-admin',))
+    created = client.post('/api/v1/email-senders', json={'email_address': 'info@unicrm.tech', 'display_name': 'Общая почта'}).json()
+    client.delete(f"/api/v1/email-senders/{created['id']}")
+    again = client.post('/api/v1/email-senders', json={'email_address': 'info@unicrm.tech', 'display_name': 'Общая почта'})
+    assert again.status_code == 201, again.text
+    assert again.json()['id'] == created['id'] and again.json()['status'] == 'awaiting_confirmation'
+    assert sent == ['info@unicrm.tech', 'info@unicrm.tech']
