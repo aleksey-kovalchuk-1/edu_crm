@@ -56,7 +56,10 @@ class Launch(Base):
     university_id: Mapped[int] = mapped_column(ForeignKey('universities.id'))
     program: Mapped[str] = mapped_column(russian_text(200))
     product: Mapped[str] = mapped_column(russian_text(200))
-    owner: Mapped[str] = mapped_column(russian_text(100))
+    owner: Mapped[str] = mapped_column(russian_text(200))
+    # Set when the typed owner matches exactly one active user (app/owner_links.py); a rename then
+    # rewrites `owner` for these rows so assignment and report filters keep one name per person.
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), index=True)
     students: Mapped[int] = mapped_column(default=0)
     stage: Mapped[int] = mapped_column(default=0)
     deadline: Mapped[date] = mapped_column(Date)
@@ -359,19 +362,36 @@ class AnnualMetric(Base):
     streams: Mapped[int]
 
 
+SENDER_STATUSES = ('pending_approval', 'awaiting_confirmation', 'active', 'rejected')
+
+
 class EmailSenderIdentity(Base):
-    """A "from" address a user may send university correspondence as (Настройки → Личный профиль).
-    Every row is inherently admin-approved: only crm-supervisor/crm-admin can create one — there is
-    no self-service "verify my own mailbox" flow. Deactivated (is_active=False), never hard-deleted,
-    so a user who previously selected one keeps a valid historical reference.
+    """A "from" address for university correspondence. Shared rows (owner_user_id NULL) are added by a
+    supervisor/admin; personal rows are requested by their owner and approved by a supervisor/admin.
+    Either kind becomes usable only after the mailbox confirms a one-time link (status 'active').
+    Deactivated (is_active=False), never hard-deleted, so a stored selection stays a valid reference.
     """
     __tablename__ = 'email_sender_identities'
+    __table_args__ = (
+        CheckConstraint(f"status in ({', '.join(repr(s) for s in SENDER_STATUSES)})", name='status'),
+    )
     id: Mapped[int] = mapped_column(primary_key=True)
     email_address: Mapped[str] = mapped_column(String(254), unique=True)
     display_name: Mapped[str] = mapped_column(russian_text(200))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    owner_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), index=True)
+    status: Mapped[str] = mapped_column(String(32), default='active', server_default='active')
+    requested_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    approved_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    rejection_reason: Mapped[str] = mapped_column(String(500), default='', server_default='')
+    confirmation_token_hash: Mapped[str | None] = mapped_column(String(64), unique=True)
+    confirmation_expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmation_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class User(Base):
@@ -381,6 +401,14 @@ class User(Base):
     keycloak_sub: Mapped[str] = mapped_column(String(255), unique=True)
     email: Mapped[str] = mapped_column(String(254), default='')
     full_name: Mapped[str] = mapped_column(russian_text(200))
+    # Mirror Keycloak firstName/lastName/attributes.middleName; the profile writes Keycloak first.
+    first_name: Mapped[str] = mapped_column(String(100), default='', server_default='')
+    middle_name: Mapped[str] = mapped_column(String(100), default='', server_default='')
+    last_name: Mapped[str] = mapped_column(String(100), default='', server_default='')
+    timezone: Mapped[str] = mapped_column(String(64), default='Europe/Moscow', server_default='Europe/Moscow')
+    # Saved contacts only — no messaging integration exists (spec 2026-09-27, section 1).
+    telegram: Mapped[str] = mapped_column(String(32), default='', server_default='')
+    whatsapp: Mapped[str] = mapped_column(String(16), default='', server_default='')
     roles: Mapped[list[str]] = mapped_column(ARRAY(String(32)), default=list)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
