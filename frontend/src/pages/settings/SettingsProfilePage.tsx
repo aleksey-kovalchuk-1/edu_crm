@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { ApiError, errorText } from "../../api/client";
 import { contactStatus, useProfile, useUpdateProfile, type Profile } from "../../api/profile";
 import { PhoneVerificationPanel } from "./PhoneVerificationPanel";
@@ -12,43 +12,44 @@ const FIELD_KEYS = ["first_name", "middle_name", "last_name", "timezone", "teleg
 
 export function SettingsProfilePage() {
   const profile = useProfile();
-  const update = useUpdateProfile();
-  const [form, setForm] = useState<Form | null>(null);
-  const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    if (!profile.data) return;
-    const data = profile.data;
-    setForm((current) => current ?? {
-      first_name: data.first_name, middle_name: data.middle_name, last_name: data.last_name,
-      timezone: data.timezone, telegram: data.telegram, whatsapp: data.whatsapp,
-    });
-  }, [profile.data]);
-
-  const zones = useMemo(
-    () => (form && !TIME_ZONES.includes(form.timezone) ? [form.timezone, ...TIME_ZONES] : TIME_ZONES),
-    [form],
-  );
-
   if (profile.isError) {
     return <section className="panel"><p className="danger" role="alert">{errorText(profile.error)}</p></section>;
   }
-  if (!profile.data || !form) {
+  if (!profile.data) {
     return <section className="panel"><p className="muted">Загрузка…</p></section>;
   }
+  return (
+    <>
+      <PersonalDataForm profile={profile.data} />
+      <PhoneVerificationPanel />
+      <SenderAddressPanel />
+    </>
+  );
+}
+
+function PersonalDataForm({ profile }: { profile: Profile }) {
+  const update = useUpdateProfile();
+  const [form, setForm] = useState<Form>(() => ({
+    first_name: profile.first_name, middle_name: profile.middle_name, last_name: profile.last_name,
+    timezone: profile.timezone, telegram: profile.telegram, whatsapp: profile.whatsapp,
+  }));
+  const [saved, setSaved] = useState(false);
+  const zones = useMemo(
+    () => (TIME_ZONES.includes(form.timezone) ? TIME_ZONES : [form.timezone, ...TIME_ZONES]),
+    [form.timezone],
+  );
 
   const error = update.error;
   const fieldError = (field: string) => (error instanceof ApiError ? error.fieldMessage(field) : undefined);
   const hasFieldError = FIELD_KEYS.some((key) => fieldError(key));
 
   function set<K extends keyof Form>(key: K, value: Form[K]) {
-    setForm((current) => (current ? { ...current, [key]: value } : current));
+    setForm((current) => ({ ...current, [key]: value }));
     setSaved(false);
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!form) return;
     setSaved(false);
     update.mutate(form, { onSuccess: () => setSaved(true) });
   }
@@ -58,7 +59,7 @@ export function SettingsProfilePage() {
     return (
       <label>
         {label}
-        <input value={form![key]} onChange={(e) => set(key, e.target.value)}
+        <input value={form[key]} onChange={(e) => set(key, e.target.value)}
           aria-invalid={message ? true : undefined} {...props} />
         {message && <small className="field-error danger">{message}</small>}
       </label>
@@ -66,56 +67,52 @@ export function SettingsProfilePage() {
   }
 
   return (
-    <>
-      <form className="panel" onSubmit={submit} aria-labelledby="profile-personal-title" noValidate>
-        <div className="section-head">
+    <form className="panel" onSubmit={submit} aria-labelledby="profile-personal-title" noValidate>
+      <div className="section-head">
+        <div>
+          <h2 id="profile-personal-title">Личные данные</h2>
+          <p>Имя, отчество и фамилия сохраняются в учётной записи для входа.</p>
+        </div>
+      </div>
+      <div className="wizard-body">
+        <div className="form-row">
+          {field("first_name", "Имя", { maxLength: 100, autoComplete: "given-name" })}
+          {field("middle_name", "Отчество", { maxLength: 100, autoComplete: "additional-name" })}
+          {field("last_name", "Фамилия", { maxLength: 100, autoComplete: "family-name" })}
+        </div>
+        <label>
+          Email
+          <input value={profile.email} readOnly aria-readonly="true" />
+          <small className="field-hint">Меняется администратором в учётной записи.</small>
+        </label>
+        <label>
+          Часовой пояс
+          <select value={form.timezone} onChange={(e) => set("timezone", e.target.value)}
+            aria-invalid={fieldError("timezone") ? true : undefined}>
+            {zones.map((zone) => <option key={zone} value={zone}>{zone.replace(/_/g, " ")}</option>)}
+          </select>
+          {fieldError("timezone") && <small className="field-error danger">{fieldError("timezone")}</small>}
+        </label>
+        <div className="form-row">
           <div>
-            <h2 id="profile-personal-title">Личные данные</h2>
-            <p>Имя, отчество и фамилия сохраняются в учётной записи для входа.</p>
+            {field("telegram", "Telegram", { maxLength: 40, placeholder: "@username" })}
+            <small className="field-hint">{contactStatus(form.telegram)}</small>
+          </div>
+          <div>
+            {field("whatsapp", "WhatsApp", { maxLength: 32, type: "tel", placeholder: "+7XXXXXXXXXX" })}
+            <small className="field-hint">{contactStatus(form.whatsapp)}</small>
           </div>
         </div>
-        <div className="wizard-body">
-          <div className="form-row">
-            {field("first_name", "Имя", { maxLength: 100, autoComplete: "given-name" })}
-            {field("middle_name", "Отчество", { maxLength: 100, autoComplete: "additional-name" })}
-            {field("last_name", "Фамилия", { maxLength: 100, autoComplete: "family-name" })}
-          </div>
-          <label>
-            Email
-            <input value={profile.data.email} readOnly aria-readonly="true" />
-            <small className="field-hint">Меняется администратором в учётной записи.</small>
-          </label>
-          <label>
-            Часовой пояс
-            <select value={form.timezone} onChange={(e) => set("timezone", e.target.value)}
-              aria-invalid={fieldError("timezone") ? true : undefined}>
-              {zones.map((zone) => <option key={zone} value={zone}>{zone.replace(/_/g, " ")}</option>)}
-            </select>
-            {fieldError("timezone") && <small className="field-error danger">{fieldError("timezone")}</small>}
-          </label>
-          <div className="form-row">
-            <div>
-              {field("telegram", "Telegram", { maxLength: 40, placeholder: "@username" })}
-              <small className="field-hint">{contactStatus(form.telegram)}</small>
-            </div>
-            <div>
-              {field("whatsapp", "WhatsApp", { maxLength: 32, type: "tel", placeholder: "+7XXXXXXXXXX" })}
-              <small className="field-hint">{contactStatus(form.whatsapp)}</small>
-            </div>
-          </div>
-          <small className="field-hint">
-            Контакты только сохраняются в профиле: CRM не отправляет сообщения в мессенджеры.
-          </small>
+        <small className="field-hint">
+          Контакты только сохраняются в профиле: CRM не отправляет сообщения в мессенджеры.
+        </small>
 
-          {error && !hasFieldError && <p className="danger" role="alert">{errorText(error)}</p>}
-          {saved && <p className="text-green" role="status">Изменения сохранены</p>}
-          <div className="wizard-actions">
-            <button className="primary" disabled={update.isPending}>{update.isPending ? "Сохраняем…" : "Сохранить"}</button>
-          </div>
+        {error && !hasFieldError && <p className="danger" role="alert">{errorText(error)}</p>}
+        {saved && <p className="text-green" role="status">Изменения сохранены</p>}
+        <div className="wizard-actions">
+          <button className="primary" disabled={update.isPending}>{update.isPending ? "Сохраняем…" : "Сохранить"}</button>
         </div>
-      </form>
-      <PhoneVerificationPanel />
-      <SenderAddressPanel />
-    </>
+      </div>
+    </form>
   );
 }
