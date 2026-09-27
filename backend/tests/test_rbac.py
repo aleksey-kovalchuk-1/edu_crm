@@ -11,6 +11,8 @@ PUBLIC_ENDPOINTS = {
     ('GET', '/api/v1/auth/callback'),
     # The mailed single-use token proves control of the mailbox; no session by design (spec 2026-09-27, §2).
     ('POST', '/api/v1/email-senders/confirm'),
+    # Login screen shows the organization name before sign-in; returns the name only.
+    ('GET', '/api/v1/organization/brand'),
 }
 READ_ENDPOINTS = ['/api/v1/stages', '/api/v1/universities', '/api/v1/launches', '/api/v1/tasks', '/api/v1/dashboard', '/api/v1/audit/recent']
 
