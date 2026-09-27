@@ -15,6 +15,7 @@ from .db import get_db
 from .email import EmailSendError, send_email
 from .errors import AppError, ErrorCode
 from .models import EmailSenderIdentity, utcnow
+from .sender_addresses import usable_sender
 
 router = APIRouter(prefix='/api/v1/email-senders', tags=['Отправители писем'])
 any_role = require_roles(*ALL_ROLES)
@@ -99,14 +100,15 @@ def test_send(request: Request, auth: AuthContext = Depends(any_role), db: Sessi
     # default — which is how tests stand in for "a working provider is in place" without touching
     # settings.email_provider_url or hitting real HTTP.
     configured = bool(settings.email_provider_url) or sender is not send_email
-    from_identity = db.get(EmailSenderIdentity, auth.user.email_sender_identity_id) if auth.user.email_sender_identity_id else None
+    now = utcnow()
+    if auth.user.email_test_sent_at is not None and (now - auth.user.email_test_sent_at).total_seconds() < TEST_SEND_COOLDOWN_SECONDS:
+        raise AppError(ErrorCode.RATE_LIMITED, TEST_SEND_COOLDOWN_MESSAGE)
+    # Checked immediately before sending: a selection that became unusable is refused, never replaced.
+    from_identity = usable_sender(db, auth.user, auth.user.email_sender_identity_id) if auth.user.email_sender_identity_id else None
     from_label = from_identity.email_address if from_identity else (settings.email_sender_address or settings.email_sender_name)
     from_address = from_identity.email_address if from_identity else (settings.email_sender_address or None)
     subject = 'Тестовое письмо UniCRM'
     body = f'Это тестовое письмо, отправленное от имени «{from_label}». Если вы получили его, отправка почты настроена верно.'
-    now = utcnow()
-    if auth.user.email_test_sent_at is not None and (now - auth.user.email_test_sent_at).total_seconds() < TEST_SEND_COOLDOWN_SECONDS:
-        raise AppError(ErrorCode.RATE_LIMITED, TEST_SEND_COOLDOWN_MESSAGE)
     try:
         # Always the caller's own Keycloak-sourced address — never a client-supplied one: an
         # endpoint that could target any address would be an open mail-relay-testing primitive.
