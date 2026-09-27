@@ -179,6 +179,11 @@ class FakeKeycloak:
             )
             self.admin_users[user_id]['temporary_password'] = body['credentials'][0]['value']
             return httpx.Response(201, headers={'Location': f'{ADMIN_BASE_URL}/admin/realms/edu-crm/users/{user_id}'})
+        if suffix.startswith('users/') and request.method == 'GET' and '/' not in suffix[len('users/'):]:
+            user = self.admin_users.get(suffix[len('users/'):])
+            if user is None:
+                return httpx.Response(404)
+            return httpx.Response(200, json={k: v for k, v in user.items() if k not in ('roles', 'temporary_password')})
         if suffix.startswith('users/') and request.method in ('PUT', 'DELETE') and '/' not in suffix[len('users/'):]:
             user_id = suffix[len('users/'):]
             if user_id not in self.admin_users:
@@ -186,7 +191,17 @@ class FakeKeycloak:
             if request.method == 'DELETE':
                 del self.admin_users[user_id]
             else:
-                self.admin_users[user_id].update(json.loads(request.content))
+                body = json.loads(request.content)
+                self.admin_users[user_id].update(body)
+                if 'firstName' in body or 'lastName' in body:
+                    # Real Keycloak puts the new names into the next refreshed token.
+                    stored = self.admin_users[user_id]
+                    for claims in self.refresh_tokens.values():
+                        if claims['sub'] == user_id:
+                            claims.update(
+                                given_name=stored.get('firstName', ''), family_name=stored.get('lastName', ''),
+                                name=f"{stored.get('firstName', '')} {stored.get('lastName', '')}".strip(),
+                            )
             return httpx.Response(204)
         if suffix.startswith('users/') and suffix.endswith('/logout') and request.method == 'POST':
             user_id = suffix[len('users/'):-len('/logout')]

@@ -101,6 +101,17 @@ class KeycloakAdminClient:
     def set_user_enabled(self, user_id, enabled):
         self._request('PUT', f'/users/{user_id}', json={'enabled': enabled})
 
+    def update_user_names(self, user_id, *, first_name, last_name, middle_name):
+        """Read-modify-write: Keycloak's declarative user profile can drop attributes a partial PUT
+        omits, so the full representation goes back with only the name fields changed."""
+        representation = self._json(self._request('GET', f'/users/{user_id}'))
+        if not isinstance(representation, dict):
+            raise KeycloakAdminError('unexpected user representation shape')
+        attributes = dict(representation.get('attributes') or {})
+        attributes['middleName'] = [middle_name] if middle_name else []
+        representation.update(firstName=first_name, lastName=last_name, attributes=attributes)
+        self._request('PUT', f'/users/{user_id}', json=representation)
+
     def update_user(self, user_id, *, username, email, first_name, last_name):
         self._request('PUT', f'/users/{user_id}', json={
             'username': username, 'email': email, 'firstName': first_name,
