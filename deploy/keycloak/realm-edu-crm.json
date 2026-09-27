@@ -8,6 +8,7 @@
   "resetPasswordAllowed": false,
   "rememberMe": false,
   "loginWithEmailAllowed": true,
+  "registrationEmailAsUsername": false,
   "duplicateEmailsAllowed": false,
   "editUsernameAllowed": false,
   "internationalizationEnabled": true,

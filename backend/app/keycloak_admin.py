@@ -78,6 +78,9 @@ class KeycloakAdminClient:
         response = self._request('GET', '/users', params=params)
         return [self._to_admin_user(row) for row in self._json_list(response)]
 
+    def get_user(self, user_id):
+        return self._to_admin_user(self._json(self._request('GET', f'/users/{user_id}')))
+
     def assign_realm_role(self, user_id, role_name):
         self._request(
             'POST', f'/users/{user_id}/role-mappings/realm',
@@ -96,6 +99,17 @@ class KeycloakAdminClient:
         user_id = path.partition(marker)[2]
         if marker not in path or not user_id or '/' in user_id:
             raise KeycloakAdminError('create user response has no valid Location')
+        try:
+            actual = self.get_user(user_id)
+            if actual.username != username or actual.email != email:
+                raise KeycloakAdminError('created user username or email differs from the request')
+        except KeycloakAdminError:
+            # The record is still disabled. Avoid leaving a misleading, unusable account behind.
+            try:
+                self.delete_user(user_id)
+            except KeycloakAdminError:
+                pass
+            raise
         return user_id
 
     def set_user_enabled(self, user_id, enabled):
@@ -138,6 +152,15 @@ class KeycloakAdminClient:
         if not isinstance(body, dict):
             raise KeycloakAdminError(f'expected a JSON object for realm info, got {type(body).__name__}')
         return body.get('passwordPolicy', '')
+
+    def get_realm_login_settings(self):
+        body = self._json(self._request('GET', ''))
+        if not isinstance(body, dict):
+            raise KeycloakAdminError('expected a JSON object for realm settings')
+        return {
+            'registrationEmailAsUsername': body.get('registrationEmailAsUsername', False),
+            'editUsernameAllowed': body.get('editUsernameAllowed', False),
+        }
 
     def _to_admin_user(self, row):
         try:

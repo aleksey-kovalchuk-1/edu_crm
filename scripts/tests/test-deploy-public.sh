@@ -29,8 +29,10 @@ case "$*" in
     if [[ "${FAIL_BRAND_UPDATE:-}" == 1 ]]; then exit 7; fi
     if [[ "${BAD_BRAND_READBACK:-}" == 1 ]]; then
       printf '{"displayName":"Образование CRM","displayNameHtml":"Образование CRM"}\n'
+    elif [[ "${BAD_LOGIN_MODE:-}" == 1 ]]; then
+      printf '{"displayName":"UniCRM","displayNameHtml":"UniCRM","registrationEmailAsUsername":true,"editUsernameAllowed":false}\n'
     else
-      printf '{"displayName":"UniCRM","displayNameHtml":"UniCRM"}\n'
+      printf '{"displayName":"UniCRM","displayNameHtml":"UniCRM","registrationEmailAsUsername":false,"editUsernameAllowed":false}\n'
     fi ;;
   *) echo "unexpected Docker command: $*" >&2; exit 9 ;;
 esac
@@ -93,6 +95,9 @@ if FAIL_BRAND_UPDATE=1 "$root/scripts/deploy-public.sh" synthetic-brand-update-f
 fi
 if BAD_BRAND_READBACK=1 "$root/scripts/deploy-public.sh" synthetic-brand-readback-fail >/dev/null 2>&1; then
   echo 'deployment accepted stale Keycloak branding' >&2; exit 1
+fi
+if BAD_LOGIN_MODE=1 "$root/scripts/deploy-public.sh" synthetic-login-mode-fail >/dev/null 2>&1; then
+  echo 'deployment accepted a realm that replaces logins with email addresses' >&2; exit 1
 fi
 
 printf 'BACKUP_DIR=%q\nBACKUP_AGE_RECIPIENT=%q\nDEPLOY_CHECKOUT=%q\n' \

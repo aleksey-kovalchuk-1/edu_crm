@@ -70,6 +70,17 @@ def test_create_account_reports_duplicate_and_does_not_replace_existing_user():
     assert len(fake.admin_users) == 1
 
 
+def test_create_account_rejects_realm_that_rewrites_login_to_email():
+    fake = FakeKeycloak()
+    fake.registration_email_as_username = True
+    with pytest.raises(KeycloakAdminError, match='username'):
+        make_client(fake).create_user(
+            username='admin_1', email='admin_1@example.test', first_name='Администратор',
+            last_name='Один', temporary_password='TemporarySecret123456789',
+        )
+    assert fake.admin_users == {}
+
+
 def test_assign_realm_role_adds_it():
     fake = FakeKeycloak()
     fake.add_admin_user(id='u1', email='a@demo.local', username='a', roles=[])
