@@ -89,7 +89,21 @@ def _reset(session):
     session.info.pop('notified', None)
 
 
+def _do_orm_execute(state):
+    """Task members are replaced with a bulk `delete(TaskMember)` the ORM hooks never see; record which rows
+    it removes, so commit-time comparison can tell real removals from members that were simply re-added."""
+    statement = state.statement
+    if state.is_delete and getattr(getattr(statement, 'table', None), 'name', None) == 'task_members':
+        query = select(TaskMember.task_id, TaskMember.user_id, TaskMember.role)
+        if statement.whereclause is not None:
+            query = query.where(statement.whereclause)
+        rows = state.session.execute(query).all()
+        _changes(state.session).extend(
+            ('deleted', 'TaskMember', {'task_id': t, 'user_id': u, 'role': r}) for t, u, r in rows)
+
+
 def install(session_factory):
+    event.listen(session_factory, 'do_orm_execute', _do_orm_execute)
     event.listen(session_factory, 'before_flush', _before_flush)
     event.listen(session_factory, 'after_flush', _after_flush)
     event.listen(session_factory, 'before_commit', _before_commit)
@@ -182,4 +196,63 @@ _LABEL = {
     'workflow_stages_changed': 'Изменили этапы процесса',
 }
 
-HANDLERS = [_university_events, _launch_events, _workflow_events]
+WORKING_ROLES = ('assignee', 'participant')
+
+
+def task_member_ids(db, task_id, roles):
+    return set(db.scalars(select(TaskMember.user_id).where(TaskMember.task_id == task_id, TaskMember.role.in_(roles))))
+
+
+def _task_notify(db, task, user_ids, event_type, title, actor):
+    for user_id in sorted(user_ids):
+        notify(db, user_id=user_id, event_type=event_type, title=title, body=task.title, link_type='task',
+               link_id=task.id, university_id=task.university_id, actor_user_id=actor)
+
+
+def _task_events(db, changes, actor):
+    deleted, inserted = {}, {}
+    for kind, model, data in changes:
+        if model == 'TaskMember':
+            bucket = deleted if kind == 'deleted' else inserted
+            bucket.setdefault(data['task_id'], set()).add((data['user_id'], data['role']))
+    for task_id in sorted(set(deleted) | set(inserted)):
+        task = db.get(Task, task_id)
+        if task is None:
+            continue
+        now_rows = set(db.execute(select(TaskMember.user_id, TaskMember.role).where(TaskMember.task_id == task_id)).all())
+        before_rows = (now_rows - inserted.get(task_id, set())) | deleted.get(task_id, set())
+        working = lambda rows: {u for u, r in rows if r in WORKING_ROLES}  # noqa: E731
+        after, before = working(now_rows), working(before_rows)
+        _task_notify(db, task, after - before, 'task_assigned', 'Вас назначили исполнителем задачи', actor)
+        _task_notify(db, task, before - after, 'task_unassigned', 'Вас убрали из исполнителей задачи', actor)
+
+    for kind, model, data in changes:
+        if model == 'Task' and kind == 'updated':
+            task = db.get(Task, data['id'])
+            if task is None:
+                continue
+            deadline, status = data['deadline'], data['status']
+            # Checked against the current value: a change undone by a savepoint rollback sends nothing.
+            if deadline and deadline.deleted and task.deadline != deadline.deleted[0]:
+                _task_notify(db, task, task_member_ids(db, task.id, WORKING_ROLES), 'task_deadline_changed',
+                             'Изменили срок вашей задачи', actor)
+            if status and status.deleted and status.added and task.status == status.added[0]:
+                old, new = status.deleted[0], status.added[0]
+                if new == 'awaiting_review':
+                    _task_notify(db, task, {task.creator_id} - {None}, 'task_submitted_for_approval',
+                                 'Задачу отправили на согласование', actor)
+                elif old == 'awaiting_review':
+                    _task_notify(db, task, task_member_ids(db, task.id, WORKING_ROLES), 'task_review_decided',
+                                 'Задачу согласовали' if new == 'completed' else 'Задачу вернули на доработку', actor)
+                elif new in ('completed', 'cancelled'):
+                    everyone = task_member_ids(db, task.id, ('assignee', 'participant', 'observer')) | {task.creator_id}
+                    _task_notify(db, task, everyone - {None}, 'task_closed',
+                                 'Задачу завершили' if new == 'completed' else 'Задачу отменили', actor)
+        elif model == 'TaskComment' and kind == 'new':
+            task = db.get(Task, data['task_id'])
+            if task is not None:
+                recipients = task_member_ids(db, task.id, WORKING_ROLES) | {task.creator_id}
+                _task_notify(db, task, recipients - {None}, 'task_commented', 'Добавили комментарий к вашей задаче', actor)
+
+
+HANDLERS = [_university_events, _launch_events, _workflow_events, _task_events]
