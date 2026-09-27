@@ -54,6 +54,7 @@ export const paths = {
   settingsPersonalData: "/settings/personal-data",
   settingsBackups: "/settings/backups",
   settingsAccount: "/settings/account",
+  confirmSender: "/confirm-sender",
 } as const;
 
 export const universityPath = (id: number) => `${paths.universities}/${id}`;
