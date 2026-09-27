@@ -17,6 +17,7 @@ from .db import get_db
 from .errors import AppError, ErrorCode
 from .models import LoginState, User, UserSession, utcnow
 from .oidc import OIDCError, OIDCUnavailable
+from .owner_links import rename_user
 from .security import new_token, pkce_pair, safe_next_path, token_hash, tokens_match
 
 logger = logging.getLogger(__name__)
@@ -160,13 +161,15 @@ def callback(
     row = db.execute(
         upsert.on_conflict_do_update(
             index_elements=[User.keycloak_sub],
-            set_={'email': identity.email, 'full_name': identity.full_name, 'roles': list(identity.roles), 'last_login_at': now},
+            # full_name is left to rename_user below, so a changed name also reaches linked interactions.
+            set_={'email': identity.email, 'roles': list(identity.roles), 'last_login_at': now},
             where=User.is_active.is_(True),
         ).returning(User.id)
     ).first()
     if row is None:
         db.rollback()
         return _login_error(request, 'NO_ACCESS')
+    _sync_name(db, request, db.get(User, row.id), identity)
 
     raw_session = new_token()
     ttl = timedelta(hours=app_state.settings.session_ttl_hours)
@@ -224,6 +227,12 @@ current_auth.authenticates = True
 logout_auth.authenticates = True
 
 
+def _sync_name(db, request, user, identity):
+    # A token without given_name/family_name (account with no names set) must not erase saved ones.
+    rename_user(db, request, user, first_name=identity.given_name or user.first_name,
+                last_name=identity.family_name or user.last_name, full_name=identity.full_name)
+
+
 def _revalidate(request, db, session_id, now):
     app_state = request.app.state
     # Lock the row and re-read it from the database (populate_existing): Keycloak rotates refresh tokens on use,
@@ -261,7 +270,7 @@ def _revalidate(request, db, session_id, now):
         raise AppError(ErrorCode.UNAUTHENTICATED)
 
     user.email = identity.email
-    user.full_name = identity.full_name
+    _sync_name(db, request, user, identity)
     user.roles = list(identity.roles)
     if tokens.refresh_token:
         session.refresh_token_encrypted = app_state.cipher.encrypt(tokens.refresh_token)
