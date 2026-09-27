@@ -169,16 +169,18 @@ def test_exports_open_with_the_selected_columns(client, keycloak, database_url):
     assert 'attachment' in xlsx.headers['content-disposition'] and '.xlsx' in xlsx.headers['content-disposition']
     sheet = openpyxl.load_workbook(io.BytesIO(xlsx.content)).active
     values = list(sheet.values)
-    assert values[0] == ('Учебное заведение', 'ИТ-продукт', 'Ответственный')
+    assert values[0][0] == 'ИТ Школа Ростелеком'  # organization line (spec 2026-09-27-organization-settings)
+    assert values[1] == ('Учебное заведение', 'ИТ-продукт', 'Ответственный')
     assert ('Колледж связи', 'РТК ИТ — PostgreSQL', 'Ирина Петрова') in values
-    assert len(values) == 4
+    assert len(values) == 5
 
     xls = client.get('/api/v1/reports/interactions/export', params={**params, 'format': 'xls'})
     assert xls.status_code == 200, xls.text
     book = xlrd.open_workbook(file_contents=xls.content)
     sh = book.sheet_by_index(0)
-    assert sh.row_values(0) == ['Учебное заведение', 'ИТ-продукт', 'Ответственный']
-    assert sh.nrows == 4
+    assert sh.row_values(0)[0] == 'ИТ Школа Ростелеком'
+    assert sh.row_values(1) == ['Учебное заведение', 'ИТ-продукт', 'Ответственный']
+    assert sh.nrows == 5
 
     pdf = client.get('/api/v1/reports/interactions/export', params={**params, 'format': 'pdf'})
     assert pdf.status_code == 200, pdf.text

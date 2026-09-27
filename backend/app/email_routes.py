@@ -19,6 +19,7 @@ from .db import get_db
 from .email import EmailSendError, send_email
 from .errors import AppError, ErrorCode
 from .models import EmailSenderIdentity, User, utcnow
+from .organization import organization_name
 from .security import token_hash
 from .sender_addresses import INVALID_LINK, RESEND_COOLDOWN_SECONDS, is_usable, issue_confirmation, usable_sender
 
@@ -209,7 +210,7 @@ def create_sender(data: SenderIn, request: Request, auth: AuthContext = Depends(
     if existing is None:
         db.add(row)
     db.flush()
-    issue_confirmation(request, row)
+    issue_confirmation(db, request, row)
     _event(db, request, auth.user, 'email_sender.create', row,
            f'Добавлен отправитель писем «{row.display_name}» ({row.email_address})')
     db.commit()
@@ -231,7 +232,7 @@ def approve(sender_id: int, request: Request, auth: AuthContext = Depends(sender
     row.status = 'awaiting_confirmation'
     row.approved_by_user_id = auth.user.id
     row.approved_at = utcnow()
-    delivered, message = issue_confirmation(request, row)
+    delivered, message = issue_confirmation(db, request, row)
     _event(db, request, auth.user, 'email_sender.approve', row, f'Одобрен адрес отправителя {row.email_address}')
     db.commit()
     return DeliveryOut(delivered=delivered, message=message)
@@ -251,7 +252,7 @@ def resend(sender_id: int, request: Request, auth: AuthContext = Depends(sender_
     row = _open_row(db, sender_id, 'awaiting_confirmation')
     if row.confirmation_sent_at and (utcnow() - row.confirmation_sent_at).total_seconds() < RESEND_COOLDOWN_SECONDS:
         raise AppError(ErrorCode.RATE_LIMITED, 'Письмо уже отправлено, повторить можно не раньше чем через минуту')
-    delivered, message = issue_confirmation(request, row)
+    delivered, message = issue_confirmation(db, request, row)
     _event(db, request, auth.user, 'email_sender.confirmation_resent', row,
            f'Повторно отправлено подтверждение на {row.email_address}')
     db.commit()
@@ -298,11 +299,14 @@ def test_send(request: Request, auth: AuthContext = Depends(any_role), db: Sessi
     from_label = from_identity.email_address if from_identity else (settings.email_sender_address or settings.email_sender_name)
     from_address = from_identity.email_address if from_identity else (settings.email_sender_address or None)
     subject = 'Тестовое письмо UniCRM'
-    body = f'Это тестовое письмо, отправленное от имени «{from_label}». Если вы получили его, отправка почты настроена верно.'
+    organization = organization_name(db)
+    from_name = from_identity.display_name if from_identity else organization
+    body = (f'Это тестовое письмо, отправленное от имени «{from_label}». Если вы получили его, отправка почты настроена верно.'
+            f'\n\n{organization}')
     try:
         # Always the caller's own Keycloak-sourced address — never a client-supplied one: an
         # endpoint that could target any address would be an open mail-relay-testing primitive.
-        sender(settings, auth.user.email, subject, body, from_address=from_address)
+        sender(settings, auth.user.email, subject, body, from_address=from_address, from_name=from_name)
     except EmailSendError as error:
         raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось отправить письмо, попробуйте ещё раз позже') from error
     auth.user.email_test_sent_at = now

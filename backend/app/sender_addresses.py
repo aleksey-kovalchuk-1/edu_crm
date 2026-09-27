@@ -8,6 +8,7 @@ from sqlalchemy import select
 from .email import EmailSendError, send_email
 from .errors import AppError, ErrorCode
 from .models import EmailSenderIdentity, utcnow
+from .organization import organization_name
 from .security import token_hash
 
 SENDER_UNAVAILABLE = 'Выбранный адрес отправителя недоступен — выберите другой в профиле'
@@ -35,10 +36,11 @@ RESEND_COOLDOWN_SECONDS = 60
 INVALID_LINK = 'Ссылка недействительна или устарела'
 
 
-def issue_confirmation(request, identity):
+def issue_confirmation(db, request, identity):
     """A new single-use link (replacing any previous one) mailed to the address itself, from the system
     sender. Returns (delivered, message), following the project's honesty rule for unconfigured mail."""
     settings = request.app.state.settings
+    organization = organization_name(db)
     token = secrets.token_urlsafe(32)
     now = utcnow()
     identity.confirmation_token_hash = token_hash(token)
@@ -49,12 +51,13 @@ def issue_confirmation(request, identity):
     body = (
         f'Этот адрес добавляют как адрес отправителя писем UniCRM («{identity.display_name}»).\n'
         f'Чтобы подтвердить, откройте ссылку и нажмите «Подтвердить»: {link}\n'
-        'Ссылка действует 48 часов. Если вы не ожидали это письмо, просто проигнорируйте его.'
+        'Ссылка действует 48 часов. Если вы не ожидали это письмо, просто проигнорируйте его.\n\n'
+        f'{organization}'
     )
     sender = getattr(request.app.state, 'email_sender', None) or send_email
     try:
         sender(settings, identity.email_address, 'Подтвердите адрес отправителя UniCRM', body,
-               from_address=settings.email_sender_address or None)
+               from_address=settings.email_sender_address or None, from_name=organization)
     except EmailSendError as error:
         raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось отправить письмо подтверждения, попробуйте позже') from error
     if settings.email_provider_url or sender is not send_email:

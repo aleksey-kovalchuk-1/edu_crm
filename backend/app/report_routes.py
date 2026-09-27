@@ -29,6 +29,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.orm import Session, selectinload
 
+from .organization import organization_name
 from .audit import record_event
 from .auth import ALL_ROLES, AuthContext, require_roles
 from .catalog_routes import university_scope
@@ -205,34 +206,37 @@ def interactions_report(f: ReportFilters = Depends(report_filters), auth: AuthCo
 
 # ---------- files ----------
 
-def _xlsx(columns, rows):
+def _xlsx(columns, rows, organization):
     book = openpyxl.Workbook()
     sheet = book.active
     sheet.title = 'Взаимодействия'
+    sheet.append([organization])
+    sheet['A1'].font = Font(bold=True)
     sheet.append([c['label'] for c in columns])
-    for cell in sheet[1]:
+    for cell in sheet[2]:
         cell.font = Font(bold=True)
     for row in rows:
         sheet.append([row[c['key']] for c in columns])
     for i, c in enumerate(columns, start=1):
         longest = max([len(str(c['label']))] + [len(str(r[c['key']])) for r in rows])
         sheet.column_dimensions[get_column_letter(i)].width = min(60, longest + 2)
-    sheet.freeze_panes = 'A2'
-    sheet.auto_filter.ref = sheet.dimensions
+    sheet.freeze_panes = 'A3'
+    sheet.auto_filter.ref = f'A2:{get_column_letter(len(columns))}{sheet.max_row}'
     out = io.BytesIO()
     book.save(out)
     return out.getvalue()
 
 
-def _xls(columns, rows):
+def _xls(columns, rows, organization):
     book = xlwt.Workbook(encoding='utf-8')
     sheet = book.add_sheet('Взаимодействия')
     bold = xlwt.easyxf('font: bold on')
+    sheet.write(0, 0, organization, bold)
     for j, c in enumerate(columns):
-        sheet.write(0, j, c['label'], bold)
+        sheet.write(1, j, c['label'], bold)
         longest = max([len(str(c['label']))] + [len(str(r[c['key']])) for r in rows])
         sheet.col(j).width = 256 * min(60, longest + 2)
-    for i, row in enumerate(rows, start=1):
+    for i, row in enumerate(rows, start=2):
         for j, c in enumerate(columns):
             sheet.write(i, j, row[c['key']])
     out = io.BytesIO()
@@ -248,28 +252,38 @@ def register_pdf_fonts():
         _fonts_registered = True
 
 
-def _pdf(columns, rows, subtitle):
+def _esc(value):
+    return str(value).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def pdf_story(columns, rows, subtitle, organization, width=None):
+    """The report's flowables: organization line, title, subtitle, table (kept separate so it can be tested)."""
     register_pdf_fonts()
     body = ParagraphStyle('cell', fontName='DejaVuSans', fontSize=8, leading=10)
     head = ParagraphStyle('head', parent=body, fontName='DejaVuSans-Bold')
     title = ParagraphStyle('title', fontName='DejaVuSans-Bold', fontSize=14, leading=18)
     meta = ParagraphStyle('meta', fontName='DejaVuSans', fontSize=9, leading=12, textColor=colors.HexColor('#4b435c'))
 
-    out = io.BytesIO()
-    doc = SimpleDocTemplate(out, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
-                            title='Отчёт по взаимодействиям с учебными заведениями')
-    esc = lambda v: str(v).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+    esc = _esc
     data = [[Paragraph(esc(c['label']), head) for c in columns]]
     data += [[Paragraph(esc(row[c['key']]), body) for c in columns] for row in rows]
     if not rows:
         data.append([Paragraph('Нет взаимодействий по выбранным условиям', body)] + [''] * (len(columns) - 1))
-    table = Table(data, repeatRows=1, colWidths=[doc.width / len(columns)] * len(columns))
+    table = Table(data, repeatRows=1, colWidths=[width / len(columns)] * len(columns) if width else None)
     table.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#f1eafa')),
         ('GRID', (0, 0), (-1, -1), 0.4, colors.HexColor('#e4e1ec')),
         ('VALIGN', (0, 0), (-1, -1), 'TOP'),
     ]))
-    doc.build([Paragraph('Отчёт по взаимодействиям с учебными заведениями', title), Paragraph(esc(subtitle), meta), Spacer(1, 4 * mm), table])
+    return [Paragraph(esc(organization), meta), Paragraph('Отчёт по взаимодействиям с учебными заведениями', title),
+            Paragraph(esc(subtitle), meta), Spacer(1, 4 * mm), table]
+
+
+def _pdf(columns, rows, subtitle, organization):
+    out = io.BytesIO()
+    doc = SimpleDocTemplate(out, pagesize=landscape(A4), leftMargin=12 * mm, rightMargin=12 * mm, topMargin=12 * mm, bottomMargin=12 * mm,
+                            title='Отчёт по взаимодействиям с учебными заведениями')
+    doc.build(pdf_story(columns, rows, subtitle, organization, doc.width))
     return out.getvalue()
 
 
@@ -292,10 +306,10 @@ def export_interactions_report(
     if format == 'pdf':
         period = ' — '.join(d.strftime('%d.%m.%Y') if d else '…' for d in (f.period_from, f.period_to)) if (f.period_from or f.period_to) else 'весь период'
         subtitle = f'Период: {period} · Взаимодействий: {len(rows)} · Сформирован {datetime.now():%d.%m.%Y %H:%M}, {auth.user.full_name}'
-        content, media_type = _pdf(columns, rows, subtitle), 'application/pdf'
+        content, media_type = _pdf(columns, rows, subtitle, organization_name(db)), 'application/pdf'
     else:
         media_type, writer = FORMATS[format]
-        content = writer(columns, rows)
+        content = writer(columns, rows, organization_name(db))
     record_event(db, request, auth.user, 'report.export', entity_type='report',
                  summary=f'Выгружен отчёт по взаимодействиям ({format}, строк: {len(rows)})',
                  payload={'format': format, 'rows': len(rows), 'columns': f.columns, 'filters': f.as_payload()})
