@@ -4142,7 +4142,7 @@ dialog.wide {
   min-width: 0;
 }
 .brand-org {
-  font-size: 12px;
+  font-size: var(--text-xs);
   font-weight: 400;
   color: var(--color-text-subtle);
   white-space: nowrap;
