@@ -189,6 +189,7 @@ def callback(
         validated_at=now,
         ip=request.client.host if request.client else None,
         user_agent=(request.headers.get('user-agent') or '')[:300] or None,
+        keycloak_session_id=identity.session_id[:64] or None,
     ))
     db.commit()
 
