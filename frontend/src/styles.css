@@ -4109,3 +4109,27 @@ dialog.wide {
   align-items: center;
   gap: 8px;
 }
+
+/* Organization card, read-only view (Настройки → Организация). */
+.organization-details {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.organization-details div {
+  display: grid;
+  grid-template-columns: minmax(140px, 220px) 1fr;
+  gap: 12px;
+}
+.organization-details dt {
+  color: var(--color-text-subtle);
+}
+.organization-details dd {
+  margin: 0;
+}
+@media (max-width: 640px) {
+  .organization-details div {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
+}

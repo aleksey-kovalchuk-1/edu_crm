@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { mockApi, renderApp, sessionFixture } from "../../test/utils";
+import { apiError, mockApi, organizationFixture, renderApp, sessionFixture } from "../../test/utils";
 
 const pending = {
   id: 5, email_address: "anna@uni-demo.ru", display_name: "Анна", is_active: true, status: "pending_approval",
@@ -44,11 +44,51 @@ describe("organization sender queue", () => {
     expect(api.callsTo("POST", "/email-senders")[0].body).toEqual({ email_address: "office@uni-demo.ru", display_name: "Офис" });
   });
 
-  it("shows only the placeholder text to a regular user", async () => {
+  it("shows the organization card read-only to a regular user, without the queue", async () => {
     const api = mockApi({ "GET /auth/me": () => sessionFixture(["crm-user"]) });
     renderApp("/settings/organization");
-    await screen.findByText("Реквизиты и контактные данные организации.");
+    await screen.findByText("ИТ Школа Ростелеком");
+    screen.getByText("1095030001131");
+    screen.getByText("+7 (495) 196-62-05");
+    expect(screen.queryByRole("button", { name: "Сохранить" })).toBeNull();
+    expect(screen.queryByLabelText("Название")).toBeNull();
     expect(screen.queryByText("Заявки на адреса отправителей")).toBeNull();
     expect(api.callsTo("GET", "/email-senders/queue")).toHaveLength(0);
+  });
+});
+
+describe("organization card editing", () => {
+  it("lets an admin save all fields in one PUT and confirms success", async () => {
+    const api = mockApi({
+      "GET /auth/me": () => sessionFixture(["crm-admin"]),
+      "PUT /organization": (call) => organizationFixture(call.body as Record<string, unknown>),
+    });
+    renderApp("/settings/organization");
+    fireEvent.change(await screen.findByLabelText("Название"), { target: { value: "ИТ Школа" } });
+    fireEvent.change(screen.getByLabelText("Телефон"), { target: { value: "8 495 196-62-05" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await screen.findByText("Изменения сохранены");
+    expect(api.callsTo("PUT", "/organization")[0].body).toEqual({
+      name: "ИТ Школа",
+      legal_name: "Общество с ограниченной ответственностью «Ростелеком Информационные Технологии»",
+      ogrn: "1095030001131", registration_date: "2009-04-10",
+      legal_address: "108811, г. Москва, Киевское шоссе, 22-й км, домовладение 6, стр. 1, офис Е434",
+      postal_address: "108811, г. Москва, Киевское шоссе, 22-й км, домовладение 6, стр. 1, офис Е434",
+      contact_address: "Москва, проспект Вернадского, д. 41", phone: "8 495 196-62-05", email: "edupro@rt.ru",
+    });
+  });
+
+  it("shows a field error next to the field", async () => {
+    mockApi({
+      "GET /auth/me": () => sessionFixture(["crm-admin"]),
+      "PUT /organization": () => apiError(422, "VALIDATION_ERROR", "Проверьте заполненные поля", [
+        { field: "ogrn", message: "ОГРН — 13 цифр с верной контрольной цифрой", type: "value_error" },
+      ]),
+    });
+    renderApp("/settings/organization");
+    fireEvent.change(await screen.findByLabelText("ОГРН"), { target: { value: "1095030001132" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    await screen.findByText("ОГРН — 13 цифр с верной контрольной цифрой");
+    expect(screen.queryByText("Изменения сохранены")).toBeNull();
   });
 });

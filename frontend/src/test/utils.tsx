@@ -318,6 +318,21 @@ export const sessionFixture = (
   csrf_token: csrfToken,
 });
 
+export const organizationFixture = (overrides: Record<string, unknown> = {}) => ({
+  name: "ИТ Школа Ростелеком",
+  legal_name: "Общество с ограниченной ответственностью «Ростелеком Информационные Технологии»",
+  ogrn: "1095030001131",
+  registration_date: "2009-04-10",
+  legal_address: "108811, г. Москва, Киевское шоссе, 22-й км, домовладение 6, стр. 1, офис Е434",
+  postal_address: "108811, г. Москва, Киевское шоссе, 22-й км, домовладение 6, стр. 1, офис Е434",
+  contact_address: "Москва, проспект Вернадского, д. 41",
+  phone: "+74951966205",
+  phone_display: "+7 (495) 196-62-05",
+  email: "edupro@rt.ru",
+  updated_at: null,
+  ...overrides,
+});
+
 export const profileFixture = (overrides: Record<string, unknown> = {}) => ({
   id: 1, email: "anna.petrova@example.test", first_name: "Анна", middle_name: "", last_name: "Петрова",
   full_name: "Анна Петрова", phone: "", phone_verified_at: null, timezone: "Europe/Moscow",
@@ -378,6 +393,8 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     "GET /profile": () => profileFixture(),
     "GET /email-senders": () => [],
     "GET /email-senders/queue": () => [],
+    "GET /organization": () => organizationFixture(),
+    "GET /organization/brand": () => ({ name: "ИТ Школа Ростелеком" }),
     [`GET ${AUDIT_PATH}`]: () => [],
     "GET /universities": () => data.universities,
     "GET /launches": () => data.launches,
