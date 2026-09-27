@@ -207,3 +207,38 @@ def test_update_user_names_with_empty_middle_name_clears_it():
 def test_update_user_names_for_missing_user_raises():
     with pytest.raises(KeycloakAdminError):
         make_client(FakeKeycloak()).update_user_names('kc-missing', first_name='А', last_name='Б', middle_name='')
+
+
+def test_delete_session_ends_it_and_tolerates_an_already_gone_session():
+    fake = FakeKeycloak()
+    fake.admin_sessions = {'sid-1'}
+    client = make_client(fake)
+    client.delete_session('sid-1')
+    assert fake.admin_sessions == set()
+    client.delete_session('sid-1')  # already ended: not an error
+
+
+def test_list_user_events_returns_login_events_for_that_user():
+    fake = FakeKeycloak()
+    fake.admin_events = [
+        {'time': 1790000000000, 'type': 'LOGIN', 'userId': 'u1', 'ipAddress': '10.0.0.1', 'clientId': 'edu-crm-api'},
+        {'time': 1790000100000, 'type': 'LOGIN_ERROR', 'userId': 'u1', 'ipAddress': '10.0.0.2', 'error': 'invalid_user_credentials'},
+        {'time': 1790000200000, 'type': 'LOGIN', 'userId': 'u2', 'ipAddress': '10.0.0.3'},
+    ]
+    events = make_client(fake).list_user_events('u1', max_results=50)
+    assert [e['type'] for e in events] == ['LOGIN', 'LOGIN_ERROR']
+
+
+def test_list_user_events_without_permission_raises_forbidden():
+    fake = FakeKeycloak()
+    fake.events_forbidden = True
+    with pytest.raises(keycloak_admin.KeycloakAdminForbidden):
+        make_client(fake).list_user_events('u1')
+
+
+def test_get_realm_security_reads_policy_brute_force_and_events_flag():
+    fake = FakeKeycloak()
+    fake.realm_events_enabled = True
+    info = make_client(fake).get_realm_security()
+    assert info == {'password_policy': fake.realm_password_policy, 'brute_force_protected': True,
+                    'failure_factor': 30, 'events_enabled': True}
