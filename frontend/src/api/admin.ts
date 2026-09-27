@@ -35,6 +35,20 @@ export interface CreatedAccount {
   temporary_password: string;
 }
 
+export type AssignableRole = "crm-user" | "crm-admin";
+
+export interface ChangedRole {
+  keycloak_id: string;
+  username: string;
+  role: AssignableRole;
+}
+
+export interface ResetPasswordResult {
+  keycloak_id: string;
+  username: string;
+  temporary_password: string;
+}
+
 export interface PendingRegistration {
   keycloak_id: string;
   email: string;
@@ -64,6 +78,27 @@ export function useCreateAccount() {
   return useMutation({
     mutationFn: (data: NewAccount) => apiRequest<CreatedAccount>("/admin/users", "POST", data),
     onSuccess: () => { void client.invalidateQueries({ queryKey: adminKeys.users }); },
+  });
+}
+
+/** PATCH /admin/users/{id}/role — manager or administrator; privileged roles are protected. */
+export function useChangeUserRole() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ keycloakId, role }: { keycloakId: string; role: AssignableRole }) =>
+      apiRequest<ChangedRole>(`/admin/users/${keycloakId}/role`, "PATCH", { role }),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: adminKeys.users });
+      void client.invalidateQueries({ queryKey: adminKeys.pending });
+    },
+  });
+}
+
+/** POST /admin/users/{id}/reset-password — the temporary password is returned only once. */
+export function useResetUserPassword() {
+  return useMutation({
+    mutationFn: (keycloakId: string) =>
+      apiRequest<ResetPasswordResult>(`/admin/users/${keycloakId}/reset-password`, "POST"),
   });
 }
 
