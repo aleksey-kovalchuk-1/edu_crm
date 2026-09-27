@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { mockApi, renderApp } from "../test/utils";
+import { mockApi, renderApp, sessionFixture } from "../test/utils";
 
 const snapshot = {
   period_from: "2026-01-01",
@@ -31,9 +31,21 @@ describe("new interaction analytics", () => {
     const today = new Date();
     expect(params.get("period_from")).toBe(`${today.getFullYear()}-01-01`);
     expect(params.get("period_to")).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(params.get("time_zone")).toBe("Europe/Moscow");
+    expect(screen.getByText(/Часовой пояс профиля: Europe\/Moscow/)).toBeTruthy();
+    expect(screen.queryByText("Показатели по годам")).toBeNull();
+  });
+
+  it("falls back to the browser timezone only when the profile has no timezone", async () => {
+    const api = mockApi({
+      "GET /auth/me": () => sessionFixture(["crm-supervisor"], undefined, { timezone: "" }),
+      "GET /analytics/interactions": () => snapshot,
+    });
+    renderApp("/analytics");
+    await screen.findByRole("heading", { name: "Вузы по этапам" });
+    const params = new URLSearchParams(api.callsTo("GET", "/analytics/interactions")[0].path.split("?")[1]);
     expect(params.get("time_zone")).toBe(Intl.DateTimeFormat().resolvedOptions().timeZone);
     expect(screen.getByText(/Часовой пояс браузера/)).toBeTruthy();
-    expect(screen.queryByText("Показатели по годам")).toBeNull();
   });
 
   it("applies multiple universities to the charts and the PDF link", async () => {
