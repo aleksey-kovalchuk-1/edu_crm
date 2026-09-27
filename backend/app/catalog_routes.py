@@ -1,6 +1,6 @@
 """Catalog and contract API (contract: docs/api/catalogs.md; model: docs/design/catalogs.md).
 
-Managers (crm-user) only see universities they are assigned to and everything attached to them (D-141);
+Managers (crm-user) see assigned universities and the customer-approved shared partner roster;
 records outside that scope answer 404 so their existence is not revealed.
 """
 from datetime import date, datetime, timedelta
@@ -70,7 +70,12 @@ def managed_university_ids(user):
 
 
 def university_scope(column, user):
-    return true() if sees_all(user) else column.in_(managed_university_ids(user))
+    if sees_all(user):
+        return true()
+    shared_ids = select(University.id).where(
+        University.is_active.is_(True), University.team_visible_to_managers.is_(True),
+    )
+    return or_(column.in_(managed_university_ids(user)), column.in_(shared_ids))
 
 
 def one_year_after(day):
@@ -126,9 +131,12 @@ def validation_error(field, message):
 
 def university_in_scope(db, user, university_id):
     university = db.get(University, university_id)
-    if university is None or not (sees_all(user) or db.scalar(select(exists().where(
-        UniversityManager.university_id == university_id, UniversityManager.user_id == user.id,
-    )))):
+    if university is None or not (
+        sees_all(user) or (university.is_active and university.team_visible_to_managers)
+        or db.scalar(select(exists().where(
+            UniversityManager.university_id == university_id, UniversityManager.user_id == user.id,
+        )))
+    ):
         raise not_found()
     return university
 

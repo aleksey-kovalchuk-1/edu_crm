@@ -2,6 +2,7 @@ import { CheckCircle2 } from "lucide-react";
 import { useApprovePendingRegistration, usePendingRegistrations } from "../../api/admin";
 import { AdminUsersPanel } from "../../components/AdminUsersPanel";
 import { ErrorAlert, queryFallback, RefreshError } from "../../components/QueryState";
+import { CreateAccountPanel } from "./CreateAccountPanel";
 
 /**
  * A "pending registration" is a Keycloak account that can already sign in but has no CRM role
@@ -78,6 +79,7 @@ function PendingRegistrations() {
 export function SettingsUsersPage() {
   return (
     <>
+      <CreateAccountPanel />
       <PendingRegistrations />
       <AdminUsersPanel />
     </>

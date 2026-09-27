@@ -4,18 +4,35 @@ import { apiRequest } from "./client";
 /* Types of backend/app/admin_routes.py (Настройки → Пользователи и роли / Аккаунт) */
 
 export interface AdminUser {
-  id: number;
+  keycloak_id: string;
+  username: string;
   email: string;
   full_name: string;
   roles: string[];
   is_active: boolean;
-  created_at: string;
   last_login_at: string | null;
 }
 
 export interface AdminUsers {
+  available: boolean;
   total: number;
   users: AdminUser[];
+}
+
+export interface NewAccount {
+  username: string;
+  email: string;
+  first_name: string;
+  last_name: string;
+  role: "crm-user" | "crm-admin";
+}
+
+export interface CreatedAccount {
+  keycloak_id: string;
+  username: string;
+  email: string;
+  role: string;
+  temporary_password: string;
 }
 
 export interface PendingRegistration {
@@ -40,6 +57,15 @@ export const useAdminUsers = () =>
     queryKey: adminKeys.users,
     queryFn: () => apiRequest<AdminUsers>("/admin/users"),
   });
+
+/** POST /admin/users — only Irina's superadmin role can create managers and administrators. */
+export function useCreateAccount() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (data: NewAccount) => apiRequest<CreatedAccount>("/admin/users", "POST", data),
+    onSuccess: () => { void client.invalidateQueries({ queryKey: adminKeys.users }); },
+  });
+}
 
 /** GET /admin/pending-registrations — superadmin only. */
 export const usePendingRegistrations = () =>
