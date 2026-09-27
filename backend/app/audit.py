@@ -3,6 +3,8 @@
 Callers add the event to the same database session as the change, before committing, so the change and
 its audit record are stored together or not at all.
 """
+from fastapi.encoders import jsonable_encoder
+
 from .models import AuditEvent
 
 MAX_SUMMARY_LENGTH = 300
@@ -15,6 +17,7 @@ def record_event(db, request, actor, action, *, entity_type=None, entity_id=None
         entity_type=entity_type,
         entity_id=None if entity_id is None else str(entity_id),
         summary=summary[:MAX_SUMMARY_LENGTH],
-        payload=payload or {},
+        # jsonable_encoder: payloads may carry dates (e.g. a task's old/new deadline); JSONB needs plain JSON.
+        payload=jsonable_encoder(payload or {}),
         ip=request.client.host if request is not None and request.client else None,
     ))
