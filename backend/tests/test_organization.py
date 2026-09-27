@@ -122,3 +122,20 @@ def test_brand_is_public_and_exposes_only_the_name(client):
     response = client.get(f'{ORG}/brand')
     assert response.status_code == 200
     assert response.json() == {'name': 'ИТ Школа Ростелеком'}
+
+
+@pytest.mark.parametrize('patch,field,message', [
+    ({'name': '  '}, 'name', 'Заполните поле'),
+    ({'legal_address': 'x' * 501}, 'legal_address', 'Не более 500 символов'),
+    ({'email': 'bad'}, 'email', 'Укажите корректный email'),
+    ({'registration_date': ''}, 'registration_date', 'Укажите корректную дату'),
+])
+def test_validation_messages_are_russian(client, keycloak, patch, field, message):
+    login(client, keycloak, roles=('crm-admin',))
+    details = client.put(ORG, json={**VALID, **patch}).json()['details']
+    assert {'field': field, 'message': message} in [{'field': d['field'], 'message': d['message']} for d in details]
+
+
+def test_a_superadmin_only_account_can_read_the_card_it_can_edit(client, keycloak):
+    login(client, keycloak, roles=('crm-superadmin',))
+    assert client.get(ORG).status_code == 200

@@ -169,3 +169,9 @@ def test_clearing_a_name_is_rejected_in_russian(kc_client, keycloak):
     assert response.status_code == 422
     detail = response.json()['details'][0]
     assert detail['field'] == 'first_name' and detail['message'] == 'Укажите имя'
+
+
+def test_profile_length_error_is_russian(client, keycloak):
+    login(client, keycloak)
+    detail = client.patch(PROFILE, json={'middle_name': 'x' * 101}).json()['details'][0]
+    assert detail == {'field': 'middle_name', 'message': 'Не более 100 символов', 'type': 'string_too_long'}

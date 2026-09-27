@@ -31,4 +31,9 @@ describe("styles.css design tokens", () => {
     expect(px.length).toBeGreaterThan(0);
     expect(Math.min(...px)).toBeGreaterThanOrEqual(11);
   });
+
+  it("gives the organization line in the dark sidebar the sidebar's muted colour (readable contrast)", () => {
+    const rule = withoutComments(rules).match(/\.sidebar \.brand-org\s*\{([^}]*)\}/);
+    expect(rule?.[1]).toMatch(/color:\s*var\(--sidebar-text-muted\)/);
+  });
 });
