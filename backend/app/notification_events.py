@@ -8,7 +8,7 @@ The acting user comes from session.info['actor_user_id'] (set when a request aut
 from sqlalchemy import event, inspect, select
 
 from .models import (
-    Contract, Launch, Notification, StatusChange, Task, TaskComment, TaskMember, University, UniversityContact,
+    Attachment, Contract, Launch, StatusChange, Task, TaskComment, TaskMember, University, UniversityContact,
     UniversityManager, WorkflowStatus,
 )
 from .notifications import notify
@@ -127,4 +127,59 @@ def _university_events(db, changes, actor):
                        actor_user_id=actor)
 
 
-HANDLERS = [_university_events]
+def _launch_events(db, changes, actor):
+    for kind, model, data in changes:
+        if kind != 'new' or model != 'StatusChange':
+            continue
+        change = db.get(StatusChange, data['id'])
+        # from_status_id is NULL only for the entry written when an interaction is created: not a stage change.
+        if change is None or change.from_status_id is None:
+            continue
+        launch = db.get(Launch, change.launch_id)
+        if launch is None:
+            continue
+        moved = change.from_status_id != change.to_status_id
+        target = db.get(WorkflowStatus, change.to_status_id)
+        has_file = db.scalar(select(Attachment.id).where(Attachment.status_change_id == change.id).limit(1)) is not None
+        # One action, one notification: the first type that applies and that the recipient has switched on.
+        candidates = []
+        if moved and target is not None and target.is_final:
+            candidates.append(('launch_completed', f'Завершили взаимодействие «{launch.program}»'))
+        if moved:
+            candidates.append(('launch_stage_changed', f'«{launch.program}»: этап «{target.name if target else ""}»'))
+        if change.comment or has_file:
+            candidates.append(('launch_comment_or_file', f'К взаимодействию «{launch.program}» добавили комментарий или файл'))
+        for user_id in university_managers(db, launch.university_id):
+            for event_type, body in candidates:
+                if notify(db, user_id=user_id, event_type=event_type, title=_LABEL[event_type], body=body,
+                          link_type='launch', link_id=launch.id, university_id=launch.university_id, actor_user_id=actor):
+                    break
+
+
+def _workflow_events(db, changes, actor):
+    template_ids = {data['template_id'] for kind, model, data in changes if model == 'WorkflowStatus'}
+    for template_id in template_ids:
+        # Each recipient gets one notification per action, linked to their first interaction on this process.
+        rows = db.execute(
+            select(UniversityManager.user_id, Launch.id, Launch.university_id)
+            .join(Launch, Launch.university_id == UniversityManager.university_id)
+            .where(Launch.workflow_template_id == template_id)
+            .order_by(UniversityManager.user_id, Launch.id)
+        ).all()
+        first = {}
+        for user_id, launch_id, university_id in rows:
+            first.setdefault(user_id, (launch_id, university_id))
+        for user_id, (launch_id, university_id) in first.items():
+            notify(db, user_id=user_id, event_type='workflow_stages_changed', title=_LABEL['workflow_stages_changed'],
+                   body='Изменили этапы процесса, по которому идут ваши взаимодействия', link_type='launch',
+                   link_id=launch_id, university_id=university_id, actor_user_id=actor)
+
+
+_LABEL = {
+    'launch_completed': 'Взаимодействие завершено',
+    'launch_stage_changed': 'Изменили этап взаимодействия',
+    'launch_comment_or_file': 'Комментарий или файл к взаимодействию',
+    'workflow_stages_changed': 'Изменили этапы процесса',
+}
+
+HANDLERS = [_university_events, _launch_events, _workflow_events]
