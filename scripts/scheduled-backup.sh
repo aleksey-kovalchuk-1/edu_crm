@@ -27,20 +27,55 @@ export BACKUP_DIR BACKUP_AGE_RECIPIENT="${BACKUP_AGE_RECIPIENT:-}"
 export BACKUP_AGE_RECIPIENTS_FILE="${BACKUP_AGE_RECIPIENTS_FILE:-}"
 export BACKUP_AGE_IDENTITY_FILE="${BACKUP_AGE_IDENTITY_FILE:-}"
 export COMPOSE_PROJECT_NAME=edu-crm
+# Scheduled (LaunchAgent at 03:30) or manual (scripts/run-requested-backup.sh sets both variables).
+trigger="${BACKUP_TRIGGER:-scheduled}"
+label="${BACKUP_LABEL:-daily-$(date -u +%Y%m%d)}"
+[[ "$trigger" == scheduled || "$trigger" == manual ]] || { echo 'unknown backup trigger' >&2; exit 2; }
+[[ "$label" =~ ^(daily|manual)-[a-z0-9-]+$ ]] || { echo 'unsafe backup label' >&2; exit 2; }
+
+# Status report for Настройки → Резервное копирование (names, sizes, dates only; see scripts/backup_status.py).
+status_dir="${BACKUP_STATUS_DIR:-$PWD/deploy/local/backup-status}"
+started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+stage=preflight_failed
+verified=''
+verification_configured=false
+[[ -n "$BACKUP_AGE_IDENTITY_FILE" ]] && verification_configured=true
+write_status() {
+  # A report that cannot be written must never fail or hide the backup itself.
+  python3 scripts/backup_status.py --status-dir "$status_dir" --backup-dir "$BACKUP_DIR" --trigger "$trigger" \
+    --label "$label" --started-at "$started_at" --result "$1" --verified "$verified" --error "${2:-}" \
+    --retention-days "$retention_days" --min-pairs "$min_pairs" \
+    --verification-configured "$verification_configured" >/dev/null 2>&1 \
+    || echo 'backup status report not written' >&2
+}
+finish() {
+  local code=$?
+  if (( code == 0 )); then write_status success; else write_status failure "$stage"; fi
+  exit "$code"
+}
+write_status running
+trap finish EXIT
+
 source scripts/backup-age.sh
 backup_age_recipient_preflight
 backup_private_directory
 
-label="daily-$(date -u +%Y%m%d)"
-echo 'Creating daily encrypted database backup'
+echo 'Creating encrypted database backup'
+stage=database_backup_failed
 dump="$(scripts/db-backup.sh "$label")"
-echo 'Creating daily encrypted attachment backup'
+echo 'Creating encrypted attachment backup'
+stage=attachments_backup_failed
 archive="$(scripts/attachments-backup.sh "$label")"
 if [[ -n "$BACKUP_AGE_IDENTITY_FILE" ]]; then
+  stage=verification_failed
+  verified=false
   scripts/verify-encrypted-pair.sh "$dump" "$archive"
+  verified=true
+  stage=retention_failed
+  # Removes only old *daily* pairs; manual copies are never deleted automatically.
   python3 scripts/prune-scheduled-backups.py "$BACKUP_DIR" \
     --retention-days "$retention_days" --min-pairs "$min_pairs"
 else
   echo 'Retention skipped: no recovery identity configured' >&2
 fi
-echo 'Daily backup pair complete'
+echo 'Backup pair complete'

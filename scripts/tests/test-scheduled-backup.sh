@@ -28,6 +28,8 @@ EOF
 chmod +x "$tmp/bin/docker"
 export PATH="$tmp/bin:$PATH" FAKE_DOCKER_LOG="$tmp/docker.log"
 export FAKE_ATTACHMENTS="$tmp/attachments" BACKUP_CONFIG_FILE="$tmp/config.env"
+# Never let a test run write the real checkout's status report (deploy/local/backup-status).
+export BACKUP_STATUS_DIR="$tmp/default-status"
 "$root/scripts/scheduled-backup.sh" >/dev/null
 dump="$(find "$tmp/backups" -name '*.dump.age' -print -quit)"
 archive="$(find "$tmp/backups" -name '*.tar.gz.age' -print -quit)"
@@ -65,4 +67,43 @@ if BACKUP_CONFIG_FILE="$tmp/wrong-recipient.env" "$root/scripts/scheduled-backup
   echo 'daily backup accepted a recipient that cannot be recovered' >&2; exit 1
 fi
 test -f "$old_dump" && test -f "$old_archive"
+# Status report for Настройки → Резервное копирование: success, failure, and a manual run.
+mkdir -m 700 "$tmp/status-backups" "$tmp/status"
+printf 'BACKUP_DIR=%q\nBACKUP_AGE_RECIPIENT=%q\nBACKUP_AGE_IDENTITY_FILE=%q\nDEPLOY_CHECKOUT=%q\nBACKUP_STATUS_DIR=%q\n' \
+  "$tmp/status-backups" "$recipient" "$tmp/identity" "$root" "$tmp/status" > "$tmp/status.env"
+chmod 600 "$tmp/status.env"
+BACKUP_CONFIG_FILE="$tmp/status.env" "$root/scripts/scheduled-backup.sh" >/dev/null
+python3 - "$tmp/status/status.json" "$tmp/status-backups" <<'PY'
+import json, sys
+text = open(sys.argv[1]).read()
+status = json.loads(text)
+run = status['last_run']
+assert run['result'] == 'success' and run['trigger'] == 'scheduled' and run['verified'] is True, run
+assert run['label'].startswith('daily-') and status['last_success_at'] == run['finished_at'], status
+assert status['pairs'][0]['database'] and status['pairs'][0]['attachments'], status['pairs']
+assert sys.argv[2] not in text, 'backup directory path leaked into the report'
+PY
+if FAIL_ATTACHMENT=1 BACKUP_CONFIG_FILE="$tmp/status.env" BACKUP_LABEL=manual-20260927-120000 \
+    "$root/scripts/scheduled-backup.sh" >/dev/null 2>&1; then
+  echo 'failing attachment backup reported success' >&2; exit 1
+fi
+python3 - "$tmp/status/status.json" <<'PY'
+import json, sys
+status = json.load(open(sys.argv[1]))
+run = status['last_run']
+assert run['result'] == 'failure' and run['error'] == 'attachments_backup_failed', run
+assert status['last_success_at'], 'a failure must keep the last success time'
+PY
+BACKUP_CONFIG_FILE="$tmp/status.env" BACKUP_TRIGGER=manual BACKUP_LABEL=manual-20260927-130000 \
+  "$root/scripts/scheduled-backup.sh" >/dev/null
+python3 - "$tmp/status/status.json" <<'PY'
+import json, sys
+status = json.load(open(sys.argv[1]))
+assert status['last_run']['trigger'] == 'manual' and status['last_run']['label'] == 'manual-20260927-130000', status['last_run']
+assert any(p['label'] == 'manual-20260927-130000' for p in status['pairs'])
+PY
+if BACKUP_CONFIG_FILE="$tmp/status.env" BACKUP_LABEL='../evil' "$root/scripts/scheduled-backup.sh" >/dev/null 2>&1; then
+  echo 'an unsafe label was accepted' >&2; exit 1
+fi
+
 echo 'Scheduled backup synthetic checks passed.'
