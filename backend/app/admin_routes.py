@@ -18,9 +18,9 @@ import secrets
 from datetime import datetime
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Path, Request, Response
 from pydantic import BaseModel, EmailStr, StringConstraints
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
@@ -28,8 +28,8 @@ from .audit import record_event
 from .auth import ROLE_SUPERADMIN, AuthContext, require_roles
 from .db import get_db
 from .errors import AppError, ErrorCode
-from .keycloak_admin import KeycloakAdminConflict, KeycloakAdminError
-from .models import User
+from .keycloak_admin import KeycloakAdminConflict, KeycloakAdminError, KeycloakAdminNotFound
+from .models import User, UserSession, utcnow
 from .oidc import CRM_ROLES
 
 router = APIRouter(prefix='/api/v1/admin', tags=['Администрирование'])
@@ -51,6 +51,41 @@ class CreatedAdminUser(BaseModel):
     email: str
     role: str
     temporary_password: str
+
+
+UserId = Annotated[str, Path(pattern=r'^[A-Za-z0-9_-]{1,80}$')]
+
+
+def _account_for_admin_action(keycloak_admin, keycloak_id):
+    if not keycloak_admin.is_configured():
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Управление пользователями Keycloak не настроено')
+    try:
+        account = keycloak_admin.get_user(keycloak_id)
+    except KeycloakAdminNotFound as error:
+        raise AppError(ErrorCode.NOT_FOUND, 'Учётная запись не найдена') from error
+    except KeycloakAdminError as error:
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Keycloak временно недоступен') from error
+    if not account.email:
+        raise AppError(ErrorCode.NOT_FOUND, 'Учётная запись не найдена')
+    return account
+
+
+def _revoke_crm_sessions(db, keycloak_id):
+    local = db.scalar(select(User).where(User.keycloak_sub == keycloak_id))
+    if local is not None:
+        db.execute(update(UserSession).where(
+            UserSession.user_id == local.id, UserSession.revoked_at.is_(None),
+        ).values(revoked_at=utcnow()))
+    return local
+
+
+def _all_keycloak_accounts(client):
+    accounts = []
+    while True:
+        page = client.list_users(first=len(accounts), max_results=200)
+        accounts.extend(page)
+        if len(page) < 200:
+            return accounts
 
 
 @router.post('/users', response_model=CreatedAdminUser, status_code=201,
@@ -101,6 +136,102 @@ def create_admin_user(
     )
 
 
+class RoleChangeIn(BaseModel):
+    role: Literal['crm-user', 'crm-admin']
+
+
+class ChangedRole(BaseModel):
+    keycloak_id: str
+    username: str
+    role: str
+
+
+@router.patch('/users/{keycloak_id}/role', response_model=ChangedRole,
+              summary='Изменить роль зарегистрированного пользователя')
+def change_user_role(
+    keycloak_id: UserId, data: RoleChangeIn, request: Request,
+    auth: AuthContext = Depends(superadmin_only), db: Session = Depends(get_db),
+):
+    keycloak_admin = request.app.state.keycloak_admin
+    account = _account_for_admin_action(keycloak_admin, keycloak_id)
+    previous = set(account.roles) & CRM_ROLES
+    if previous & {'crm-supervisor', 'crm-superadmin'}:
+        raise AppError(ErrorCode.CONFLICT, 'Роль руководителя и главного администратора защищена')
+    if previous == {data.role}:
+        return ChangedRole(keycloak_id=keycloak_id, username=account.username, role=data.role)
+
+    removed = []
+    added = False
+    try:
+        # Remove an old administrator role first so a failed demotion never leaves it elevated.
+        for old_role in sorted(previous - {data.role}):
+            keycloak_admin.remove_realm_role(keycloak_id, old_role)
+            removed.append(old_role)
+        if data.role not in previous:
+            keycloak_admin.assign_realm_role(keycloak_id, data.role)
+            added = True
+        actual = keycloak_admin.get_user(keycloak_id)
+        if set(actual.roles) & CRM_ROLES != {data.role}:
+            raise KeycloakAdminError('Keycloak did not save the requested CRM role')
+        keycloak_admin.logout_user(keycloak_id)
+    except KeycloakAdminError as error:
+        # Best effort compensation if Keycloak rejected a later step. A failed demotion
+        # must be visible as an error, never reported as a successful role update.
+        if added:
+            try:
+                keycloak_admin.remove_realm_role(keycloak_id, data.role)
+            except KeycloakAdminError:
+                logger.exception('Could not undo the new role on %s', keycloak_id)
+        for old_role in removed:
+            try:
+                keycloak_admin.assign_realm_role(keycloak_id, old_role)
+            except KeycloakAdminError:
+                logger.exception('Could not restore role %s on %s', old_role, keycloak_id)
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось изменить роль; проверьте учётную запись и повторите действие') from error
+
+    local = _revoke_crm_sessions(db, keycloak_id)
+    if local is not None:
+        local.roles = [data.role]
+    record_event(
+        db, request, auth.user, 'admin.user_role_change', entity_type='keycloak_user',
+        entity_id=keycloak_id, summary=f'Изменена роль пользователя {account.username}',
+        payload={'keycloak_id': keycloak_id, 'old_roles': sorted(previous), 'new_role': data.role},
+    )
+    db.commit()
+    return ChangedRole(keycloak_id=keycloak_id, username=account.username, role=data.role)
+
+
+class ResetPasswordOut(BaseModel):
+    keycloak_id: str
+    username: str
+    temporary_password: str
+
+
+@router.post('/users/{keycloak_id}/reset-password', response_model=ResetPasswordOut,
+             summary='Выдать пользователю новый временный пароль')
+def reset_user_password(
+    keycloak_id: UserId, request: Request, response: Response,
+    auth: AuthContext = Depends(superadmin_only), db: Session = Depends(get_db),
+):
+    keycloak_admin = request.app.state.keycloak_admin
+    account = _account_for_admin_action(keycloak_admin, keycloak_id)
+    password = secrets.token_urlsafe(24)
+    try:
+        keycloak_admin.logout_user(keycloak_id)
+        keycloak_admin.set_temporary_password(keycloak_id, password)
+    except KeycloakAdminError as error:
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось сбросить пароль; попробуйте ещё раз') from error
+    _revoke_crm_sessions(db, keycloak_id)
+    record_event(
+        db, request, auth.user, 'admin.user_password_reset', entity_type='keycloak_user',
+        entity_id=keycloak_id, summary=f'Сброшен пароль пользователя {account.username}',
+        payload={'keycloak_id': keycloak_id, 'username': account.username},
+    )
+    db.commit()
+    response.headers['Cache-Control'] = 'no-store'
+    return ResetPasswordOut(keycloak_id=keycloak_id, username=account.username, temporary_password=password)
+
+
 class AdminUserOut(BaseModel):
     keycloak_id: str
     username: str
@@ -126,12 +257,7 @@ def list_all_users(request: Request, db: Session = Depends(get_db)):
     if not keycloak_admin.is_configured():
         return AdminUsersOut(available=False, total=0, users=[])
     try:
-        accounts = []
-        while True:
-            page = keycloak_admin.list_users(first=len(accounts), max_results=200)
-            accounts.extend(page)
-            if len(page) < 200:
-                break
+        accounts = _all_keycloak_accounts(keycloak_admin)
     except KeycloakAdminError as error:
         raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Keycloak временно недоступен, попробуйте ещё раз позже') from error
     accounts = [account for account in accounts if account.email and not CRM_ROLES.isdisjoint(account.roles)]
@@ -173,7 +299,7 @@ def list_pending_registrations(request: Request):
     if not keycloak_admin.is_configured():
         return PendingRegistrationsOut(available=False, pending=[])
     try:
-        users = keycloak_admin.list_users()
+        users = _all_keycloak_accounts(keycloak_admin)
     except KeycloakAdminError as error:
         raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Keycloak временно недоступен, попробуйте ещё раз позже') from error
     # No email (e.g. the edu-crm-admin service account itself) can't be a pending human registration.

@@ -31,7 +31,7 @@ describe("settings users page", () => {
     expect(within(form).getByLabelText("Роль").querySelectorAll("option")).toHaveLength(2);
   });
 
-  it("shows pending registrations and approves one", async () => {
+  it("shows pending registrations and grants manager access", async () => {
     let approved: string[] = [];
     const api = mockApi({
       "GET /auth/me": ADMIN_SESSION,
@@ -41,7 +41,7 @@ describe("settings users page", () => {
           ? []
           : [{ keycloak_id: "kc-1", email: "newbie@demo.local", username: "newbie" }],
       }),
-      "POST /admin/pending-registrations/kc-1/approve": () => {
+      "PATCH /admin/users/kc-1/role": () => {
         approved = [...approved, "kc-1"];
         return [204, undefined];
       },
@@ -50,9 +50,10 @@ describe("settings users page", () => {
     renderApp("/settings/users");
     await screen.findByText("newbie@demo.local");
 
-    fireEvent.click(screen.getByRole("button", { name: "Одобрить" }));
+    fireEvent.click(screen.getByRole("button", { name: "Выдать доступ" }));
 
-    await waitFor(() => expect(api.callsTo("POST", "/admin/pending-registrations/kc-1/approve")).toHaveLength(1));
+    await waitFor(() => expect(api.callsTo("PATCH", "/admin/users/kc-1/role")).toHaveLength(1));
+    expect(api.callsTo("PATCH", "/admin/users/kc-1/role")[0].body).toEqual({ role: "crm-user" });
     await waitFor(() => expect(screen.queryByText("newbie@demo.local")).toBeNull());
     screen.getByText("Заявок на доступ нет.");
   });
@@ -78,5 +79,46 @@ describe("settings users page", () => {
     });
     renderApp("/settings/users");
     await screen.findByText("anna@demo.local");
+  });
+
+  it("lets Irina change an existing manager to an administrator", async () => {
+    const api = mockApi({
+      "GET /auth/me": ADMIN_SESSION,
+      "GET /admin/pending-registrations": () => ({ available: true, pending: [] }),
+      "GET /admin/users": () => ({
+        available: true, total: 2,
+        users: [
+          { keycloak_id: "kc-manager", username: "manager_1", email: "manager@example.test", full_name: "Менеджер", roles: ["crm-user"], is_active: true, last_login_at: null },
+          { keycloak_id: "kc-irina", username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null },
+        ],
+      }),
+      "PATCH /admin/users/kc-manager/role": () => [200, { keycloak_id: "kc-manager", username: "manager_1", role: "crm-admin" }],
+    });
+    renderApp("/settings/users");
+    const editor = await screen.findByRole("form", { name: "Роль пользователя manager_1" });
+    fireEvent.change(within(editor).getByLabelText("Новая роль"), { target: { value: "crm-admin" } });
+    fireEvent.submit(editor);
+
+    await waitFor(() => expect(api.callsTo("PATCH", "/admin/users/kc-manager/role")).toHaveLength(1));
+    expect(api.callsTo("PATCH", "/admin/users/kc-manager/role")[0].body).toEqual({ role: "crm-admin" });
+    expect(screen.queryByRole("form", { name: "Роль пользователя irina_super_admin" })).toBeNull();
+  });
+
+  it("lets Irina assign the administrator role to a pending Keycloak account", async () => {
+    const api = mockApi({
+      "GET /auth/me": ADMIN_SESSION,
+      "GET /admin/pending-registrations": () => ({
+        available: true, pending: [{ keycloak_id: "kc-new", username: "new_admin", email: "new@example.test" }],
+      }),
+      "GET /admin/users": () => ({ available: true, total: 0, users: [] }),
+      "PATCH /admin/users/kc-new/role": () => [200, { keycloak_id: "kc-new", username: "new_admin", role: "crm-admin" }],
+    });
+    renderApp("/settings/users");
+    const editor = await screen.findByRole("form", { name: "Доступ пользователя new_admin" });
+    fireEvent.change(within(editor).getByLabelText("Роль"), { target: { value: "crm-admin" } });
+    fireEvent.submit(editor);
+
+    await waitFor(() => expect(api.callsTo("PATCH", "/admin/users/kc-new/role")).toHaveLength(1));
+    expect(api.callsTo("PATCH", "/admin/users/kc-new/role")[0].body).toEqual({ role: "crm-admin" });
   });
 });
