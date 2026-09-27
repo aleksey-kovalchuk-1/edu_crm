@@ -298,17 +298,30 @@ export const CSRF_TOKEN = "csrf-test-token";
 export const sessionFixture = (
   roles: string[] = ["crm-supervisor"],
   csrfToken = CSRF_TOKEN,
-  user: { phone?: string; phone_verified_at?: string | null } = {},
+  user: Partial<Session["user"]> = {},
 ): Session => ({
   user: {
     id: 1,
     email: "anna.petrova@example.test",
     full_name: "Анна Петрова",
+    first_name: "Анна",
+    middle_name: "",
+    last_name: "Петрова",
     roles,
-    phone: user.phone ?? "",
-    phone_verified_at: user.phone_verified_at ?? null,
+    phone: "",
+    phone_verified_at: null,
+    timezone: "Europe/Moscow",
+    telegram: "",
+    whatsapp: "",
+    ...user,
   },
   csrf_token: csrfToken,
+});
+
+export const profileFixture = (overrides: Record<string, unknown> = {}) => ({
+  id: 1, email: "anna.petrova@example.test", first_name: "Анна", middle_name: "", last_name: "Петрова",
+  full_name: "Анна Петрова", phone: "", phone_verified_at: null, timezone: "Europe/Moscow",
+  telegram: "", whatsapp: "", email_sender_identity_id: null, ...overrides,
 });
 
 export const AUDIT_PATH = "/audit/recent?limit=10";
@@ -362,6 +375,9 @@ export function mockApi(extra: Record<string, Handler> = {}) {
   };
   const handlers: Record<string, Handler> = {
     "GET /auth/me": () => sessionFixture(),
+    "GET /profile": () => profileFixture(),
+    "GET /email-senders": () => [],
+    "GET /email-senders/queue": () => [],
     [`GET ${AUDIT_PATH}`]: () => [],
     "GET /universities": () => data.universities,
     "GET /launches": () => data.launches,

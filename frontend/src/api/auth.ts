@@ -16,6 +16,13 @@ export interface CurrentUser {
   /** CRM-owned phone verification (D-155): "" until a number is verified. */
   phone: string;
   phone_verified_at: string | null;
+  first_name: string;
+  middle_name: string;
+  last_name: string;
+  timezone: string;
+  /** Saved contacts only; no messaging integration. */
+  telegram: string;
+  whatsapp: string;
 }
 
 /** Response of GET /auth/me. */
