@@ -7,6 +7,7 @@ import {
   PanelLeftClose,
   Plus,
 } from "lucide-react";
+import { useBrand } from "../api/organization";
 import { useTaskCounters } from "../api/tasks";
 import { CreateModal } from "../components/forms/CreateModal";
 import { ErrorAlert } from "../components/QueryState";
@@ -30,6 +31,7 @@ const CREATE_LABELS: Record<CreateKind, string> = {
 };
 
 export function Layout() {
+  const brand = useBrand();
   const isDemoMode = import.meta.env.VITE_DEMO_MODE === "true";
   const location = useLocation();
   const { user } = useSession();
@@ -59,7 +61,10 @@ export function Layout() {
             <span className="brand-mark">
               <GraduationCap size={27} />
             </span>
-            <span>UniCRM</span>
+            <span className="brand-text">
+              <span>UniCRM</span>
+              {brand.data?.name && <small className="brand-org">{brand.data.name}</small>}
+            </span>
           </Link>
           <p className="nav-label">УПРАВЛЕНИЕ</p>
           <nav>

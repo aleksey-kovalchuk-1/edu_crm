@@ -18,6 +18,7 @@ import {
   useLogout,
   type Session,
 } from "../api/auth";
+import { useBrand } from "../api/organization";
 import { ApiError, errorText } from "../api/client";
 import { ErrorAlert } from "../components/QueryState";
 import { browser } from "../lib/browser";
@@ -98,6 +99,7 @@ function AuthScreen({
 }) {
   const actions = useRef<HTMLDivElement>(null);
   const [announce, setAnnounce] = useState(false);
+  const brand = useBrand();
   useEffect(() => {
     actions.current?.querySelector("button")?.focus();
     // Insert the message into the live region after mount so it is announced.
@@ -111,8 +113,9 @@ function AuthScreen({
           <span className="university-icon">
             <GraduationCap size={25} />
           </span>
-          <span>
+          <span className="brand-text">
             <strong>UniCRM</strong>
+            {brand.data?.name && <small className="brand-org">{brand.data.name}</small>}
           </span>
         </div>
         <p className="eyebrow">ОБРАЗОВАТЕЛЬНЫЕ ПАРТНЁРСТВА</p>
