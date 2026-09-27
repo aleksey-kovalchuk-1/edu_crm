@@ -9,6 +9,9 @@ services:
       PUBLIC_BASE_URL: https://unicrm.tech
       OIDC_ISSUER: https://unicrm.tech/auth/realms/edu-crm
       COOKIE_SECURE: 'true'
+      BACKUP_STATUS_FILE: /run/edu-crm-backup-status/status.json
+    volumes:
+      - ${BACKUP_STATUS_DIR:-./deploy/local/backup-status}:/run/edu-crm-backup-status:ro
 
   notifier:
     environment:

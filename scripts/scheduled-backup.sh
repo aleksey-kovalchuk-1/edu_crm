@@ -36,11 +36,17 @@ echo 'Creating daily encrypted database backup'
 dump="$(scripts/db-backup.sh "$label")"
 echo 'Creating daily encrypted attachment backup'
 archive="$(scripts/attachments-backup.sh "$label")"
+verified=()
 if [[ -n "$BACKUP_AGE_IDENTITY_FILE" ]]; then
   scripts/verify-encrypted-pair.sh "$dump" "$archive"
+  verified=(--verified)
+fi
+if [[ -n "$BACKUP_AGE_IDENTITY_FILE" ]]; then
   python3 scripts/prune-scheduled-backups.py "$BACKUP_DIR" \
     --retention-days "$retention_days" --min-pairs "$min_pairs"
 else
   echo 'Retention skipped: no recovery identity configured' >&2
 fi
+python3 scripts/record-backup-status.py "${BACKUP_STATUS_DIR:-deploy/local/backup-status}/status.json" \
+  "$dump" "$archive" "$label" "${verified[@]}"
 echo 'Daily backup pair complete'
