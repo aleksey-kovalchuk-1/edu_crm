@@ -126,12 +126,11 @@ describe("new interaction form", () => {
 });
 
 describe("chart downloads", () => {
-  it("offers PNG and PDF for the analytics chart and the overview pipeline", async () => {
+  it("offers PDF for the new analytics and overview pipeline", async () => {
     mockApi();
     renderApp("/analytics");
-    const png = await screen.findByRole("link", { name: "Скачать «Динамика образовательных программ» в PNG" });
-    expect(png.getAttribute("href")).toBe("/api/v1/charts/annual?format=png");
-    expect(screen.getByRole("link", { name: /в PDF/ }).getAttribute("href")).toBe("/api/v1/charts/annual?format=pdf");
+    const pdf = await screen.findByRole("link", { name: "Скачать PDF" });
+    expect(pdf.getAttribute("href")).toContain("/api/v1/analytics/interactions.pdf?");
     renderApp("/");
     expect(
       (await screen.findByRole("link", { name: "Скачать «Цикл взаимодействия» в PDF" })).getAttribute("href"),

@@ -64,8 +64,8 @@ check_http 'http://127.0.0.1:8080/'
 check_http 'https://unicrm.tech/'
 check_http 'https://unicrm.tech/api/v1/health'
 
-# Realm imports do not update an existing realm. Change only its two visible names.
-echo 'Updating the existing login branding'
+# Realm imports do not update an existing realm. Keep branding and custom logins in sync.
+echo 'Updating the existing login branding and login mode'
 brand="$(docker compose exec -T keycloak bash -s <<'KEYCLOAK'
 set -euo pipefail
 set +x
@@ -79,12 +79,13 @@ kcadm=/opt/keycloak/bin/kcadm.sh
   --user "$KC_BOOTSTRAP_ADMIN_USERNAME" --password "$KC_BOOTSTRAP_ADMIN_PASSWORD" \
   --config "$config" >/dev/null
 "$kcadm" update realms/edu-crm -s displayName=UniCRM -s displayNameHtml=UniCRM \
+  -s registrationEmailAsUsername=false -s editUsernameAllowed=false \
   --config "$config" >/dev/null
-"$kcadm" get realms/edu-crm --fields displayName,displayNameHtml --config "$config"
+"$kcadm" get realms/edu-crm --fields displayName,displayNameHtml,registrationEmailAsUsername,editUsernameAllowed --config "$config"
 KEYCLOAK
 )"
-if ! printf '%s' "$brand" | python3 -c 'import json, sys; data = json.load(sys.stdin); sys.exit(0 if data.get("displayName") == data.get("displayNameHtml") == "UniCRM" else 1)'; then
-  echo 'login branding readback failed' >&2
+if ! printf '%s' "$brand" | python3 -c 'import json, sys; data = json.load(sys.stdin); sys.exit(0 if data.get("displayName") == data.get("displayNameHtml") == "UniCRM" and data.get("registrationEmailAsUsername") is False and data.get("editUsernameAllowed") is False else 1)'; then
+  echo 'login branding or mode readback failed' >&2
   exit 1
 fi
 
