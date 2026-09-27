@@ -68,9 +68,11 @@ class FakeKeycloak:
         return jwt.encode(payload, key or self.private_key, algorithm=algorithm, headers={'kid': kid or self.kid})
 
     def issue_code(self, *, nonce, code_challenge, subject='kc-user-1', email='anna.demo@demo.local', name='Анна Демо',
-                   roles=('crm-user',), given_name=None, family_name=None):
+                   roles=('crm-user',), given_name=None, family_name=None, sid=None):
         code = secrets.token_urlsafe(16)
         claims = {'sub': subject, 'email': email, 'name': name, 'roles': list(roles)}
+        if sid is not None:
+            claims['sid'] = sid
         if given_name is not None:
             claims['given_name'] = given_name
         if family_name is not None:

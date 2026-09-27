@@ -441,6 +441,8 @@ class UserSession(Base):
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     ip: Mapped[str | None] = mapped_column(String(45))
     user_agent: Mapped[str | None] = mapped_column(String(300))
+    # Keycloak's `sid` for this browser login: ending the CRM session also ends it in Keycloak.
+    keycloak_session_id: Mapped[str | None] = mapped_column(String(64))
 
 
 class LoginState(Base):

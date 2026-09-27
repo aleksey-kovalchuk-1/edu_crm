@@ -47,6 +47,7 @@ class Identity:
     roles: tuple[str, ...]
     given_name: str = ''
     family_name: str = ''
+    session_id: str = ''
 
 
 class OIDCClient:
@@ -137,6 +138,7 @@ class OIDCClient:
             roles=tuple(sorted({role for role in roles if role in CRM_ROLES})),
             given_name=claims.get('given_name') or '',
             family_name=claims.get('family_name') or '',
+            session_id=claims.get('sid') or '',
         )
 
     def _post(self, path, data):
