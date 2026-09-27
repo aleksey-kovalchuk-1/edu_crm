@@ -21,6 +21,7 @@ from .models import AnnualMetric, ITProduct, Launch, StageEvent, StatusChange, T
 from .plan_routes import resolve_assignee, run_generation, snapshot_template
 from .plan_routes import router as plan_router
 from .notification_events import install as install_notification_events
+from .notification_routes import router as notification_router
 from .organization_routes import router as organization_router
 from .profile_routes import router as profile_router
 from .report_routes import router as report_router
@@ -134,6 +135,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.include_router(email_router)
     app.include_router(import_router)
     app.include_router(plan_router)
+    app.include_router(notification_router)
     app.include_router(organization_router)
     app.include_router(profile_router)
     app.include_router(report_router)
