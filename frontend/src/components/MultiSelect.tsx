@@ -11,18 +11,20 @@ export interface MultiSelectOption<T extends string | number> {
  */
 export function MultiSelect<T extends string | number>({
   label,
+  allLabel = "Все",
   options,
   value,
   onChange,
 }: {
   label: string;
+  allLabel?: string;
   options: MultiSelectOption<T>[];
   value: T[];
   onChange: (value: T[]) => void;
 }) {
   const chosen = options.filter((o) => value.includes(o.value));
   const summary = !chosen.length
-    ? "Все"
+    ? allLabel
     : chosen.length <= 2
       ? chosen.map((o) => o.label).join(", ")
       : `Выбрано: ${chosen.length}`;

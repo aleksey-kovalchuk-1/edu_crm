@@ -72,10 +72,10 @@
 - Consumes: snapshot JSON from Task 2 and scoped `useUniversities()` options.
 - Produces: four ordered blocks, date and multi-university filter, visible browser-time-zone note, accessible SVG/HTML chart labels, PDF URL with exactly the active filters.
 
-- [ ] Write failing UI tests for block order, default current-year period, multi-select affecting the API query, clear inverted-period error, chart empty states, and exact PDF URL.
-- [ ] Implement a single analytics query hook and replace the legacy annual content; leave Overview's existing chart alone.
-- [ ] Render horizontal funnel bars, a month line with zero gaps, and paired top-five columns with numeric labels; use the design system and responsive layout.
-- [ ] Update tests that referred to the removed annual analytics chart, then run all frontend tests, lint and production build; commit the page.
+- [x] Write failing UI tests for block order, default current-year period, multi-select affecting the API query, clear inverted-period error, chart empty states, and exact PDF URL.
+- [x] Implement a single analytics query hook and replace the legacy annual content; leave Overview's existing chart alone.
+- [x] Render horizontal funnel bars, a month line with zero gaps, and paired top-five columns with numeric labels; use the design system and responsive layout.
+- [x] Update tests that referred to the removed annual analytics chart, then run all frontend tests, lint and production build; commit the page.
 
 ### Task 4: Matching PDF
 

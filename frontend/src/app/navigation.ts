@@ -126,8 +126,8 @@ export const pages: PageMeta[] = [
     name: "Аналитика",
     icon: ChartNoAxesCombined,
     heading: "Аналитика",
-    subtitle: "Динамика спроса на обучение и результаты предыдущих лет.",
-    create: "launch",
+    subtitle: "Этапы взаимодействий, внедрённые программы и результаты вузов.",
+    create: null,
   },
   {
     path: paths.reports,

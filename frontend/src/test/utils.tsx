@@ -398,6 +398,13 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     "GET /workflows": () => data.workflows,
     "GET /launches/1/status-changes": () => [],
     "GET /dashboard": () => data.dashboard,
+    "GET /analytics/interactions": () => ({
+      period_from: "2026-01-01", period_to: "2026-09-30", time_zone: "UTC",
+      universities: ["Все вузы"],
+      stages: ["Первый контакт", "Документы", "Внедрение", "Обучение", "Сопровождение"]
+        .map((name) => ({ name, count: 0 })),
+      monthly: [], ranking: [], has_stage_data: false, has_implementation_data: false,
+    }),
     "GET /launches/1/history": () => [
       { id: 1, stage: 4, created_at: "2026-09-01T10:00:00" },
     ],
