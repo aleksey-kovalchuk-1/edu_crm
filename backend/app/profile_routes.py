@@ -17,7 +17,7 @@ from typing import Annotated
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from fastapi import APIRouter, Depends, Request
-from pydantic import BaseModel, ConfigDict, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
@@ -28,6 +28,7 @@ from .errors import AppError, ErrorCode
 from .keycloak_admin import KeycloakAdminError
 from .models import PhoneVerificationCode, User, utcnow
 from .owner_links import normalize_name, normalized_column, rename_user
+from .sender_addresses import usable_sender
 from .phone import PhoneFormatError, mask_phone, normalize_phone
 from .security import token_hash, tokens_match
 from .sms import SmsSendError, send_sms
@@ -83,6 +84,8 @@ class ProfilePatch(BaseModel):
     timezone: Annotated[str, StringConstraints(strip_whitespace=True, max_length=64)] | None = None
     telegram: Annotated[str, StringConstraints(strip_whitespace=True, max_length=40)] | None = None
     whatsapp: Annotated[str, StringConstraints(strip_whitespace=True, max_length=32)] | None = None
+    # 0 clears the selection; any other id must pass the same check every send uses.
+    email_sender_identity_id: int | None = Field(default=None, ge=0)
 
 
 class ProfileOut(BaseModel):
@@ -152,6 +155,10 @@ def update_profile(data: ProfilePatch, request: Request, auth: AuthContext = Dep
     timezone = _clean_timezone(data.timezone) if data.timezone is not None else None
     telegram = _clean_telegram(data.telegram) if data.telegram is not None else None
     whatsapp = _clean_whatsapp(data.whatsapp) if data.whatsapp is not None else None
+    sender_id = None
+    if data.email_sender_identity_id:
+        # Before any Keycloak call, so a refused address never leaves a half-applied rename behind.
+        sender_id = usable_sender(db, user, data.email_sender_identity_id).id
 
     changed = []
     current_first, current_last = _names_of(user)
@@ -184,6 +191,9 @@ def update_profile(data: ProfilePatch, request: Request, auth: AuthContext = Dep
         if value is not None and value != getattr(user, field):
             setattr(user, field, value)
             changed.append(field)
+    if data.email_sender_identity_id is not None and sender_id != user.email_sender_identity_id:
+        user.email_sender_identity_id = sender_id
+        changed.append('email_sender')
     if changed:
         # Field names only: contact values stay out of the audit log.
         record_event(db, request, user, 'profile.update', entity_type='user', entity_id=user.id,
