@@ -5,7 +5,7 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from .auth import ALL_ROLES, ROLE_SUPERADMIN, AuthContext, require_roles
@@ -13,11 +13,10 @@ from .db import get_db
 from .errors import AppError, ErrorCode
 from .models import Notification, NotificationPreference, utcnow
 from .notification_scheduler import FIRST_HOUR, user_zone
-from .notifications import EVENT_TYPES, FOREVER, GROUPS, UNSCOPED_EVENTS, can_see, is_enabled
+from .notifications import EVENT_TYPES, FOREVER, GROUPS, UNSCOPED_EVENTS, can_see, is_enabled, visible_notifications
 
 router = APIRouter(prefix='/api/v1/notifications', tags=['Уведомления'])
 any_role = require_roles(*ALL_ROLES, ROLE_SUPERADMIN)
-MAX_UNREAD_SCAN = 500
 PATHS = {'university': '/universities/{}', 'launch': '/interactions/{}', 'task': '/tasks/{}'}
 
 
@@ -71,10 +70,9 @@ class PauseOut(BaseModel):
     paused_until: datetime | None
 
 
-def _visible(db, user, row):
-    """(show it, link visible)"""
-    visible = can_see(db, user, row.link_type, row.link_id, row.university_id)
-    return (visible or row.event_type in UNSCOPED_EVENTS), visible
+def _link_visible(db, user, row):
+    # Rows already passed visible_notifications(); only removal notices can point at something now hidden.
+    return row.event_type not in UNSCOPED_EVENTS or can_see(db, user, row.link_type, row.link_id, row.university_id)
 
 
 def _out(row, link_visible):
@@ -90,24 +88,18 @@ def _out(row, link_visible):
 @router.get('', response_model=list[NotificationOut], summary='Мои уведомления')
 def list_notifications(unread: bool = False, limit: int = Query(50, ge=1, le=100),
                        auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-    query = select(Notification).where(Notification.user_id == auth.user.id)
+    query = select(Notification).where(Notification.user_id == auth.user.id, visible_notifications(auth.user))
     if unread:
         query = query.where(Notification.read_at.is_(None))
-    items = []
-    for row in db.scalars(query.order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit * 3)):
-        show, link_visible = _visible(db, auth.user, row)
-        if show:
-            items.append(_out(row, link_visible))
-        if len(items) == limit:
-            break
-    return items
+    rows = db.scalars(query.order_by(Notification.created_at.desc(), Notification.id.desc()).limit(limit)).all()
+    return [_out(row, _link_visible(db, auth.user, row)) for row in rows]
 
 
 @router.get('/unread-count', response_model=CountOut, summary='Число непрочитанных уведомлений')
 def unread_count(auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
-    rows = db.scalars(select(Notification).where(Notification.user_id == auth.user.id, Notification.read_at.is_(None))
-                      .order_by(Notification.id.desc()).limit(MAX_UNREAD_SCAN))
-    return CountOut(count=sum(1 for row in rows if _visible(db, auth.user, row)[0]))
+    # Same filter as the list, so the badge and the panel always agree.
+    return CountOut(count=db.scalar(select(func.count()).select_from(Notification).where(
+        Notification.user_id == auth.user.id, Notification.read_at.is_(None), visible_notifications(auth.user))))
 
 
 @router.post('/read-all', status_code=204, summary='Отметить все уведомления прочитанными')

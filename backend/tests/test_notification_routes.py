@@ -113,3 +113,32 @@ def test_pause_until_tomorrow_8am_local_forever_and_off(client, keycloak, databa
     assert datetime.fromisoformat(forever) == FOREVER
     assert client.put(f'{BASE}/pause', json={'duration': 'off'}).json()['paused_until'] is None
     assert client.put(f'{BASE}/pause', json={'duration': 'soon'}).status_code == 422
+
+
+def test_older_visible_notifications_are_not_crowded_out_and_count_matches(client, keycloak, database_url):
+    anna, university_id = _anna_with_university(client, keycloak, database_url)
+    visible = _seed(database_url, anna['id'], university_id)
+    with database(database_url) as db:
+        hidden = _university(db, 'Вуз, к которому доступа больше нет').id
+        db.add_all([Notification(user_id=anna['id'], event_type='university_contacts_changed', title='t', body='b',
+                                 link_type='university', link_id=hidden, university_id=hidden) for _ in range(160)])
+        db.commit()
+    items = client.get(BASE).json()
+    assert [i['id'] for i in items] == [visible]
+    assert client.get(f'{BASE}/unread-count').json() == {'count': len(items)}
+
+
+def test_count_uses_a_fixed_number_of_queries(client, keycloak, database_url, app):
+    from sqlalchemy import event
+    anna, university_id = _anna_with_university(client, keycloak, database_url)
+    for _ in range(30):
+        _seed(database_url, anna['id'], university_id)
+    statements = []
+    engine = app.state.session_factory.kw['bind']
+    listener = lambda *args: statements.append(1)  # noqa: E731
+    event.listen(engine, 'before_cursor_execute', listener)
+    try:
+        assert client.get(f'{BASE}/unread-count').json() == {'count': 30}
+    finally:
+        event.remove(engine, 'before_cursor_execute', listener)
+    assert len(statements) < 10  # auth/session queries plus one count, not one query per notification

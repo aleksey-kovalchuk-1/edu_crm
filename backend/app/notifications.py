@@ -3,7 +3,7 @@ notification is created, with every rule that decides whether one is created at 
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import exists, select
+from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from .catalog_routes import university_scope
@@ -75,6 +75,18 @@ def can_see(db, user, link_type, link_id, university_id) -> bool:
     if university_id is None:
         return False
     return bool(db.scalar(select(exists().where(University.id == university_id, university_scope(University.id, user)))))
+
+
+def visible_notifications(user):
+    """SQL filter: notifications about records `user` can see now, plus the removal notices (UNSCOPED_EVENTS).
+    One query for any number of rows, so the list and the unread count agree and stay cheap to poll."""
+    task_visible = exists().where(Task.id == Notification.link_id, visible_tasks_query(user))
+    university_visible = exists().where(University.id == Notification.university_id, university_scope(University.id, user))
+    return or_(
+        Notification.event_type.in_(UNSCOPED_EVENTS),
+        and_(Notification.link_type == 'task', task_visible),
+        and_(Notification.link_type != 'task', university_visible),
+    )
 
 
 def notify(db, *, user_id, event_type, title, body, link_type, link_id, university_id=None, actor_user_id=None,

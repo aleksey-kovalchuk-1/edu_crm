@@ -115,3 +115,24 @@ def test_paused_user_gets_nothing(app, database_url):
         db.commit()
     run_once(app.state.session_factory, now=datetime(2026, 10, 10, 9, 0, tzinfo=UTC))
     assert _due(database_url, 'task_due_today') == []
+
+
+def test_licence_warning_uses_a_window_so_a_missed_day_or_a_short_contract_still_warns(app, database_url):
+    with database(database_url) as db:
+        anna = _user(db, 'kc-anna')
+        university = University(name='Вуз окна', city='Москва', contact='')
+        product = ITProduct(vendor='РТК ИТ', name='Среда')
+        db.add_all([university, product])
+        db.flush()
+        db.add(UniversityManager(university_id=university.id, user_id=anna.id))
+        short = Contract(contract_number='Л-20', university_id=university.id, it_product_id=product.id,
+                         signed_at=date(2026, 9, 1), valid_until=date(2026, 10, 30))  # 20 days left at first run
+        db.add(short)
+        db.commit()
+        anna_id, contract_id = anna.id, short.id
+    enable(database_url, anna_id, 'license_expires_30', 'license_expires_7')
+    run_once(app.state.session_factory, now=datetime(2026, 10, 10, 9, 0, tzinfo=UTC))
+    run_once(app.state.session_factory, now=datetime(2026, 10, 11, 9, 0, tzinfo=UTC))  # no repeat
+    run_once(app.state.session_factory, now=datetime(2026, 10, 25, 9, 0, tzinfo=UTC))  # 5 days left (day 7 missed)
+    assert _due(database_url, 'license_expires_30') == [(anna_id, contract_id)]
+    assert _due(database_url, 'license_expires_7') == [(anna_id, contract_id)]
