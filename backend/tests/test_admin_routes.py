@@ -3,7 +3,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.main import create_app
-from app.models import AuditEvent, User
+from app.models import AuditEvent, User, UserSession
 from fake_keycloak import ADMIN_BASE_URL, ADMIN_CLIENT_ID, ADMIN_CLIENT_SECRET
 from helpers import database, login, make_settings
 
@@ -103,6 +103,19 @@ def test_pending_registrations_lists_keycloak_users_with_no_crm_role(configured_
     assert body['pending'][0]['email'] == 'pending@demo.local'
 
 
+def test_pending_registration_list_includes_accounts_after_first_keycloak_page(configured_client, keycloak):
+    for index in range(200):
+        keycloak.add_admin_user(id=f'kc-active-{index}', email=f'active-{index}@demo.local',
+                                username=f'active-{index}', roles=['crm-user'])
+    keycloak.add_admin_user(id='kc-pending-last', email='last@demo.local', username='last', roles=[])
+    login(configured_client, keycloak, roles=('crm-superadmin', 'crm-admin'), subject='kc-irina')
+
+    response = configured_client.get(PENDING_PATH)
+
+    assert response.status_code == 200, response.text
+    assert [row['username'] for row in response.json()['pending']] == ['last']
+
+
 def test_approving_grants_the_crm_user_role(configured_client, keycloak):
     keycloak.add_admin_user(id='kc-pending-2', email='newbie@demo.local', username='newbie', roles=[])
     login(configured_client, keycloak, roles=('crm-superadmin',))
@@ -173,3 +186,93 @@ def test_failed_role_assignment_rolls_back_new_account(configured_client, keyclo
     assert not keycloak.admin_users
     with database(database_url) as db:
         assert db.scalar(select(User).where(User.email == CREATE_PAYLOAD['email'])) is None
+
+
+def test_superadmin_changes_existing_manager_to_admin_and_revokes_old_sessions(configured_client, keycloak, database_url):
+    keycloak.add_admin_user(id='kc-manager', email='manager@example.test', username='manager', roles=['crm-user'])
+    login(configured_client, keycloak, subject='kc-manager', email='manager@example.test')
+    login(configured_client, keycloak, roles=('crm-admin', 'crm-superadmin'), subject='kc-irina', email='irina@example.test')
+
+    response = configured_client.patch(f'{USERS_PATH}/kc-manager/role', json={'role': 'crm-admin'})
+
+    assert response.status_code == 200, response.text
+    assert response.json()['role'] == 'crm-admin'
+    assert keycloak.admin_users['kc-manager']['roles'] == ['crm-admin']
+    assert 'kc-manager' in keycloak.logged_out_users
+    with database(database_url) as db:
+        user = db.scalar(select(User).where(User.keycloak_sub == 'kc-manager'))
+        assert user.roles == ['crm-admin']
+        assert all(s.revoked_at is not None for s in db.scalars(select(UserSession).where(UserSession.user_id == user.id)))
+        event = db.scalar(select(AuditEvent).where(AuditEvent.action == 'admin.user_role_change'))
+        assert event is not None and event.payload['new_role'] == 'crm-admin'
+
+
+def test_superadmin_can_assign_admin_role_to_pending_account(configured_client, keycloak):
+    keycloak.add_admin_user(id='kc-pending', email='pending@example.test', username='pending', roles=[])
+    login(configured_client, keycloak, roles=('crm-superadmin', 'crm-admin'), subject='kc-irina')
+
+    response = configured_client.patch(f'{USERS_PATH}/kc-pending/role', json={'role': 'crm-admin'})
+
+    assert response.status_code == 200, response.text
+    assert keycloak.admin_users['kc-pending']['roles'] == ['crm-admin']
+    assert [u['username'] for u in configured_client.get(USERS_PATH).json()['users']] == ['pending']
+    assert configured_client.get(PENDING_PATH).json()['pending'] == []
+
+
+def test_role_change_rejects_new_head_and_protects_existing_head(configured_client, keycloak):
+    keycloak.add_admin_user(id='kc-head', email='head@example.test', username='head', roles=['crm-supervisor'])
+    keycloak.add_admin_user(id='kc-manager', email='manager@example.test', username='manager', roles=['crm-user'])
+    login(configured_client, keycloak, roles=('crm-superadmin', 'crm-admin'), subject='kc-irina')
+
+    assert configured_client.patch(f'{USERS_PATH}/kc-manager/role', json={'role': 'crm-supervisor'}).status_code == 422
+    assert configured_client.patch(f'{USERS_PATH}/kc-manager/role', json={'role': 'crm-superadmin'}).status_code == 422
+    assert configured_client.patch(f'{USERS_PATH}/kc-head/role', json={'role': 'crm-user'}).status_code == 409
+    assert keycloak.admin_users['kc-head']['roles'] == ['crm-supervisor']
+    assert keycloak.admin_users['kc-manager']['roles'] == ['crm-user']
+
+
+def test_only_superadmin_can_change_role_or_reset_password(configured_client, keycloak):
+    keycloak.add_admin_user(id='kc-target', email='target@example.test', username='target', roles=['crm-user'])
+    login(configured_client, keycloak, roles=('crm-admin',), subject='kc-admin')
+
+    assert configured_client.patch(f'{USERS_PATH}/kc-target/role', json={'role': 'crm-admin'}).status_code == 403
+    assert configured_client.post(f'{USERS_PATH}/kc-target/reset-password').status_code == 403
+    assert keycloak.admin_users['kc-target']['roles'] == ['crm-user']
+    assert 'temporary_password' not in keycloak.admin_users['kc-target']
+
+
+def test_password_reset_returns_one_time_secret_and_ends_existing_sessions(configured_client, keycloak, database_url):
+    keycloak.add_admin_user(id='kc-target', email='target@example.test', username='target', roles=['crm-user'])
+    login(configured_client, keycloak, subject='kc-target', email='target@example.test')
+    login(configured_client, keycloak, roles=('crm-superadmin', 'crm-admin'), subject='kc-irina')
+
+    response = configured_client.post(f'{USERS_PATH}/kc-target/reset-password')
+
+    assert response.status_code == 200, response.text
+    secret = response.json()['temporary_password']
+    assert len(secret) >= 24
+    assert response.headers['cache-control'] == 'no-store'
+    assert keycloak.admin_users['kc-target']['temporary_password'] == secret
+    assert 'kc-target' in keycloak.logged_out_users
+    with database(database_url) as db:
+        user = db.scalar(select(User).where(User.keycloak_sub == 'kc-target'))
+        assert all(s.revoked_at is not None for s in db.scalars(select(UserSession).where(UserSession.user_id == user.id)))
+        event = db.scalar(select(AuditEvent).where(AuditEvent.action == 'admin.user_password_reset'))
+        assert event is not None and secret not in str(event.payload)
+
+
+def test_reset_and_role_change_do_not_modify_unknown_keycloak_user(configured_client, keycloak):
+    login(configured_client, keycloak, roles=('crm-superadmin', 'crm-admin'))
+    assert configured_client.patch(f'{USERS_PATH}/unknown/role', json={'role': 'crm-admin'}).status_code == 404
+    assert configured_client.post(f'{USERS_PATH}/unknown/reset-password').status_code == 404
+
+
+def test_failed_old_role_removal_restores_original_access(configured_client, keycloak):
+    keycloak.add_admin_user(id='kc-target', email='target@example.test', username='target', roles=['crm-admin'])
+    login(configured_client, keycloak, roles=('crm-superadmin', 'crm-admin'), subject='kc-irina')
+    keycloak.fail_role_removal = True
+
+    response = configured_client.patch(f'{USERS_PATH}/kc-target/role', json={'role': 'crm-user'})
+
+    assert response.status_code == 503
+    assert keycloak.admin_users['kc-target']['roles'] == ['crm-admin']

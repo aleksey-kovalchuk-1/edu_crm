@@ -44,12 +44,15 @@ class FakeKeycloak:
         self.admin_users = {}  # id -> {"id", "email", "username", "roles": [...]}
         self.logged_out_users = []
         self.fail_role_assignment = False
+        self.fail_role_removal = False
         self.realm_password_policy = "length(12) and notUsername and notEmail and passwordHistory(3)"
         self.realm_events_enabled = False
         self.admin_sessions = set()   # Keycloak session ids that are still active
         self.admin_events = []        # stored login events ({'time', 'type', 'userId', ...})
         self.events_forbidden = False  # service account lacks view-events
         self.fail_session_delete = False
+        self.registration_email_as_username = False
+        self.edit_username_allowed = True
         # Malformed-response simulation for the admin API, settable per test:
         #   'not_json'    -> GET /users returns 200 with a non-JSON body.
         #   'wrong_shape' -> GET /users returns 200 with a JSON object instead of a JSON array.
@@ -182,7 +185,8 @@ class FakeKeycloak:
                 return httpx.Response(409)
             user_id = f'kc-created-{len(self.admin_users) + 1}'
             self.add_admin_user(
-                id=user_id, email=body['email'], username=body['username'], roles=[],
+                id=user_id, email=body['email'],
+                username=body['email'] if self.registration_email_as_username else body['username'], roles=[],
                 first_name=body.get('firstName', ''), last_name=body.get('lastName', ''),
                 enabled=body.get('enabled', True),
             )
@@ -201,6 +205,10 @@ class FakeKeycloak:
                 del self.admin_users[user_id]
             else:
                 body = json.loads(request.content)
+                if not self.edit_username_allowed and body.get('username', self.admin_users[user_id]['username']) != self.admin_users[user_id]['username']:
+                    return httpx.Response(400, json={'field': 'username', 'errorMessage': 'error-user-attribute-read-only'})
+                if self.registration_email_as_username:
+                    body['username'] = body.get('email', self.admin_users[user_id]['email'])
                 self.admin_users[user_id].update(body)
                 if 'firstName' in body or 'lastName' in body:
                     # Real Keycloak puts the new names into the next refreshed token.
@@ -212,6 +220,9 @@ class FakeKeycloak:
                                 name=f"{stored.get('firstName', '')} {stored.get('lastName', '')}".strip(),
                             )
             return httpx.Response(204)
+        if suffix.startswith('users/') and request.method == 'GET' and '/' not in suffix[len('users/'):]:
+            user = self.admin_users.get(suffix[len('users/'):])
+            return httpx.Response(200, json=user) if user else httpx.Response(404)
         if suffix.startswith('users/') and suffix.endswith('/logout') and request.method == 'POST':
             user_id = suffix[len('users/'):-len('/logout')]
             if user_id not in self.admin_users:
@@ -232,6 +243,8 @@ class FakeKeycloak:
             ])
         if suffix.startswith('users/') and suffix.endswith('/role-mappings/realm') and request.method in ('POST', 'DELETE'):
             if self.fail_role_assignment and request.method == 'POST':
+                return httpx.Response(503)
+            if self.fail_role_removal and request.method == 'DELETE':
                 return httpx.Response(503)
             user_id = suffix[len('users/'):-len('/role-mappings/realm')]
             roles = json.loads(request.content)
@@ -254,8 +267,12 @@ class FakeKeycloak:
             role_name = suffix[len('roles/'):]
             return httpx.Response(200, json={'id': role_name, 'name': role_name})
         if suffix == '' and request.method == 'GET':
-            return httpx.Response(200, json={'passwordPolicy': self.realm_password_policy, 'bruteForceProtected': True,
-                                             'failureFactor': 30, 'eventsEnabled': self.realm_events_enabled})
+            return httpx.Response(200, json={
+                'passwordPolicy': self.realm_password_policy, 'bruteForceProtected': True,
+                'failureFactor': 30, 'eventsEnabled': self.realm_events_enabled,
+                'registrationEmailAsUsername': self.registration_email_as_username,
+                'editUsernameAllowed': self.edit_username_allowed,
+            })
         if suffix.startswith('sessions/') and request.method == 'DELETE':
             if self.fail_session_delete:
                 return httpx.Response(503)
