@@ -6,8 +6,10 @@ describe("user helpers", () => {
     expect(roleLabel(["crm-user"])).toBe("Менеджер");
     expect(roleLabel(["crm-user", "crm-supervisor"])).toBe("Руководитель");
     expect(roleLabel(["crm-supervisor", "crm-admin", "crm-user"])).toBe("Администратор");
+    expect(roleLabel(["crm-superadmin", "crm-supervisor", "crm-admin"])).toBe("Главный администратор");
     expect(roleLabel(["offline_access"])).toBeNull();
     expect(hasCrmAccess([])).toBe(false);
+    expect(hasCrmAccess(["crm-superadmin"])).toBe(false);
   });
 
   it("allows catalog editing for supervisors and admins only", () => {

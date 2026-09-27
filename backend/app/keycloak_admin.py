@@ -10,6 +10,7 @@ scripts/keycloak-grant-admin-permissions.sh (see docs/decisions.md), not via rea
 calling any other method, which will raise.
 """
 import time
+from urllib.parse import urlparse
 
 import httpx
 
@@ -25,12 +26,19 @@ class KeycloakAdminUnavailable(KeycloakAdminError):
     """Keycloak could not be reached or answered with a server error."""
 
 
+class KeycloakAdminConflict(KeycloakAdminError):
+    """The requested username or email already exists."""
+
+
 class AdminUser:
-    def __init__(self, id, email, username, roles):
+    def __init__(self, id, email, username, roles, first_name='', last_name='', enabled=True):
         self.id = id
         self.email = email
         self.username = username
         self.roles = roles
+        self.first_name = first_name
+        self.last_name = last_name
+        self.enabled = enabled
 
 
 class KeycloakAdminClient:
@@ -76,6 +84,40 @@ class KeycloakAdminClient:
             json=[{'id': self._role_id(role_name), 'name': role_name}],
         )
 
+    def create_user(self, *, username, email, first_name, last_name, temporary_password):
+        response = self._request('POST', '/users', json={
+            'username': username, 'email': email, 'firstName': first_name,
+            'lastName': last_name, 'enabled': False, 'emailVerified': False,
+            'credentials': [{'type': 'password', 'value': temporary_password, 'temporary': True}],
+            'requiredActions': ['UPDATE_PASSWORD'],
+        })
+        path = urlparse(response.headers.get('Location', '')).path
+        marker = '/admin/realms/edu-crm/users/'
+        user_id = path.partition(marker)[2]
+        if marker not in path or not user_id or '/' in user_id:
+            raise KeycloakAdminError('create user response has no valid Location')
+        return user_id
+
+    def set_user_enabled(self, user_id, enabled):
+        self._request('PUT', f'/users/{user_id}', json={'enabled': enabled})
+
+    def update_user(self, user_id, *, username, email, first_name, last_name):
+        self._request('PUT', f'/users/{user_id}', json={
+            'username': username, 'email': email, 'firstName': first_name,
+            'lastName': last_name,
+        })
+
+    def logout_user(self, user_id):
+        self._request('POST', f'/users/{user_id}/logout')
+
+    def set_temporary_password(self, user_id, password):
+        self._request('PUT', f'/users/{user_id}/reset-password', json={
+            'type': 'password', 'value': password, 'temporary': True,
+        })
+
+    def delete_user(self, user_id):
+        self._request('DELETE', f'/users/{user_id}')
+
     def remove_realm_role(self, user_id, role_name):
         self._request(
             'DELETE', f'/users/{user_id}/role-mappings/realm',
@@ -104,7 +146,8 @@ class KeycloakAdminClient:
             raise KeycloakAdminError(f'unexpected user response shape: {error}') from error
         return AdminUser(
             id=user_id, email=row.get('email', ''), username=row.get('username', ''),
-            roles=self._realm_roles_of(user_id),
+            roles=self._realm_roles_of(user_id), first_name=row.get('firstName', ''),
+            last_name=row.get('lastName', ''), enabled=row.get('enabled', True),
         )
 
     def _realm_roles_of(self, user_id):
@@ -176,6 +219,8 @@ class KeycloakAdminClient:
             # instead of replaying the same rejected token until it naturally expires.
             self._token = None
             raise KeycloakAdminError(f'{path} returned 401')
+        if response.status_code == 409:
+            raise KeycloakAdminConflict(f'{path} returned 409')
         if response.status_code >= 400:
             raise KeycloakAdminError(f'{path} returned {response.status_code}')
         return response

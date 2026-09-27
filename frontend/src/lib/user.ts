@@ -7,6 +7,7 @@ export const ROLES = {
 
 /** Highest role first. */
 const ROLE_LABELS: [string, string][] = [
+  [ROLES.superadmin, "Главный администратор"],
   [ROLES.admin, "Администратор"],
   [ROLES.supervisor, "Руководитель"],
   [ROLES.user, "Менеджер"],
@@ -16,7 +17,8 @@ const ROLE_LABELS: [string, string][] = [
 export const roleLabel = (roles: string[]): string | null =>
   ROLE_LABELS.find(([role]) => roles.includes(role))?.[1] ?? null;
 
-export const hasCrmAccess = (roles: string[]) => roleLabel(roles) !== null;
+export const hasCrmAccess = (roles: string[]) =>
+  roles.some((role) => role === ROLES.user || role === ROLES.supervisor || role === ROLES.admin);
 
 /** Creating and editing catalog records (universities) — supervisors and admins. */
 export const canEditCatalog = (roles: string[]) =>

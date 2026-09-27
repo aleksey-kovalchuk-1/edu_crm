@@ -38,6 +38,8 @@ class University(Base):
     region: Mapped[str] = mapped_column(russian_text(100), default='', server_default='')
     website: Mapped[str] = mapped_column(String(300), default='', server_default='')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    # Initial partner roster is shared with every manager; ordinary new universities stay assigned-only.
+    team_visible_to_managers: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # Read-only view of assigned managers; assignments are changed through UniversityManager rows.
     managers: Mapped[list['User']] = relationship(
         'User',
