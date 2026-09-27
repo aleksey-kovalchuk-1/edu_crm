@@ -1,207 +1,121 @@
-import { useState, type FormEvent } from "react";
-import { ShieldAlert, ShieldCheck } from "lucide-react";
-import { errorText } from "../../api/client";
-import { isPlausiblePhone, useRequestPhoneCode, useVerifyPhoneCode } from "../../api/profile";
-import { useSession } from "../../app/AuthGate";
-import { formatDateTime } from "../../lib/format";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { ApiError, errorText } from "../../api/client";
+import { contactStatus, useProfile, useUpdateProfile, type Profile } from "../../api/profile";
+import { PhoneVerificationPanel } from "./PhoneVerificationPanel";
+import { SenderAddressPanel } from "./SenderAddressPanel";
 
-type Step = "view" | "phone" | "code";
+const TIME_ZONES: string[] =
+  typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : ["Europe/Moscow"];
 
-const PHONE_FORMAT_HINT = "Форматы: +7XXXXXXXXXX, 8XXXXXXXXXX или 7XXXXXXXXXX.";
-const PHONE_LOCAL_ERROR =
-  "Введите номер телефона в формате +7XXXXXXXXXX, 8XXXXXXXXXX или 7XXXXXXXXXX";
+type Form = Pick<Profile, "first_name" | "middle_name" | "last_name" | "timezone" | "telegram" | "whatsapp">;
+const FIELD_KEYS = ["first_name", "middle_name", "last_name", "timezone", "telegram", "whatsapp"] as const;
 
-/**
- * CRM-owned phone verification (D-155-D-157): request a code, then confirm it.
- * Every call here acts on the signed-in user's own account; there is no user id to pass.
- */
 export function SettingsProfilePage() {
-  const { user } = useSession();
-  const [step, setStep] = useState<Step>("view");
-  const [pendingPhone, setPendingPhone] = useState("");
-  const [phoneError, setPhoneError] = useState("");
-  const [code, setCode] = useState("");
+  const profile = useProfile();
+  const update = useUpdateProfile();
+  const [form, setForm] = useState<Form | null>(null);
+  const [saved, setSaved] = useState(false);
 
-  const requestCode = useRequestPhoneCode();
-  const verifyCode = useVerifyPhoneCode();
-  const verified = Boolean(user.phone_verified_at);
+  useEffect(() => {
+    if (!profile.data) return;
+    const data = profile.data;
+    setForm((current) => current ?? {
+      first_name: data.first_name, middle_name: data.middle_name, last_name: data.last_name,
+      timezone: data.timezone, telegram: data.telegram, whatsapp: data.whatsapp,
+    });
+  }, [profile.data]);
 
-  function openPhoneStep() {
-    setPhoneError("");
-    requestCode.reset();
-    setStep("phone");
+  const zones = useMemo(
+    () => (form && !TIME_ZONES.includes(form.timezone) ? [form.timezone, ...TIME_ZONES] : TIME_ZONES),
+    [form],
+  );
+
+  if (profile.isError) {
+    return <section className="panel"><p className="danger" role="alert">{errorText(profile.error)}</p></section>;
+  }
+  if (!profile.data || !form) {
+    return <section className="panel"><p className="muted">Загрузка…</p></section>;
   }
 
-  function submitPhone(event: FormEvent<HTMLFormElement>) {
+  const error = update.error;
+  const fieldError = (field: string) => (error instanceof ApiError ? error.fieldMessage(field) : undefined);
+  const hasFieldError = FIELD_KEYS.some((key) => fieldError(key));
+
+  function set<K extends keyof Form>(key: K, value: Form[K]) {
+    setForm((current) => (current ? { ...current, [key]: value } : current));
+    setSaved(false);
+  }
+
+  function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const raw = new FormData(event.currentTarget).get("phone");
-    const phone = typeof raw === "string" ? raw.trim() : "";
-    if (!isPlausiblePhone(phone)) {
-      setPhoneError(PHONE_LOCAL_ERROR);
-      return;
-    }
-    setPhoneError("");
-    requestCode.mutate(phone, {
-      onSuccess: () => {
-        setPendingPhone(phone);
-        setCode("");
-        verifyCode.reset();
-        setStep("code");
-      },
-    });
+    if (!form) return;
+    setSaved(false);
+    update.mutate(form, { onSuccess: () => setSaved(true) });
   }
 
-  function resend() {
-    requestCode.mutate(pendingPhone, {
-      onSuccess: () => {
-        setCode("");
-        verifyCode.reset();
-      },
-    });
-  }
-
-  function submitCode(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    verifyCode.mutate(code, {
-      onSuccess: () => {
-        requestCode.reset();
-        setStep("view");
-      },
-    });
+  function field(key: (typeof FIELD_KEYS)[number], label: string, props: Record<string, unknown> = {}) {
+    const message = fieldError(key);
+    return (
+      <label>
+        {label}
+        <input value={form![key]} onChange={(e) => set(key, e.target.value)}
+          aria-invalid={message ? true : undefined} {...props} />
+        {message && <small className="field-error danger">{message}</small>}
+      </label>
+    );
   }
 
   return (
     <>
-      {!verified && (
-        <div className="banner-warning" role="status">
-          <ShieldAlert size={16} aria-hidden="true" />
-          <span>
-            Вы не до конца прошли регистрацию: номер телефона не подтверждён. Подтвердите его ниже.
-          </span>
-        </div>
-      )}
-      <section className="panel" aria-labelledby="profile-phone-title">
+      <form className="panel" onSubmit={submit} aria-labelledby="profile-personal-title" noValidate>
         <div className="section-head">
           <div>
-            <h2 id="profile-phone-title">Телефон</h2>
-            <p>Используется только внутри CRM и нигде не публикуется.</p>
+            <h2 id="profile-personal-title">Личные данные</h2>
+            <p>Имя, отчество и фамилия сохраняются в учётной записи для входа.</p>
           </div>
         </div>
-
-        {step === "view" && (
-          <div className="wizard-body">
-            <p className="profile-phone-status">
-              {verified ? (
-                <>
-                  <ShieldCheck size={16} className="text-green" aria-hidden="true" />
-                  <span>
-                    Подтверждён: <strong>{user.phone}</strong>
-                    {user.phone_verified_at && (
-                      <span className="muted"> · {formatDateTime(user.phone_verified_at)}</span>
-                    )}
-                  </span>
-                </>
-              ) : (
-                <>
-                  <ShieldAlert size={16} aria-hidden="true" />
-                  <span className="muted">Номер телефона не подтверждён</span>
-                </>
-              )}
-            </p>
-            <div className="wizard-actions">
-              <button type="button" className="secondary" onClick={openPhoneStep}>
-                {verified ? "Изменить номер" : "Добавить номер"}
-              </button>
+        <div className="wizard-body">
+          <div className="form-row">
+            {field("first_name", "Имя", { maxLength: 100, autoComplete: "given-name" })}
+            {field("middle_name", "Отчество", { maxLength: 100, autoComplete: "additional-name" })}
+            {field("last_name", "Фамилия", { maxLength: 100, autoComplete: "family-name" })}
+          </div>
+          <label>
+            Email
+            <input value={profile.data.email} readOnly aria-readonly="true" />
+            <small className="field-hint">Меняется администратором в учётной записи.</small>
+          </label>
+          <label>
+            Часовой пояс
+            <select value={form.timezone} onChange={(e) => set("timezone", e.target.value)}
+              aria-invalid={fieldError("timezone") ? true : undefined}>
+              {zones.map((zone) => <option key={zone} value={zone}>{zone.replace(/_/g, " ")}</option>)}
+            </select>
+            {fieldError("timezone") && <small className="field-error danger">{fieldError("timezone")}</small>}
+          </label>
+          <div className="form-row">
+            <div>
+              {field("telegram", "Telegram", { maxLength: 40, placeholder: "@username" })}
+              <small className="field-hint">{contactStatus(form.telegram)}</small>
+            </div>
+            <div>
+              {field("whatsapp", "WhatsApp", { maxLength: 32, type: "tel", placeholder: "+7XXXXXXXXXX" })}
+              <small className="field-hint">{contactStatus(form.whatsapp)}</small>
             </div>
           </div>
-        )}
+          <small className="field-hint">
+            Контакты только сохраняются в профиле: CRM не отправляет сообщения в мессенджеры.
+          </small>
 
-        {step === "phone" && (
-          <form onSubmit={submitPhone} className="wizard-body">
-            <label>
-              Номер телефона
-              <input
-                name="phone"
-                type="tel"
-                required
-                autoFocus
-                placeholder="+7XXXXXXXXXX"
-                defaultValue={pendingPhone}
-                aria-invalid={phoneError || requestCode.isError ? true : undefined}
-              />
-              {phoneError && <small className="field-error danger">{phoneError}</small>}
-              {!phoneError && requestCode.isError && (
-                <small className="field-error danger">{errorText(requestCode.error)}</small>
-              )}
-            </label>
-            <small className="field-hint">{PHONE_FORMAT_HINT}</small>
-            <div className="wizard-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setStep("view")}
-                disabled={requestCode.isPending}
-              >
-                Отмена
-              </button>
-              <button className="primary" disabled={requestCode.isPending}>
-                {requestCode.isPending ? "Отправляем…" : "Отправить код"}
-              </button>
-            </div>
-          </form>
-        )}
-
-        {step === "code" && (
-          <form onSubmit={submitCode} className="wizard-body">
-            <p className="step-note">
-              Код отправлен на номер {pendingPhone}. Он действует 5 минут.
-            </p>
-            <label>
-              Код из SMS
-              <input
-                name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                required
-                autoFocus
-                maxLength={6}
-                value={code}
-                onChange={(event) => setCode(event.target.value.replace(/\D/g, ""))}
-                aria-invalid={verifyCode.isError ? true : undefined}
-              />
-              {verifyCode.isError && (
-                <small className="field-error danger">{errorText(verifyCode.error)}</small>
-              )}
-            </label>
-            {requestCode.isError && (
-              <p className="danger" role="alert">
-                {errorText(requestCode.error)}
-              </p>
-            )}
-            <div className="wizard-actions">
-              <button
-                type="button"
-                className="secondary"
-                onClick={() => setStep("phone")}
-                disabled={verifyCode.isPending || requestCode.isPending}
-              >
-                Изменить номер
-              </button>
-              <button
-                type="button"
-                className="secondary"
-                onClick={resend}
-                disabled={requestCode.isPending || verifyCode.isPending}
-              >
-                {requestCode.isPending ? "Отправляем…" : "Отправить код ещё раз"}
-              </button>
-              <button className="primary" disabled={verifyCode.isPending}>
-                {verifyCode.isPending ? "Проверяем…" : "Подтвердить"}
-              </button>
-            </div>
-          </form>
-        )}
-      </section>
+          {error && !hasFieldError && <p className="danger" role="alert">{errorText(error)}</p>}
+          {saved && <p className="text-green" role="status">Изменения сохранены</p>}
+          <div className="wizard-actions">
+            <button className="primary" disabled={update.isPending}>{update.isPending ? "Сохраняем…" : "Сохранить"}</button>
+          </div>
+        </div>
+      </form>
+      <PhoneVerificationPanel />
+      <SenderAddressPanel />
     </>
   );
 }
