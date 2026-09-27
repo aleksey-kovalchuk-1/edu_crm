@@ -4252,3 +4252,21 @@ dialog.wide {
 .link-button:hover:not(:disabled) {
   text-decoration: underline;
 }
+
+/* Настройки → Уведомления: one fieldset per event group. */
+.notification-group {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: grid;
+  gap: 8px;
+}
+.notification-group legend {
+  font-weight: 600;
+  padding: 0 4px;
+}
+.notification-group .checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
