@@ -397,6 +397,13 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     "GET /organization/brand": () => ({ name: "ИТ Школа Ростелеком" }),
     "GET /notifications/unread-count": () => ({ count: 0 }),
     "GET /notifications": () => [],
+    "GET /security/sessions": () => [],
+    "GET /security/login-history": () => ({ crm: [], keycloak: { available: false, reason: "disabled", events: [] } }),
+    "GET /security/password-policy": () => ({
+      available: true, rules: ["Не короче 12 символов"], brute_force: null,
+      change_password_url: "http://localhost:8080/auth/realms/edu-crm/account/account-security/signing-in",
+      admin_console_url: null,
+    }),
     [`GET ${AUDIT_PATH}`]: () => [],
     "GET /universities": () => data.universities,
     "GET /launches": () => data.launches,
