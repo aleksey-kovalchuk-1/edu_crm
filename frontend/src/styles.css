@@ -4221,7 +4221,6 @@ dialog.wide {
 }
 .analytics-ranking-bar {
   width: min(35%, 36px);
-  min-height: 2px;
   position: relative;
   border-radius: 3px 3px 0 0;
 }

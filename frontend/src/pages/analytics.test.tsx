@@ -79,4 +79,27 @@ describe("new interaction analytics", () => {
 
     expect(await screen.findAllByText("Нет данных за выбранный период")).toHaveLength(3);
   });
+
+  it("blocks periods longer than ten years before querying or downloading", async () => {
+    const api = mockApi({ "GET /analytics/interactions": () => snapshot });
+    renderApp("/analytics");
+    await screen.findByRole("heading", { name: "Вузы по этапам" });
+    const requestsBefore = api.callsTo("GET", "/analytics/interactions").length;
+    fireEvent.change(screen.getByLabelText("Период с"), { target: { value: "2015-01-01" } });
+    fireEvent.change(screen.getByLabelText("Период по"), { target: { value: "2026-01-01" } });
+    expect(screen.getByRole("alert").textContent).toContain("10 лет");
+    expect(screen.queryByRole("link", { name: "Скачать PDF" })).toBeNull();
+    expect(api.callsTo("GET", "/analytics/interactions")).toHaveLength(requestsBefore);
+  });
+
+  it("qualifies a recorded zero students value", async () => {
+    mockApi({ "GET /analytics/interactions": () => ({
+      ...snapshot, ranking: [{ id: 1, name: "Колледж связи", programs: 2, students: 0 }],
+    }) });
+    renderApp("/analytics");
+    const group = await screen.findByRole("listitem", { name: /Колледж связи: 2 внедрённых программ/ });
+    expect(group.getAttribute("aria-label")).toContain("0 студентов (возможно, данные не заполнены)");
+    expect(group.textContent).toContain("0*");
+    expect(screen.getByText(/0 может означать незаполненные данные/)).toBeTruthy();
+  });
 });
