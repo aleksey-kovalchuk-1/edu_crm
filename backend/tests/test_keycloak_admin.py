@@ -1,6 +1,7 @@
 import httpx
 import pytest
 
+from app import keycloak_admin
 from app.keycloak_admin import KeycloakAdminClient, KeycloakAdminError, KeycloakAdminUnavailable
 from fake_keycloak import ADMIN_BASE_URL, ADMIN_CLIENT_ID, ADMIN_CLIENT_SECRET, FakeKeycloak
 
@@ -43,6 +44,32 @@ def test_list_users_returns_all():
     assert {u.id for u in users} == {'u1', 'u2'}
 
 
+def test_create_account_starts_disabled_and_can_be_enabled_after_role_assignment():
+    fake = FakeKeycloak()
+    client = make_client(fake)
+    user_id = client.create_user(
+        username='admin_1', email='admin_1@example.test', first_name='Администратор',
+        last_name='Один', temporary_password='TemporarySecret123456789',
+    )
+    assert fake.admin_users[user_id]['enabled'] is False
+    assert fake.admin_users[user_id]['temporary_password'] == 'TemporarySecret123456789'
+    client.assign_realm_role(user_id, 'crm-admin')
+    client.set_user_enabled(user_id, True)
+    assert fake.admin_users[user_id]['enabled'] is True
+    assert fake.admin_users[user_id]['roles'] == ['crm-admin']
+
+
+def test_create_account_reports_duplicate_and_does_not_replace_existing_user():
+    fake = FakeKeycloak()
+    fake.add_admin_user(id='existing', email='admin_1@example.test', username='admin_1', roles=['crm-user'])
+    with pytest.raises(keycloak_admin.KeycloakAdminConflict):
+        make_client(fake).create_user(
+            username='admin_1', email='new@example.test', first_name='Администратор',
+            last_name='Другой', temporary_password='TemporarySecret123456789',
+        )
+    assert len(fake.admin_users) == 1
+
+
 def test_assign_realm_role_adds_it():
     fake = FakeKeycloak()
     fake.add_admin_user(id='u1', email='a@demo.local', username='a', roles=[])
@@ -55,6 +82,27 @@ def test_remove_realm_role_removes_it():
     fake.add_admin_user(id='u1', email='a@demo.local', username='a', roles=['crm-superadmin', 'crm-admin'])
     make_client(fake).remove_realm_role('u1', 'crm-superadmin')
     assert fake.admin_users['u1']['roles'] == ['crm-admin']
+
+
+def test_rename_user_preserves_identity_and_logs_out_old_sessions():
+    fake = FakeKeycloak()
+    fake.add_admin_user(id='irina-id', email='old@educrm-demo.ru', username='old', roles=['crm-admin'])
+    client = make_client(fake)
+    client.update_user(
+        'irina-id', username='irina_super_admin', email='irina_super_admin@educrm-demo.ru',
+        first_name='Ирина', last_name='Администратор',
+    )
+    client.logout_user('irina-id')
+    assert fake.admin_users['irina-id']['username'] == 'irina_super_admin'
+    assert fake.admin_users['irina-id']['email'] == 'irina_super_admin@educrm-demo.ru'
+    assert fake.logged_out_users == ['irina-id']
+
+
+def test_reset_existing_account_to_temporary_password():
+    fake = FakeKeycloak()
+    fake.add_admin_user(id='manager-id', email='old@educrm-demo.ru', username='old', roles=['crm-user'])
+    make_client(fake).set_temporary_password('manager-id', 'FreshTemporarySecret123456')
+    assert fake.admin_users['manager-id']['temporary_password'] == 'FreshTemporarySecret123456'
 
 
 def test_count_users_with_role():

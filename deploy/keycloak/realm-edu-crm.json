@@ -34,7 +34,7 @@
     "realm": [
       {
         "name": "crm-user",
-        "description": "Менеджер ключевых клиентов: видит и редактирует закреплённые за ним вузы"
+        "description": "Менеджер: работает с десятью общими вузами и закреплёнными за ним вузами"
       },
       {
         "name": "crm-supervisor",
@@ -42,7 +42,7 @@
       },
       {
         "name": "crm-admin",
-        "description": "Администратор: видит все данные и управляет доступом"
+        "description": "Администратор: видит все вузы и рабочие данные; создание аккаунтов доступно только главному администратору"
       },
       {
         "name": "crm-superadmin",
@@ -131,38 +131,62 @@
   ],
   "users": [
     {
-      "username": "anna.demo",
-      "firstName": "Анна",
-      "lastName": "Демо",
-      "email": "anna.demo@demo.local",
+      "username": "manager_1",
+      "firstName": "Менеджер",
+      "lastName": "1",
+      "email": "manager_1@educrm-demo.ru",
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${EDU_CRM_DEMO_USER_PASSWORD}", "temporary": false }
+        { "type": "password", "value": "${EDU_CRM_MANAGER_1_PASSWORD}", "temporary": true }
       ],
       "realmRoles": ["default-roles-edu-crm", "crm-user"]
     },
     {
-      "username": "pavel.demo",
-      "firstName": "Павел",
-      "lastName": "Демо",
-      "email": "pavel.demo@demo.local",
+      "username": "manager_2",
+      "firstName": "Менеджер",
+      "lastName": "2",
+      "email": "manager_2@educrm-demo.ru",
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${EDU_CRM_DEMO_SUPERVISOR_PASSWORD}", "temporary": false }
+        { "type": "password", "value": "${EDU_CRM_MANAGER_2_PASSWORD}", "temporary": true }
       ],
-      "realmRoles": ["default-roles-edu-crm", "crm-supervisor"]
+      "realmRoles": ["default-roles-edu-crm", "crm-user"]
     },
     {
-      "username": "irina.demo",
+      "username": "irina_super_admin",
       "firstName": "Ирина",
-      "lastName": "Демо",
-      "email": "irina.demo@demo.local",
+      "lastName": "Руководитель",
+      "email": "irina_super_admin@educrm-demo.ru",
       "emailVerified": true,
       "enabled": true,
       "credentials": [
-        { "type": "password", "value": "${EDU_CRM_DEMO_ADMIN_PASSWORD}", "temporary": false }
+        { "type": "password", "value": "${EDU_CRM_IRINA_PASSWORD}", "temporary": true }
+      ],
+      "realmRoles": ["default-roles-edu-crm", "crm-admin", "crm-supervisor", "crm-superadmin"]
+    },
+    {
+      "username": "admin_1",
+      "firstName": "Администратор",
+      "lastName": "1",
+      "email": "admin_1@educrm-demo.ru",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        { "type": "password", "value": "${EDU_CRM_ADMIN_1_PASSWORD}", "temporary": true }
+      ],
+      "realmRoles": ["default-roles-edu-crm", "crm-admin"]
+    },
+    {
+      "username": "admin_2",
+      "firstName": "Администратор",
+      "lastName": "2",
+      "email": "admin_2@educrm-demo.ru",
+      "emailVerified": true,
+      "enabled": true,
+      "credentials": [
+        { "type": "password", "value": "${EDU_CRM_ADMIN_2_PASSWORD}", "temporary": true }
       ],
       "realmRoles": ["default-roles-edu-crm", "crm-admin"]
     }

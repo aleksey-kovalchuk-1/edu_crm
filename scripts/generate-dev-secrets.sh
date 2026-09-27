@@ -8,8 +8,19 @@ dir=deploy/local
 keycloak_env="$dir/keycloak.env"
 api_env="$dir/api.env"
 
+random_text() {
+  # Letters and digits only, so values are safe in env files and URLs.
+  LC_ALL=C openssl rand -base64 64 | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c "$1"
+}
+
 if [[ -f "$keycloak_env" && -f "$api_env" ]]; then
   umask 077
+  for name in EDU_CRM_MANAGER_1_PASSWORD EDU_CRM_MANAGER_2_PASSWORD EDU_CRM_IRINA_PASSWORD EDU_CRM_ADMIN_1_PASSWORD EDU_CRM_ADMIN_2_PASSWORD; do
+    if ! grep -q "^${name}=" "$keycloak_env"; then
+      printf '%s=%s\n' "$name" "$(random_text 20)" >> "$keycloak_env"
+      echo "Added $name to $keycloak_env; existing passwords were kept."
+    fi
+  done
   if ! grep -q '^LEARNER_DATA_ENCRYPTION_KEY=' "$api_env"; then
     umask 077
     learner_key="$(openssl rand -base64 32 | tr '+/' '-_')"
@@ -30,11 +41,6 @@ if [[ -f "$keycloak_env" || -f "$api_env" ]]; then
   exit 1
 fi
 
-random_text() {
-  # Letters and digits only, so values are safe in env files and URLs.
-  LC_ALL=C openssl rand -base64 64 | LC_ALL=C tr -dc 'A-Za-z0-9' | head -c "$1"
-}
-
 mkdir -p "$dir"
 umask 077
 client_secret="$(random_text 40)"
@@ -50,9 +56,11 @@ KC_BOOTSTRAP_ADMIN_PASSWORD=$(random_text 24)
 KC_DB_PASSWORD=$(random_text 32)
 EDU_CRM_CLIENT_SECRET=$client_secret
 EDU_CRM_ADMIN_CLIENT_SECRET=$admin_client_secret
-EDU_CRM_DEMO_USER_PASSWORD=$(random_text 20)
-EDU_CRM_DEMO_SUPERVISOR_PASSWORD=$(random_text 20)
-EDU_CRM_DEMO_ADMIN_PASSWORD=$(random_text 20)
+EDU_CRM_MANAGER_1_PASSWORD=$(random_text 20)
+EDU_CRM_MANAGER_2_PASSWORD=$(random_text 20)
+EDU_CRM_IRINA_PASSWORD=$(random_text 20)
+EDU_CRM_ADMIN_1_PASSWORD=$(random_text 20)
+EDU_CRM_ADMIN_2_PASSWORD=$(random_text 20)
 EOF
 
 cat > "$api_env" <<EOF
@@ -65,4 +73,4 @@ FRAUD_MATCH_KEY_VERSION=1
 EOF
 
 echo "Created $keycloak_env and $api_env (local development only; never commit them)."
-echo "Demo logins: anna.demo (менеджер), pavel.demo (руководитель), irina.demo (администратор); passwords are in $keycloak_env."
+echo "Demo logins: irina_super_admin (руководитель), admin_1/admin_2 (администраторы), manager_1/manager_2 (менеджеры); passwords are in $keycloak_env."

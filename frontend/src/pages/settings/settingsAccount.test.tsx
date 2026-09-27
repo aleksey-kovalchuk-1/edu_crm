@@ -25,10 +25,10 @@ describe("settings account page", () => {
     mockApi({
       "GET /auth/me": () => sessionFixture(["crm-superadmin", "crm-admin"]),
       "GET /admin/users": () => ({
-        total: 2,
+        available: true, total: 2,
         users: [
-          { id: 1, email: "anna@demo.local", full_name: "Анна Демо", roles: ["crm-user"], is_active: true, created_at: "2026-01-01T00:00:00Z", last_login_at: null },
-          { id: 2, email: "oleg@demo.local", full_name: "Олег Кузнецов", roles: ["crm-admin"], is_active: true, created_at: "2026-01-01T00:00:00Z", last_login_at: null },
+          { keycloak_id: "kc-1", username: "anna", email: "anna@demo.local", full_name: "Анна Демо", roles: ["crm-user"], is_active: true, last_login_at: null },
+          { keycloak_id: "kc-2", username: "oleg", email: "oleg@demo.local", full_name: "Олег Кузнецов", roles: ["crm-admin"], is_active: true, last_login_at: null },
         ],
       }),
     });
