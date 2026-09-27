@@ -34,6 +34,7 @@ describe("new interaction analytics", () => {
     expect(params.get("time_zone")).toBe("Europe/Moscow");
     expect(screen.getByText(/Часовой пояс профиля: Europe\/Moscow/)).toBeTruthy();
     expect(screen.queryByText("Показатели по годам")).toBeNull();
+    expect(screen.queryByText("Период и вузы применяются ко всем трём графикам и PDF.")).toBeNull();
   });
 
   it("falls back to the browser timezone only when the profile has no timezone", async () => {
@@ -52,6 +53,7 @@ describe("new interaction analytics", () => {
     const api = mockApi({ "GET /analytics/interactions": () => snapshot });
     renderApp("/analytics");
     await screen.findByRole("heading", { name: "Вузы по этапам" });
+    fireEvent.click(screen.getByRole("button", { name: /Вузы: Все вузы/ }));
     const options = within(screen.getByRole("group", { name: "Вузы" }));
     fireEvent.click(await options.findByLabelText("КС"));
     fireEvent.click(options.getByLabelText("Технический университет"));
@@ -61,10 +63,24 @@ describe("new interaction analytics", () => {
       const query = new URLSearchParams(calls.at(-1)?.path.split("?")[1]);
       expect(query.getAll("university_id")).toEqual(["1", "2"]);
     });
-    const pdf = screen.getByRole("link", { name: "Скачать PDF" });
+    const pdf = await screen.findByRole("link", { name: "Скачать PDF" });
     const query = new URLSearchParams(pdf.getAttribute("href")!.split("?")[1]);
     expect(query.getAll("university_id")).toEqual(["1", "2"]);
     expect(pdf.getAttribute("href")).toContain("/api/v1/analytics/interactions.pdf?");
+  });
+
+  it("filters universities by name and keeps the picker in the page flow", async () => {
+    mockApi({ "GET /analytics/interactions": () => snapshot });
+    renderApp("/analytics");
+    fireEvent.click(await screen.findByRole("button", { name: /Вузы: Все вузы/ }));
+    const picker = screen.getByRole("group", { name: "Вузы" });
+    await within(picker).findByLabelText("КС");
+    fireEvent.change(within(picker).getByRole("searchbox", { name: "Найти вуз" }), { target: { value: "Технический" } });
+    expect(within(picker).queryByLabelText("КС")).toBeNull();
+    expect(within(picker).getByLabelText("Технический университет")).toBeTruthy();
+    fireEvent.click(within(picker).getByLabelText("Технический университет"));
+    expect(screen.getByRole("button", { name: /Вузы: Технический университет/ })).toBeTruthy();
+    expect(picker.className).toContain("analytics-university-picker");
   });
 
   it("rejects an inverted period before requesting data or allowing PDF download", async () => {
@@ -80,7 +96,7 @@ describe("new interaction analytics", () => {
     expect(api.callsTo("GET", "/analytics/interactions")).toHaveLength(requestsBefore);
   });
 
-  it("shows a clear empty state for each chart with no recorded events", async () => {
+  it("shows clearly marked example charts and a real-data flow when all actual charts are empty", async () => {
     mockApi({ "GET /analytics/interactions": () => ({
       ...snapshot,
       stages: snapshot.stages.map((stage) => ({ ...stage, count: 0 })),
@@ -89,7 +105,24 @@ describe("new interaction analytics", () => {
     }) });
     renderApp("/analytics");
 
-    expect(await screen.findAllByText("Нет данных за выбранный период")).toHaveLength(3);
+    expect(await screen.findByText("Нет данных за выбранный период")).toBeTruthy();
+    expect(screen.getByText(/демонстрационный пример/)).toBeTruthy();
+    expect(screen.getByText(/Создайте взаимодействие/)).toBeTruthy();
+    expect(screen.getByRole("img", { name: /Янв 2026 — 0/ })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "Рейтинг вузов по внедрённым программам и студентам" })).toBeTruthy();
+    expect(screen.queryByRole("link", { name: "Скачать PDF" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Скачать PDF" }).hasAttribute("disabled")).toBe(true);
+  });
+
+  it("does not mix example values into a partially populated real snapshot", async () => {
+    mockApi({ "GET /analytics/interactions": () => ({
+      ...snapshot, monthly: snapshot.monthly.map((month) => ({ ...month, count: 0 })),
+      ranking: [], has_implementation_data: false,
+    }) });
+    renderApp("/analytics");
+    expect(await screen.findAllByText("Нет данных за выбранный период")).toHaveLength(2);
+    expect(screen.queryByText(/демонстрационный пример/)).toBeNull();
+    expect(screen.getByRole("link", { name: "Скачать PDF" })).toBeTruthy();
   });
 
   it("blocks periods longer than ten years before querying or downloading", async () => {
@@ -109,8 +142,8 @@ describe("new interaction analytics", () => {
       ...snapshot, ranking: [{ id: 1, name: "Колледж связи", programs: 2, students: 0 }],
     }) });
     renderApp("/analytics");
-    const group = await screen.findByRole("listitem", { name: /Колледж связи: 2 внедрённых программ/ });
-    expect(group.getAttribute("aria-label")).toContain("0 студентов (возможно, данные не заполнены)");
+    const group = await screen.findByRole("listitem", { name: /Колледж связи: внедрённые программы — 2/ });
+    expect(group.getAttribute("aria-label")).toContain("студенты — 0 (возможно, данные не заполнены)");
     expect(group.textContent).toContain("0*");
     expect(screen.getByText(/0 может означать незаполненные данные/)).toBeTruthy();
   });
