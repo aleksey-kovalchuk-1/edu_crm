@@ -59,7 +59,8 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
       копирование (show the backups `scripts/db-backup.sh` already makes).
 - [ ] Data scopes admin screen; supervisor reassigns responsible people (T-025).
 - [ ] JSON export of results (T-034).
-- [ ] Promote users to supervisor/admin from Пользователи и роли (currently only first approval).
+- [x] Create manager and administrator accounts from Пользователи и роли (superadmin only).
+- [ ] Promote existing users to supervisor/admin from Пользователи и роли (currently creation and first approval only).
 
 ## 3. Integrations
 

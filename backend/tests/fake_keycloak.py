@@ -42,6 +42,8 @@ class FakeKeycloak:
         # responses resume. Decremented on every request while > 0.
         self.unavailable_calls_remaining = 0
         self.admin_users = {}  # id -> {"id", "email", "username", "roles": [...]}
+        self.logged_out_users = []
+        self.fail_role_assignment = False
         self.realm_password_policy = "length(12) and notUsername and notEmail and passwordHistory(3)"
         # Malformed-response simulation for the admin API, settable per test:
         #   'not_json'    -> GET /users returns 200 with a non-JSON body.
@@ -79,8 +81,11 @@ class FakeKeycloak:
             if claims['sub'] == subject:
                 claims['roles'] = list(roles)
 
-    def add_admin_user(self, *, id, email, username, roles):
-        self.admin_users[id] = {'id': id, 'email': email, 'username': username, 'roles': list(roles)}
+    def add_admin_user(self, *, id, email, username, roles, first_name='', last_name='', enabled=True):
+        self.admin_users[id] = {
+            'id': id, 'email': email, 'username': username, 'roles': list(roles),
+            'firstName': first_name, 'lastName': last_name, 'enabled': enabled,
+        }
 
     def handler(self, request):
         if self.unavailable:
@@ -153,9 +158,48 @@ class FakeKeycloak:
             users = list(self.admin_users.values())
             if email:
                 users = [u for u in users if u['email'] == email]
+            else:
+                first = int(request.url.params.get('first', '0'))
+                maximum = int(request.url.params.get('max', '100'))
+                users = users[first:first + maximum]
             return httpx.Response(200, json=[
-                {'id': u['id'], 'email': u['email'], 'username': u['username']} for u in users
+                {field: u[field] for field in ('id', 'email', 'username', 'firstName', 'lastName', 'enabled')}
+                for u in users
             ])
+        if suffix == 'users' and request.method == 'POST':
+            body = json.loads(request.content)
+            if any(u['username'].casefold() == body['username'].casefold() or
+                   u['email'].casefold() == body['email'].casefold() for u in self.admin_users.values()):
+                return httpx.Response(409)
+            user_id = f'kc-created-{len(self.admin_users) + 1}'
+            self.add_admin_user(
+                id=user_id, email=body['email'], username=body['username'], roles=[],
+                first_name=body.get('firstName', ''), last_name=body.get('lastName', ''),
+                enabled=body.get('enabled', True),
+            )
+            self.admin_users[user_id]['temporary_password'] = body['credentials'][0]['value']
+            return httpx.Response(201, headers={'Location': f'{ADMIN_BASE_URL}/admin/realms/edu-crm/users/{user_id}'})
+        if suffix.startswith('users/') and request.method in ('PUT', 'DELETE') and '/' not in suffix[len('users/'):]:
+            user_id = suffix[len('users/'):]
+            if user_id not in self.admin_users:
+                return httpx.Response(404)
+            if request.method == 'DELETE':
+                del self.admin_users[user_id]
+            else:
+                self.admin_users[user_id].update(json.loads(request.content))
+            return httpx.Response(204)
+        if suffix.startswith('users/') and suffix.endswith('/logout') and request.method == 'POST':
+            user_id = suffix[len('users/'):-len('/logout')]
+            if user_id not in self.admin_users:
+                return httpx.Response(404)
+            self.logged_out_users.append(user_id)
+            return httpx.Response(204)
+        if suffix.startswith('users/') and suffix.endswith('/reset-password') and request.method == 'PUT':
+            user_id = suffix[len('users/'):-len('/reset-password')]
+            if user_id not in self.admin_users:
+                return httpx.Response(404)
+            self.admin_users[user_id]['temporary_password'] = json.loads(request.content)['value']
+            return httpx.Response(204)
         if suffix.startswith('roles/') and suffix.endswith('/users') and request.method == 'GET':
             role_name = suffix[len('roles/'):-len('/users')]
             members = [u for u in self.admin_users.values() if role_name in u['roles']]
@@ -163,6 +207,8 @@ class FakeKeycloak:
                 {'id': u['id'], 'email': u['email'], 'username': u['username']} for u in members
             ])
         if suffix.startswith('users/') and suffix.endswith('/role-mappings/realm') and request.method in ('POST', 'DELETE'):
+            if self.fail_role_assignment and request.method == 'POST':
+                return httpx.Response(503)
             user_id = suffix[len('users/'):-len('/role-mappings/realm')]
             roles = json.loads(request.content)
             user = self.admin_users.get(user_id)

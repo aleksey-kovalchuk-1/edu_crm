@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 
 from app.models import AuditEvent
+from app.sync_partner_universities import PARTNERS, sync_partner_universities
 from helpers import database, login
 
 LAUNCH = {'program': 'Python', 'product': 'Учебная среда', 'owner': 'Менеджер', 'students': 30, 'deadline': '2026-10-01'}
@@ -96,6 +97,21 @@ def test_manager_sees_only_assigned_universities(head, manager):
     assert manager.get(f"/api/v1/universities/{other['id']}").status_code == 404
     assert manager.get(f"/api/v1/universities/{other['id']}/contacts").status_code == 404
     assert len(head.get('/api/v1/universities').json()) == 2
+
+
+def test_manager_can_work_with_all_ten_partner_universities_without_assignment(head, manager, database_url):
+    with database(database_url) as db:
+        sync_partner_universities(db, apply=True)
+        db.commit()
+    visible = manager.get('/api/v1/universities').json()
+    assert {row['name'] for row in visible} == {item.name for item in PARTNERS}
+    assert all(row['managers'] == [] for row in visible)
+    first_id = visible[0]['id']
+    created = manager.post('/api/v1/tasks', json={'title': 'Первый контакт', 'university_id': first_id})
+    assert created.status_code == 201, created.text
+
+    private = create_university(head, 'Новый непереданный вуз')
+    assert manager.get(f"/api/v1/universities/{private['id']}").status_code == 404
 
 
 def test_manager_registers_university_and_can_immediately_create_its_task(manager):

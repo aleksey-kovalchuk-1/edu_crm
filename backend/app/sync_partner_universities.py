@@ -61,15 +61,21 @@ def sync_partner_universities(db: Session, *, apply: bool) -> dict[str, int]:
     reactivated = [item for item in PARTNERS if item.name in by_name and not by_name[item.name].is_active]
     archived = [university for university in universities
                 if university.is_active and university.name in demo_names]
+    shared = [item for item in PARTNERS
+              if item.name not in by_name or not by_name[item.name].team_visible_to_managers]
     result = {'created': len(created), 'reactivated': len(reactivated),
-              'archived_demo': len(archived)}
+              'archived_demo': len(archived), 'shared_with_managers': len(shared)}
     if apply and any(result.values()):
         for item in created:
-            db.add(University(name=item.name, city=item.city))
+            db.add(University(name=item.name, city=item.city, team_visible_to_managers=True))
         for item in reactivated:
             by_name[item.name].is_active = True
+        for item in shared:
+            if item.name in by_name:
+                by_name[item.name].team_visible_to_managers = True
         for university in archived:
             university.is_active = False
+            university.team_visible_to_managers = False
         record_event(db, None, None, 'university.roster_sync', entity_type='university',
                      summary='Обновлён начальный список вузов по перечню заказчика', payload=result)
         db.flush()
