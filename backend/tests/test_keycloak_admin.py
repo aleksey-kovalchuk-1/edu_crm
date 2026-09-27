@@ -182,3 +182,28 @@ def test_401_on_a_request_clears_the_cached_token():
     with pytest.raises(KeycloakAdminError):
         client.list_users()
     assert client._token is None
+
+
+def test_update_user_names_writes_names_and_middle_name_keeping_other_attributes():
+    fake = FakeKeycloak()
+    fake.add_admin_user(id='kc-9', email='anna@x.test', username='anna', roles=['crm-user'],
+                        first_name='Анна', last_name='Петрова')
+    fake.admin_users['kc-9']['attributes'] = {'department': ['sales']}
+    make_client(fake).update_user_names('kc-9', first_name='Анна', last_name='Смирнова', middle_name='Сергеевна')
+    stored = fake.admin_users['kc-9']
+    assert (stored['firstName'], stored['lastName']) == ('Анна', 'Смирнова')
+    assert stored['username'] == 'anna' and stored['email'] == 'anna@x.test'
+    assert stored['attributes'] == {'department': ['sales'], 'middleName': ['Сергеевна']}
+
+
+def test_update_user_names_with_empty_middle_name_clears_it():
+    fake = FakeKeycloak()
+    fake.add_admin_user(id='kc-9', email='anna@x.test', username='anna', roles=['crm-user'])
+    fake.admin_users['kc-9']['attributes'] = {'middleName': ['Старое']}
+    make_client(fake).update_user_names('kc-9', first_name='Анна', last_name='Петрова', middle_name='')
+    assert fake.admin_users['kc-9']['attributes'] == {'middleName': []}
+
+
+def test_update_user_names_for_missing_user_raises():
+    with pytest.raises(KeycloakAdminError):
+        make_client(FakeKeycloak()).update_user_names('kc-missing', first_name='А', last_name='Б', middle_name='')
