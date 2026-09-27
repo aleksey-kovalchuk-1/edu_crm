@@ -16,7 +16,15 @@ request="$request_dir/request.json"
 claim="$request_dir/processing.json"
 STALE_MINUTES=360  # a claim older than this belongs to a run that crashed
 
-[[ -f "$request" ]] || exit 0
+[[ -e "$request" || -L "$request" ]] || exit 0
+# The request folder is writable by the container: never follow or act on a planted link.
+if [[ -L "$request" || ! -f "$request" ]]; then
+  echo 'Ignoring a request that is not a regular file' >&2
+  exit 0
+fi
+if [[ -L "$claim" ]]; then
+  rm -f "$claim"  # a link is never a real claim (removes the link itself, not its target)
+fi
 if [[ -e "$claim" ]]; then
   if [[ -n "$(find "$claim" -mmin +"$STALE_MINUTES" -print -quit)" ]]; then
     echo 'Clearing a stale manual-backup claim' >&2
@@ -26,7 +34,9 @@ if [[ -e "$claim" ]]; then
     exit 0
   fi
 fi
-mv "$request" "$claim"  # atomic within one folder: a second trigger finds nothing to take
+# rename(2) replaces a link at the destination instead of following it (unlike mv into a directory link);
+# atomic within one folder, so a second trigger finds nothing to take.
+python3 -c 'import os, sys; os.rename(sys.argv[1], sys.argv[2])' "$request" "$claim"
 trap 'rm -f "$claim"' EXIT
 
 label="manual-$(date -u +%Y%m%d-%H%M%S)"

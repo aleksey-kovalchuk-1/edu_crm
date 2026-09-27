@@ -53,6 +53,12 @@ class BackupStatusTests(unittest.TestCase):
         self.assertEqual(failed['last_run']['result'], 'failure')
         self.assertEqual(failed['last_run']['error'], 'attachments_backup_failed')
 
+    def test_unknown_backup_folder_keeps_the_previous_list(self):
+        self.file('edu_crm-20260926T033000Z-daily-20260926.dump.age')
+        self.write()
+        failed = self.write(backup_dir='', result='failure', error='preflight_failed', verified=None)
+        self.assertEqual([p['label'] for p in failed['pairs']], ['daily-20260926'])
+
     def test_running_has_no_finish_time(self):
         running = self.write(result='running', verified=None)
         self.assertEqual(running['last_run']['result'], 'running')

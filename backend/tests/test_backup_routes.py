@@ -72,7 +72,8 @@ def test_status_from_the_report(bk_client, dirs):
 def test_missing_and_damaged_reports_are_reported_honestly(bk_client, dirs):
     assert bk_client.get(f'{BASE}/status').json() == {'available': False, 'reason': 'no_report', 'last_run': None,
                                                         'last_success_at': None, 'stale': True, 'pairs': [],
-                                                        'retention': None, 'pending_request': False}
+                                                        'retention': None, 'pending_request': False,
+                                                        'pending_since': None}
     write(dirs, '{not json')
     assert bk_client.get(f'{BASE}/status').json()['reason'] == 'damaged'
     write(dirs, {**report(), 'schema': 99})
@@ -116,3 +117,21 @@ def test_a_run_stuck_in_running_for_hours_counts_as_interrupted(bk_client, dirs)
     body = bk_client.get(f'{BASE}/status').json()
     assert body['last_run']['result'] == 'interrupted'
     assert bk_client.post(f'{BASE}/manual').status_code == 202
+
+
+def test_a_claimed_request_still_counts_as_pending_with_its_age(bk_client, dirs):
+    write(dirs, report())
+    (dirs[1] / 'processing.json').write_text('{}')
+    body = bk_client.get(f'{BASE}/status').json()
+    assert body['pending_request'] is True
+    assert body['pending_since'] is not None
+
+
+def test_pending_since_is_the_request_age(bk_client, dirs):
+    write(dirs, report())
+    flag = dirs[1] / 'request.json'
+    flag.write_text('{}')
+    old = (datetime.now(timezone.utc) - timedelta(minutes=20)).timestamp()
+    os.utime(flag, (old, old))
+    since = datetime.fromisoformat(bk_client.get(f'{BASE}/status').json()['pending_since'].replace('Z', '+00:00'))
+    assert timedelta(minutes=19) < datetime.now(timezone.utc) - since < timedelta(minutes=21)

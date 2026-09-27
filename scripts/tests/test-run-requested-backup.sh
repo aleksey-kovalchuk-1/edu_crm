@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Synthetic check of the manual-backup request agent: one run per request flag, manual label, safe no-ops.
 set -euo pipefail
+# One assertion per line: under set -e, a failing command on the left of && does not stop the script.
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
@@ -22,20 +23,35 @@ printf '{"requested_at": "2026-09-27T12:00:00Z", "requested_by_user_id": 1}' > "
 "$root/scripts/run-requested-backup.sh"
 test "$(wc -l < "$FAKE_RUN_LOG" | tr -d ' ')" = 1
 grep -Eq '^manual manual-[0-9]{8}-[0-9]{6}$' "$FAKE_RUN_LOG"
-test ! -e "$tmp/requests/request.json" && test ! -e "$tmp/requests/processing.json"
+test ! -e "$tmp/requests/request.json"
+test ! -e "$tmp/requests/processing.json"
 "$root/scripts/run-requested-backup.sh"                      # re-triggered by its own changes: no second run
 test "$(wc -l < "$FAKE_RUN_LOG" | tr -d ' ')" = 1
 
 printf '{}' > "$tmp/requests/request.json"
 printf '{}' > "$tmp/requests/processing.json"                # a run is in progress: leave the new request waiting
 "$root/scripts/run-requested-backup.sh"
-test "$(wc -l < "$FAKE_RUN_LOG" | tr -d ' ')" = 1 && test -e "$tmp/requests/request.json"
+test "$(wc -l < "$FAKE_RUN_LOG" | tr -d ' ')" = 1
+test -e "$tmp/requests/request.json"
 
 touch -t 202601010000 "$tmp/requests/processing.json"         # crashed run long ago: stale claim is cleared
 "$root/scripts/run-requested-backup.sh"
-test "$(wc -l < "$FAKE_RUN_LOG" | tr -d ' ')" = 2 && test ! -e "$tmp/requests/processing.json"
+test "$(wc -l < "$FAKE_RUN_LOG" | tr -d ' ')" = 2
+test ! -e "$tmp/requests/processing.json"
 
 printf '{}' > "$tmp/requests/request.json"                   # a failed backup still releases the claim
 if FAKE_RUN_EXIT=3 "$root/scripts/run-requested-backup.sh"; then echo 'failure was hidden' >&2; exit 1; fi
-test ! -e "$tmp/requests/processing.json" && test ! -e "$tmp/requests/request.json"
+test ! -e "$tmp/requests/processing.json"
+test ! -e "$tmp/requests/request.json"
+mkdir "$tmp/elsewhere"                                        # planted links are never followed
+ln -s "$tmp/elsewhere" "$tmp/requests/processing.json"
+touch -h -t 202601010000 "$tmp/requests/processing.json"
+printf '{}' > "$tmp/requests/request.json"
+"$root/scripts/run-requested-backup.sh"
+test -z "$(ls -A "$tmp/elsewhere")"
+test ! -e "$tmp/requests/processing.json"
+ln -s /etc/hosts "$tmp/requests/request.json"                   # a symlinked request is refused, not run
+"$root/scripts/run-requested-backup.sh" 2>/dev/null
+test "$(wc -l < "$FAKE_RUN_LOG" | tr -d ' ')" = 4
+test -L "$tmp/requests/request.json"
 echo 'Requested backup synthetic checks passed.'

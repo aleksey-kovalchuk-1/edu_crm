@@ -106,4 +106,17 @@ if BACKUP_CONFIG_FILE="$tmp/status.env" BACKUP_LABEL='../evil' "$root/scripts/sc
   echo 'an unsafe label was accepted' >&2; exit 1
 fi
 
+# A run that fails before its first step (e.g. missing config) still reports the failure and keeps the list.
+if BACKUP_CONFIG_FILE="$tmp/missing.env" BACKUP_STATUS_DIR="$tmp/status" BACKUP_TRIGGER=manual \
+    BACKUP_LABEL=manual-20260927-140000 "$root/scripts/scheduled-backup.sh" >/dev/null 2>&1; then
+  echo 'a run without config succeeded' >&2; exit 1
+fi
+python3 - "$tmp/status/status.json" <<'PY'
+import json, sys
+status = json.load(open(sys.argv[1]))
+run = status['last_run']
+assert run['result'] == 'failure' and run['error'] == 'preflight_failed' and run['label'] == 'manual-20260927-140000', run
+assert any(p['label'] == 'manual-20260927-130000' for p in status['pairs']), 'earlier copies must stay listed'
+PY
+
 echo 'Scheduled backup synthetic checks passed.'

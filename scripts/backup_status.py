@@ -61,7 +61,8 @@ def write_status(status_dir, backup_dir, trigger, label, started_at, result, ver
             'result': result, 'verified': verified, 'error': error,
         },
         'last_success_at': now if result == 'success' else previous.get('last_success_at'),
-        'pairs': scan_pairs(backup_dir) if Path(backup_dir).is_dir() else [],
+        # No backup folder known yet (the run failed before reading its configuration): keep the last list.
+        'pairs': scan_pairs(backup_dir) if backup_dir and Path(backup_dir).is_dir() else previous.get('pairs', []),
         'retention': {'days': retention_days, 'min_pairs': min_pairs,
                       'verification_configured': verification_configured},
     }
