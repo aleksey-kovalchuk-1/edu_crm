@@ -56,7 +56,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [x] In-app notification centre and Настройки → Уведомления, including the date-based scheduler.
 - [ ] Email delivery of notifications needs a configured provider; production currently uses log-only delivery.
 - [x] Fill Настройки → Организация and Резервное копирование (status of complete encrypted pairs).
-- [ ] Optional manual backup trigger from the web UI; retain host-side execution and no recovery key in API.
+- [x] Manual backup trigger from the web UI; execution remains on the host, with no recovery key in API.
 - [ ] Data scopes admin screen; supervisor reassigns responsible people (T-025).
 - [x] JSON export of full interaction reports (T-034): same filters/columns, server-side scope and audit.
 - [x] Create manager and administrator accounts from Пользователи и роли (superadmin only).
