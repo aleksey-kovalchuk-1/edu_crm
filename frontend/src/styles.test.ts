@@ -27,9 +27,8 @@ describe("styles.css design tokens", () => {
   });
 
 
-  it("gives the organization line in the dark sidebar the sidebar's muted colour (readable contrast)", () => {
-    const rule = withoutComments(rules).match(/\.sidebar \.brand-org\s*\{([^}]*)\}/);
-    expect(rule?.[1]).toMatch(/color:\s*var\(--sidebar-text-muted\)/);
+  it("shows the organization line under UniCRM in the soft text colour", () => {
+    expect(rule(".brand-org")).toMatch(/color:\s*var\(--atmr-fg-soft\)/);
   });
   it("has no text token smaller than 12px", () => {
     const px = [...tokens.matchAll(/--text-[\w]+:\s*(\d+)px/g)].map((m) => Number(m[1]));
@@ -61,5 +60,24 @@ describe("styles.css design tokens", () => {
         ),
       );
     }
+  });
+  const rule = (selector: string) =>
+    withoutComments(rules).match(new RegExp(`(?:^|\\n)${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+
+  it("lets the side menu scroll so its last entries stay reachable on short screens", () => {
+    expect(rule(".sidebar")).toMatch(/overflow-y:\s*auto/);
+  });
+
+  it("turns the side menu into a drawer below 1280px", () => {
+    expect(withoutComments(rules)).toMatch(/@media \(max-width: 1279px\)\s*\{[^@]*\.sidebar\s*\{[^}]*transform:\s*translateX\(-100%\)/);
+  });
+
+  it("gives menu items and the top-bar buttons at least 44px", () => {
+    expect(withoutComments(rules)).toMatch(/(?:^|\n)\.nav-item,\s*\.nav-subitem\s*\{[^}]*min-height:\s*44px/);
+    expect(rule(".topbar .icon-button")).toMatch(/width:\s*var\(--atmr-size-l\)/);
+  });
+
+  it("has no hover flyout styles left", () => {
+    expect(css).not.toMatch(/\.settings-menu-panel/);
   });
 });
