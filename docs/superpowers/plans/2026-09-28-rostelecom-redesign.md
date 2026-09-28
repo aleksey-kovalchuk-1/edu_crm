@@ -1430,6 +1430,20 @@ Report progress to the owner: commits, test counts, audit summary before/after p
 **Scope:** buttons (`primary`, `secondary`, `danger`, `text-button`, `icon-button`), inputs, native selects and date fields (restyled, still native), textareas, checkboxes and switches with 44 px hit areas, chips (`filter-pill`), segmented view switches, tags and badges (stage colour dot + text), inline notifications (`ErrorAlert`, `QueryState`), toasts, tables (`data-table`, `table-wrap`: size M, sticky header, framed horizontal scroll), pagination, dialogs (`Modal.tsx`: focus trap, Esc, backdrop), empty and loading states, field hints and errors (`field-hint`, `field-error` with `aria-describedby`).
 **Acceptance:** every class listed restyled with `--atmr-*`/`--crm-*` tokens only; the audit reports zero phone controls under 44 px across all pages; no text below AA; all existing tests pass; before/after screenshots.
 
+**Approach:** the shared rules are replaced where they are defined today (base elements, `.primary`/`.secondary`/`.danger`/`.text-button`/`.icon-button`, fields, `table`/`th`/`td`, `.badge*`, `.error`, `.empty`/`.loading`, `dialog`/`.modal`, `.tabs`/`.tab`, `.chip`, `.pagination`, `.field-error`/`.field-hint`), keeping class names so no page markup changes except where noted. Page-specific rules are left to Stage 3.
+
+**Tasks:**
+1. *Guards first* (`styles.test.ts`): focus = 2 px accent outline with 2 px offset; `html` has `scroll-padding-top` ≥ the top bar; no `font-size: 0` anywhere (the phone create button keeps its label); table cells 14 px `--atmr-fg-default`, headers 14 px `--atmr-fg-soft`; phone rules give buttons, icon buttons, chips, tabs, pagination buttons and fields at least 44 px, and fields 16 px text (no iOS zoom).
+2. *Buttons and links* — primary / secondary / outline / danger / text; `.page-heading .primary` 48 px; M 36 px elsewhere on desktop; 44 px on phones; disabled state without `cursor: wait`.
+3. *Fields* — inputs, selects (custom chevron), textareas: 40 px desktop (`--atmr-size-m-chip`), 44 px phone, 1 px `--crm-input-border`, 8 px radius, 14/16 px text, focus border accent, placeholders `--atmr-fg-muted`; checkboxes and radios `accent-color`, 44 px label hit area on phones.
+4. *Tables* — size M, header `bg-surface2`, row dividers `border-muted`, row hover `accent-container-soft`, numbers right-aligned where marked.
+5. *Tags and badges* — neutral container, stage/status dot + 14 px text.
+6. *Feedback* — `.error` as an error inline notification (icon, text, retry), `.loading` with `role="status"` and a 300 ms delayed fade-in (no flash), `.empty` with body text; `dialog` 12 px radius, `--crm-overlay` backdrop.
+7. *Tabs, chips, pagination* — tabs with an accent underline, chips as pills with `aria-pressed` styling, pagination 36/44 px.
+8. *Verify* — full suite, type check, lint, build, audit (phone tap targets in shared controls must be zero; remaining page-specific findings go to Stage 3).
+
+**Rulings (28 Sep 2026):** fields are 40 px on desktop instead of the spec's 48 px (the Storybook's 40 px `size-m-chip` step) because 48 px fields made dense filter bars and table toolbars too tall for a working register; phones stay at 44 px. Field borders are 1 px `--atmr-neutral-400` (4.06:1, meets 3:1) instead of 2 px, which read too heavy at that density.
+
 ## Stage 3 — Daily workflows
 
 **Scope:** Overview (figures strip, «Ближайшие задачи», «Программы в работе», «Последние действия», demo chart labelled), Universities list and detail (existing columns and actions only), Contracts, Interactions register as the default view with the stage board one click away, Interaction detail with status timeline, Tasks (list, deadlines, planner, filters, bulk actions) and Task detail. Body text rises to 16 px here; tables stay 14 px. Phone layouts use stacked rows for the main lists.

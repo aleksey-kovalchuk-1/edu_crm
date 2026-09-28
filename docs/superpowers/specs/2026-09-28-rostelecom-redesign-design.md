@@ -123,7 +123,7 @@ UniCRM builds these itself, following the named Storybook component's look and s
 | --- | --- | --- |
 | Button | Button | Primary (accent fill), secondary (accent container), outline (white, `border-soft`), text, danger (error-700). Sizes L 48 px, M 36 px (44 px below 768). One primary per view. |
 | Icon button | IconButton | 48 px (44 px minimum), always an `aria-label`; the `title` attribute is not the only name. |
-| Input, select, date, textarea | Input, Select, InputDate, Textarea | Label above (14/20 500), 48 px, 2 px `--crm-input-border`, 8 px radius, focus border accent; hint below (12/16 soft); error below in error-700 with an icon, `aria-invalid` and `aria-describedby`. Dates in ДД.ММ.ГГГГ. Native `<select>` and `<input type="date">` stay native in Stage 2 (restyled), keeping keyboard and screen-reader behaviour. |
+| Input, select, date, textarea | Input, Select, InputDate, Textarea | Label above (14/20 500), 40 px on desktop (44 px on phones), 1 px `--crm-input-border`, 8 px radius, focus border accent; hint below (12/16 soft); error below in error-700 with an icon, `aria-invalid` and `aria-describedby`. Dates in ДД.ММ.ГГГГ. Native `<select>` and `<input type="date">` stay native in Stage 2 (restyled), keeping keyboard and screen-reader behaviour. |
 | Checkbox, switch | Checkbox, Switch | 20 px box, 44 px hit area, accent fill. |
 | Chip (filter toggle) | Chips | 40 px (44 px below 768), `aria-pressed`, count in soft text. |
 | Segmented control (view switch) | SegmentedControl | Group of `aria-pressed` buttons; used for «Реестр / Доска», «Список / Сроки / Мой план». |
