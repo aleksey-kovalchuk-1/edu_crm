@@ -1989,18 +1989,9 @@ dialog.wide {
   padding-left: var(--space-4);
   line-height: 1.6;
 }
-.notice-success {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
+/* The import page's success line; the shared .notice-success tone rule is defined with .notice. */
+.import-success {
   margin-bottom: var(--space-4);
-  border: 1px solid var(--color-success-border);
-  border-radius: var(--radius-md);
-  background: var(--color-success-soft);
-  color: var(--color-success);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
 }
 .banner-warning {
   display: flex;
@@ -4394,8 +4385,18 @@ dialog.wide {
   display: flex;
   align-items: center;
   gap: var(--atmr-spacing-2x);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
   font: var(--atmr-font-body-s);
   color: var(--atmr-fg-soft);
+}
+.breadcrumbs strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.topbar-right {
+  flex: none;
 }
 .breadcrumbs strong {
   color: var(--atmr-fg-default);
@@ -4547,6 +4548,12 @@ dialog.wide {
     inset: 64px 0 0 0;
     z-index: calc(var(--atmr-z-index-overlay) - 1);
     background: var(--crm-overlay);
+  }
+}
+@media (max-width: 1023px) {
+  .profile-text,
+  .demo-badge {
+    display: none;
   }
 }
 @media (max-width: 767px) {
@@ -4704,6 +4711,140 @@ footer {
 }
 .launch-code {
   white-space: nowrap;
+}
+/* ——— Settings (Stage 3S) ——— */
+.settings-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--atmr-spacing-4x);
+  max-width: 880px;
+  padding: 0 var(--atmr-spacing-6x) var(--atmr-spacing-6x);
+}
+.settings-body .wizard-body {
+  padding: 0;
+}
+.settings-body label:not(.checkbox-row),
+.settings-panel .wizard-body label:not(.checkbox-row) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--atmr-spacing-1x);
+  color: var(--atmr-fg-default);
+  font: var(--atmr-font-body-s-strong);
+}
+.settings-body label:not(.checkbox-row) > :is(input, select, textarea),
+.settings-panel .wizard-body label:not(.checkbox-row) > :is(input, select, textarea) {
+  width: 100%;
+}
+.settings-body .form-row,
+.settings-panel .form-row {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  align-items: end;
+}
+.settings-body h3 {
+  margin-top: var(--atmr-spacing-2x);
+  font: var(--atmr-font-heading-h3);
+}
+.settings-body .wizard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--atmr-spacing-2x);
+}
+.notice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--atmr-spacing-3x);
+  padding: var(--atmr-spacing-3x) var(--atmr-spacing-4x);
+  border-radius: var(--atmr-border-radius-m);
+  font: var(--atmr-font-body-s);
+}
+.notice > svg {
+  flex: none;
+  margin-top: 0;
+}
+.notice-text {
+  min-width: 0;
+}
+.notice-info {
+  background: var(--atmr-info-container-default);
+  color: var(--atmr-info-600);
+}
+.notice-success {
+  background: var(--atmr-success-container-default);
+  color: var(--atmr-success-700);
+}
+.notice-warning {
+  background: var(--atmr-warning-container-default);
+  color: var(--atmr-warning-800);
+}
+.notice-error {
+  background: var(--atmr-error-container-default);
+  color: var(--atmr-error-700);
+}
+.notice .notice-text {
+  color: var(--atmr-fg-default);
+}
+.error-summary ul {
+  margin: var(--atmr-spacing-2x) 0 0;
+  padding-left: var(--atmr-spacing-5x);
+}
+.error-summary a {
+  color: var(--atmr-error-700);
+  text-decoration: underline;
+}
+.checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--atmr-spacing-2x);
+  font: var(--atmr-font-body-s);
+}
+.checkbox-row input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  flex: none;
+}
+.notification-group {
+  border: 1px solid var(--atmr-border-soft);
+  border-radius: var(--atmr-border-radius-m);
+  padding: var(--atmr-spacing-3x) var(--atmr-spacing-4x);
+}
+.notification-group legend {
+  font: var(--atmr-font-body-s-strong);
+  padding: 0 var(--atmr-spacing-1x);
+}
+.sender-queue li {
+  padding: var(--atmr-spacing-3x) 0;
+  border-bottom: 1px solid var(--atmr-border-muted);
+  font: var(--atmr-font-body-s);
+}
+.sender-queue li:last-child {
+  border-bottom: 0;
+}
+.organization-details dt {
+  color: var(--atmr-fg-soft);
+  font: var(--atmr-font-body-s);
+}
+@media (max-width: 767px) {
+  .settings-body {
+    padding: 0 var(--atmr-spacing-4x) var(--atmr-spacing-4x);
+  }
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  .checkbox-row {
+    min-height: 44px;
+    align-items: center;
+  }
+  .error button {
+    min-height: 44px;
+  }
+  .organization-details div {
+    grid-template-columns: 1fr;
+    gap: var(--atmr-spacing-1x);
+  }
+  .settings-body .wizard-actions > * {
+    flex: 1 1 100%;
+  }
 }
 @media (max-width: 767px) {
   .segmented {

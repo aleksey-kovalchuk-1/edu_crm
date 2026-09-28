@@ -4,7 +4,11 @@ import { useLoginHistory, usePasswordPolicy, useSessions, useTerminateOthers, us
 import { formatDateTime } from "../../lib/format";
 import { useAdminUsers, usePendingRegistrations, useResetUserPassword } from "../../api/admin";
 import { useSession } from "../../app/AuthGate";
+import { Modal } from "../../components/Modal";
+import { Notice } from "../../components/Notice";
 import { ErrorAlert, queryFallback, RefreshError } from "../../components/QueryState";
+import type { SessionItem } from "../../api/security";
+import { SettingsPanel } from "./SettingsPanel";
 import { ROLES } from "../../lib/user";
 
 const STATES = { active: "Активен", ended: "Завершён", expired: "Истёк" } as const;
@@ -31,12 +35,20 @@ function SessionsPanel() {
   const terminate = useTerminateSession();
   const terminateOthers = useTerminateOthers();
   const [notice, setNotice] = useState("");
+  // Ending a session signs that device out, so it is confirmed first, naming what ends.
+  const [confirming, setConfirming] = useState<{ kind: "one"; session: SessionItem } | { kind: "others" } | null>(null);
   const error = terminate.error ?? terminateOthers.error;
   const hasOthers = (sessions.data ?? []).some((s) => !s.current);
+  function confirmEnd() {
+    if (!confirming) return;
+    const done = { onSuccess: (r: { message: string }) => setNotice(r.message), onSettled: () => setConfirming(null) };
+    if (confirming.kind === "one") terminate.mutate(confirming.session.id, done);
+    else terminateOthers.mutate(undefined, done);
+  }
   return (
-    <section className="panel" aria-labelledby="sessions-title">
-      <h2 id="sessions-title">Мои сеансы</h2>
-      {sessions.isError && <p className="danger" role="alert">{errorText(sessions.error)}</p>}
+    <SettingsPanel titleId="sessions-title" title="Мои сеансы" description="Устройства, на которых вы вошли в CRM. Завершённый сеанс потребует входа заново.">
+      {sessions.isPending && <div className="loading" role="status">Загружаем сеансы…</div>}
+      {sessions.isError && <ErrorAlert error={sessions.error} onRetry={() => void sessions.refetch()} />}
       <ul className="sender-queue">
         {sessions.data?.map((s) => (
           <li key={s.id}>
@@ -46,18 +58,33 @@ function SessionsPanel() {
             </div>
             {!s.current && (
               <button type="button" className="secondary" aria-label={`Завершить сеанс ${s.device}`} disabled={terminate.isPending}
-                onClick={() => terminate.mutate(s.id, { onSuccess: (r) => setNotice(r.message) })}>Завершить</button>
+                onClick={() => setConfirming({ kind: "one", session: s })}>Завершить</button>
             )}
           </li>
         ))}
       </ul>
       {hasOthers && (
         <button type="button" className="secondary" disabled={terminateOthers.isPending}
-          onClick={() => terminateOthers.mutate(undefined, { onSuccess: (r) => setNotice(r.message) })}>Завершить все остальные</button>
+          onClick={() => setConfirming({ kind: "others" })}>Завершить все остальные</button>
       )}
-      {notice && <p role="status" className="muted">{notice}</p>}
-      {error && <p className="danger" role="alert">{errorText(error)}</p>}
-    </section>
+      {notice && <Notice tone="info">{notice}</Notice>}
+      {error && <Notice tone="error">{errorText(error)}</Notice>}
+      {confirming && (
+        <Modal title={confirming.kind === "one" ? "Завершить сеанс?" : "Завершить все остальные сеансы?"} close={() => setConfirming(null)}>
+          <p className="form-note">
+            {confirming.kind === "one"
+              ? `Устройство «${confirming.session.device}» выйдет из CRM и потребует входа заново.`
+              : "Все устройства, кроме этого, выйдут из CRM и потребуют входа заново."}
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="secondary" onClick={() => setConfirming(null)}>Отмена</button>
+            <button type="button" className="primary" disabled={terminate.isPending || terminateOthers.isPending} onClick={confirmEnd}>
+              {confirming.kind === "one" ? "Завершить сеанс" : "Завершить все остальные"}
+            </button>
+          </div>
+        </Modal>
+      )}
+    </SettingsPanel>
   );
 }
 
@@ -65,9 +92,9 @@ function HistoryPanel() {
   const history = useLoginHistory();
   const data = history.data;
   return (
-    <section className="panel" aria-labelledby="history-title">
-      <h2 id="history-title">История входов</h2>
-      {history.isError && <p className="danger" role="alert">{errorText(history.error)}</p>}
+    <SettingsPanel titleId="history-title" title="История входов" description="Входы в CRM за 30 дней и события журнала Keycloak.">
+      {history.isPending && <div className="loading" role="status">Загружаем историю входов…</div>}
+      {history.isError && <ErrorAlert error={history.error} onRetry={() => void history.refetch()} />}
       <h3>Входы в CRM (30 дней)</h3>
       {data?.crm.length === 0 && <p className="muted">Входов за 30 дней нет</p>}
       <ul className="sender-queue">
@@ -83,7 +110,7 @@ function HistoryPanel() {
           <li key={i}><span>{formatDateTime(e.at)} · <strong>{e.label}</strong></span><span className="muted">{e.ip}</span></li>
         ))}
       </ul>
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -91,9 +118,9 @@ function PolicyPanel() {
   const policy = usePasswordPolicy();
   const data = policy.data;
   return (
-    <section className="panel" aria-labelledby="policy-title">
-      <h2 id="policy-title">Парольная политика</h2>
-      {policy.isError && <p className="danger" role="alert">{errorText(policy.error)}</p>}
+    <SettingsPanel titleId="policy-title" title="Парольная политика" description="Требования Keycloak к паролям сотрудников.">
+      {policy.isPending && <div className="loading" role="status">Загружаем политику…</div>}
+      {policy.isError && <ErrorAlert error={policy.error} onRetry={() => void policy.refetch()} />}
       {data && !data.available && <p className="muted">Политика сейчас недоступна: нет связи с Keycloak.</p>}
       {data?.available && (
         <ul>
@@ -110,7 +137,7 @@ function PolicyPanel() {
         </div>
       )}
       {data?.admin_console_url && <p className="muted">Политику меняет администратор в консоли Keycloak (нужна учётная запись администратора Keycloak).</p>}
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -132,13 +159,11 @@ function PasswordManager() {
   }
 
   return (
-    <section className="panel" aria-labelledby="password-management-title">
-      <div className="section-head">
-        <div>
-          <h2 id="password-management-title">Управление паролями</h2>
-          <p>Новый временный пароль потребуется передать сотруднику лично. Все его прежние сеансы завершатся.</p>
-        </div>
-      </div>
+    <SettingsPanel
+      titleId="password-management-title"
+      title="Управление паролями"
+      description="Новый временный пароль потребуется передать сотруднику лично. Все его прежние сеансы завершатся."
+    >
       {reset.error && <ErrorAlert error={reset.error} />}
       {queryFallback([users, pending]) ?? (
         <>
@@ -174,6 +199,6 @@ function PasswordManager() {
           </p>
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }

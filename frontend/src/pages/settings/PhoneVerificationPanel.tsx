@@ -70,7 +70,7 @@ export function PhoneVerificationPanel() {
   }
 
   return (
-    <section className="panel" aria-labelledby="profile-phone-title">
+    <section className="panel settings-panel" aria-labelledby="profile-phone-title">
       <div className="section-head">
         <div>
           <h2 id="profile-phone-title">Мобильный телефон</h2>

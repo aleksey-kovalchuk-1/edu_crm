@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { mockApi, renderApp } from "../../test/utils";
+import { apiError, mockApi, renderApp } from "../../test/utils";
 
 const ev = (key: string, label: string, enabled: boolean) => ({ key, label, enabled, default: enabled });
 const prefs = (paused_until: string | null = null) => ({
@@ -59,5 +59,17 @@ describe("settings notifications", () => {
     await screen.findByText("Уведомления приостановлены до выключения паузы");
     fireEvent.click(screen.getByRole("button", { name: "Возобновить уведомления" }));
     await waitFor(() => expect(api.callsTo("PUT", "/notifications/pause")[0].body).toEqual({ duration: "off" }));
+  });
+
+  it("offers a retry when the preferences cannot be loaded, and recovers", async () => {
+    let fail = true;
+    mockApi({
+      "GET /notifications/preferences": () => (fail ? apiError(503, "SERVICE_UNAVAILABLE", "Настройки недоступны") : prefs()),
+    });
+    renderApp("/settings/notifications");
+    expect(await screen.findByText(/Настройки недоступны/)).toBeTruthy();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: /Повторить/ }));
+    expect(await screen.findByRole("region", { name: "Пауза" })).toBeTruthy();
   });
 });

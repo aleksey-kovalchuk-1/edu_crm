@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Notice } from "../../components/Notice";
 import { errorText } from "../../api/client";
 import {
   SENDER_STATUS_LABELS, useRequestSender, useSenders, useTestSend, useWithdrawRequest, type Sender,
@@ -33,7 +34,7 @@ export function SenderAddressPanel() {
   }
 
   return (
-    <section className="panel" aria-labelledby="profile-sender-title">
+    <section className="panel settings-panel" aria-labelledby="profile-sender-title">
       <div className="section-head">
         <div>
           <h2 id="profile-sender-title">Адрес отправителя</h2>
@@ -62,7 +63,7 @@ export function SenderAddressPanel() {
             ))}
           </select>
         </label>
-        {update.isError && <p className="danger" role="alert">{errorText(update.error)}</p>}
+        {update.isError && <Notice tone="error">{errorText(update.error)}</Notice>}
 
         {ownNotUsable.map((s) => (
           <p key={s.id} className="sender-request">
@@ -94,15 +95,15 @@ export function SenderAddressPanel() {
             </button>
           </form>
         )}
-        {requestSender.isError && <p className="danger" role="alert">{errorText(requestSender.error)}</p>}
+        {requestSender.isError && <Notice tone="error">{errorText(requestSender.error)}</Notice>}
 
         <div className="wizard-actions">
           <button type="button" className="secondary" disabled={testSend.isPending} onClick={() => testSend.mutate()}>
             {testSend.isPending ? "Отправляем…" : "Отправить тестовое письмо себе"}
           </button>
         </div>
-        {testSend.data && <p role="status" className={testSend.data.delivered ? "text-green" : "muted"}>{testSend.data.message}</p>}
-        {testSend.isError && <p className="danger" role="alert">{errorText(testSend.error)}</p>}
+        {testSend.data && <Notice tone={testSend.data.delivered ? "success" : "info"}>{testSend.data.message}</Notice>}
+        {testSend.isError && <Notice tone="error">{errorText(testSend.error)}</Notice>}
       </div>
     </section>
   );

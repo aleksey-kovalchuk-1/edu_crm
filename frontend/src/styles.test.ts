@@ -148,5 +148,33 @@ describe("styles.css design tokens", () => {
       expect(phone).toMatch(/\.segmented button\s*\{[^}]*min-height:\s*44px/);
     });
   });
+
+  describe("settings (Stage 3S)", () => {
+    const clean = withoutComments(rules);
+    const phone = [...clean.matchAll(/@media \(max-width: 767px\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join("\n");
+
+    it("puts settings labels above their fields", () => {
+      expect(clean).toMatch(/\.settings-body label:not\(\.checkbox-row\),\s*\.settings-panel \.wizard-body label:not\(\.checkbox-row\)\s*\{[^}]*display:\s*flex;[^}]*flex-direction:\s*column/);
+    });
+
+    it("colours notices with the tone container and the tone's text step", () => {
+      expect(rule(".notice-error")).toMatch(/background:\s*var\(--atmr-error-container-default\)/);
+      expect(rule(".notice-error")).toMatch(/color:\s*var\(--atmr-error-700\)/);
+      expect(rule(".notice-success")).toMatch(/color:\s*var\(--atmr-success-700\)/);
+      expect(rule(".notice-warning")).toMatch(/color:\s*var\(--atmr-warning-800\)/);
+      expect(rule(".notice-info")).toMatch(/color:\s*var\(--atmr-info-600\)/);
+    });
+
+    it("keeps the top bar within the screen on tablets", () => {
+      expect(clean).toMatch(/@media \(max-width: 1023px\)\s*\{[^@]*\.profile-text,\s*\.demo-badge\s*\{[^}]*display:\s*none/);
+      expect(rule(".breadcrumbs")).toMatch(/min-width:\s*0/);
+      expect(phone).toMatch(/\.error button\s*\{[^}]*min-height:\s*44px/);
+    });
+
+    it("stacks settings form rows and gives checkbox rows 44px on phones", () => {
+      expect(phone).toMatch(/\.form-row\s*\{[^}]*grid-template-columns:\s*1fr/);
+      expect(phone).toMatch(/\.checkbox-row\s*\{[^}]*min-height:\s*44px/);
+    });
+  });
 });
 
