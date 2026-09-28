@@ -134,11 +134,17 @@ def terminate_others(request: Request, auth: AuthContext = Depends(any_role), db
         result, down = _end_quietly(request, auth, session, now, keycloak_down=keycloak_down)
         keycloak_down = keycloak_down or down
         results.append(result)
-    all_ended = all(r != NOT_ENDED for r in results)
+    # True only when every Keycloak session was really ended; one shared with this device stays alive.
+    all_ended = all(r == ENDED for r in results)
     record_event(db, request, auth.user, 'security.sessions_terminate_others', entity_type='user', entity_id=auth.user.id,
                  summary=f'Завершены остальные сеансы ({len(others)})', payload={'count': len(others)})
     db.commit()
-    message = 'Все остальные сеансы завершены.' if all_ended else f'Сеансы в CRM завершены. {KEYCLOAK_SELF_EXPIRY}'
+    if all_ended:
+        message = 'Все остальные сеансы завершены.'
+    elif NOT_ENDED in results:
+        message = f'Сеансы в CRM завершены. {KEYCLOAK_SELF_EXPIRY}'
+    else:
+        message = 'Сеансы в CRM завершены. Вход в Keycloak общий с этим устройством и остаётся активным.'
     return TerminateOthersOut(count=len(others), keycloak_all_ended=all_ended, message=message)
 
 
