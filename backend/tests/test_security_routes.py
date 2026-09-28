@@ -189,3 +189,15 @@ def test_terminate_others_stops_calling_an_unavailable_keycloak(kc_client, keycl
     assert body['count'] == 3 and all(_revoked(database_url, i) for i in ids)
     assert keycloak.session_delete_calls == 1  # the first failure stops further Keycloak calls
     assert '30 минут' in body['message']
+
+
+def test_terminate_others_with_a_shared_keycloak_session_is_not_all_ended(kc_client, keycloak, database_url):
+    me = _sign_in(kc_client, keycloak)
+    keycloak.admin_sessions = {'sid-current', 'sid-laptop'}
+    shared = _other_session(database_url, me['id'], sid='sid-current')
+    laptop = _other_session(database_url, me['id'], sid='sid-laptop')
+    body = kc_client.post(f'{BASE}/sessions/terminate-others').json()
+    assert body['count'] == 2 and _revoked(database_url, shared) and _revoked(database_url, laptop)
+    assert keycloak.admin_sessions == {'sid-current'}  # this device's Keycloak session is left alone
+    assert body['keycloak_all_ended'] is False
+    assert 'общий с этим устройством' in body['message'] and '30 минут' not in body['message']
