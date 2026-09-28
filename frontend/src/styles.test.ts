@@ -117,5 +117,27 @@ describe("styles.css design tokens", () => {
       expect(phone).toMatch(/input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="file"\]\),\s*select:not\(\[multiple\]\),\s*textarea:not\(\[disabled\]\)\s*\{[^}]*font-size:\s*var\(--text-md\);[^}]*min-height:\s*44px/);
     });
   });
+
+  describe("daily workflows (Stage 3)", () => {
+    const clean = withoutComments(rules);
+    const phone = [...clean.matchAll(/@media \(max-width: 767px\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join("\n");
+
+    it("stacks marked tables into labelled rows on phones", () => {
+      expect(phone).toMatch(/\.stack-table tr\s*\{[^}]*display:\s*block/);
+      expect(phone).toMatch(/\.stack-table td\[data-label\]::before\s*\{[^}]*content:\s*attr\(data-label\)/);
+      expect(phone).toMatch(/\.stack-table thead\s*\{[^}]*position:\s*absolute/);
+    });
+
+    it("turns panels into flat frames without shadows", () => {
+      expect(rule(".panel")).toMatch(/border:\s*1px solid var\(--atmr-border-soft\)/);
+      expect(rule(".panel")).toMatch(/border-radius:\s*var\(--atmr-border-radius-l\)/);
+      expect(rule(".panel")).toMatch(/box-shadow:\s*none/);
+    });
+
+    it("styles the view switch as a segmented control with a 44px phone size", () => {
+      expect(rule(".segmented button")).toMatch(/min-height:\s*var\(--atmr-size-m\)/);
+      expect(phone).toMatch(/\.segmented button\s*\{[^}]*min-height:\s*44px/);
+    });
+  });
 });
 

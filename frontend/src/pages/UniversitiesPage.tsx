@@ -77,7 +77,7 @@ export function UniversitiesPage() {
         </div>
       ) : (
         <div className="panel table-wrap university-table">
-          <table className="data-table">
+          <table className="data-table stack-table">
             <thead>
               <tr>
                 <th scope="col">Название</th>
@@ -92,7 +92,7 @@ export function UniversitiesPage() {
             <tbody>
               {universityList.map((u) => (
                 <tr key={u.id}>
-                  <td className="university-name-cell">
+                  <td className="university-name-cell" data-label="Название">
                     <Link className="cell-title" to={universityPath(u.id)}>
                       {u.short_name && <span className="short-name">{u.short_name}</span>}
                       <span>{u.name}</span>
@@ -104,11 +104,11 @@ export function UniversitiesPage() {
                       </div>
                     )}
                   </td>
-                  <td>{placeLabel(u) || <span className="muted">—</span>}</td>
-                  <td>
+                  <td data-label="Город, регион">{placeLabel(u) || <span className="muted">—</span>}</td>
+                  <td data-label="Ответственные">
                     <PersonAvatars people={u.managers} />
                   </td>
-                  <td>{launchList.filter((l) => l.university_id === u.id).length}</td>
+                  <td data-label="Программ">{launchList.filter((l) => l.university_id === u.id).length}</td>
                   <td className="row-actions">
                     <button
                       type="button"

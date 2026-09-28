@@ -58,6 +58,42 @@ describe("routing", () => {
 });
 
 describe("interactions page", () => {
+  it("shows the register by default, with launch codes", async () => {
+    mockApi();
+    renderApp("/interactions");
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("ВЗ-0001")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Реестр" }).getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector(".board")).toBeNull();
+  });
+
+  it("switches to the stage view and keeps it in the URL", async () => {
+    mockApi();
+    renderApp("/interactions");
+    fireEvent.click(await screen.findByRole("button", { name: "Этапы" }));
+    expect(await screen.findByText("ВЗ-0001")).toBeTruthy();
+    expect(columnOf("ВЗ-0001")).toBe("Документы");
+    expect(screen.getByTestId("location").textContent).toBe("/interactions?view=stages");
+    fireEvent.click(screen.getByRole("button", { name: "Реестр" }));
+    expect(await screen.findByRole("table")).toBeTruthy();
+  });
+
+  it("opens the stage view from a ?view=stages link", async () => {
+    mockApi();
+    renderApp("/interactions?view=stages");
+    await screen.findByText("ВЗ-0001");
+    expect(columnOf("ВЗ-0001")).toBe("Документы");
+  });
+
+  it("says «просрочено» next to an overdue date in the register, not only in red", async () => {
+    mockApi();
+    renderApp("/interactions");
+    const row = (await screen.findByText("ВЗ-0002")).closest("tr")!;
+    expect(row.textContent).toMatch(/просрочено/);
+    const onTime = screen.getByText("ВЗ-0001").closest("tr")!;
+    expect(onTime.textContent).not.toMatch(/просрочено/);
+  });
+
   it("filters by the server overdue flag without recomputing it", async () => {
     mockApi();
     renderApp("/interactions");
@@ -139,7 +175,7 @@ describe("task creation", () => {
 describe("interaction detail navigation", () => {
   it("opens the interaction detail page from the board card", async () => {
     mockApi();
-    renderApp("/interactions");
+    renderApp("/interactions?view=stages");
     await screen.findByText("ВЗ-0001");
     expect(columnOf("ВЗ-0001")).toBe("Документы");
     fireEvent.click(screen.getByRole("link", { name: /Аналитика данных/ }));
@@ -327,5 +363,26 @@ describe("topbar account avatar", () => {
 
     fireEvent.click(link!);
     expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
+  });
+});
+
+describe("stacked phone rows", () => {
+  it("labels university and contract cells with their column names", async () => {
+    mockApi();
+    renderApp("/universities");
+    const uniTable = await screen.findByRole("table");
+    expect(uniTable.className).toContain("stack-table");
+    const city = within((await within(uniTable).findByText("Колледж связи")).closest("tr") as HTMLElement).getAllByRole("cell")[1];
+    expect(city.getAttribute("data-label")).toBe("Город, регион");
+  });
+
+  it("labels contract cells with their column names", async () => {
+    mockApi();
+    renderApp("/contracts");
+    const table = await screen.findByRole("table");
+    expect(table.className).toContain("stack-table");
+    const first = within(table).getAllByRole("row")[1];
+    const labels = within(first).getAllByRole("cell").map((c) => c.getAttribute("data-label"));
+    expect(labels.slice(0, 3)).toEqual(["Номер", "Учебное заведение", "ИТ-продукт"]);
   });
 });
