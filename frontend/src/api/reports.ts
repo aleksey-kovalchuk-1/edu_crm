@@ -33,9 +33,9 @@ export interface ReportParams {
   column: string[];
 }
 
-export type ReportFormat = "xlsx" | "xls" | "pdf";
+export type ReportFormat = "xlsx" | "xls" | "pdf" | "json";
 
-/** Query string shared by the preview and the downloads, so the file always matches the screen. */
+/** Shared filters and columns; downloads contain all rows while the screen previews at most 200. */
 export function reportQuery(params: ReportParams): string {
   const q = new URLSearchParams();
   if (params.period_from) q.set("period_from", params.period_from);

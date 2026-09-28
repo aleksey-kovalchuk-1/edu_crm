@@ -2,7 +2,7 @@
 
 A report is the list of interactions (launches) the user can see, filtered by period, universities,
 IT directions, IT products, responsible and status, with the columns the user picked. The same
-query feeds the on-screen preview (JSON) and the xlsx / xls / pdf downloads.
+query feeds the on-screen preview (JSON) and the xlsx / xls / pdf / json downloads.
 
 Period (D-221): an interaction belongs to a period when its launch date (`deadline`) or any of its
 status changes falls inside it — i.e. something happened with it in that period.
@@ -16,7 +16,7 @@ from typing import Literal
 import openpyxl
 import xlwt
 from fastapi import APIRouter, Depends, Query, Request
-from fastapi.responses import Response
+from fastapi.responses import JSONResponse, Response
 from openpyxl.styles import Font
 from openpyxl.utils import get_column_letter
 from reportlab.lib import colors
@@ -111,6 +111,8 @@ def _day_start(day):
 
 
 def report_query(user, f: ReportFilters):
+    # The scope must live in SQL before any filtering, counting or serialization. Applying it
+    # only in the UI would expose another manager's university through direct export URLs.
     query = (
         select(Launch, University, WorkflowStatus)
         .join(University, University.id == Launch.university_id)
@@ -129,6 +131,9 @@ def report_query(user, f: ReportFilters):
     if f.status_id:
         query = query.where(Launch.status_id.in_(f.status_id))
     if f.period_from or f.period_to:
+        # A launch is active in the period if its planned date OR a status event falls inside
+        # the inclusive calendar dates. The event side uses a half-open UTC interval so events
+        # on the final day, including 23:59:59, are included without microsecond rounding.
         deadline_in = []
         changed_in = [StatusChange.launch_id == Launch.id]
         if f.period_from:
@@ -201,6 +206,7 @@ def report_options(auth: AuthContext = Depends(any_role), db: Session = Depends(
 @router.get('/reports/interactions', summary='Отчёт по взаимодействиям (предпросмотр)')
 def interactions_report(f: ReportFilters = Depends(report_filters), auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
     rows = build_report(db, auth.user, f)
+    # The 200-row cap is a UI preview limit. File exports below use all scoped rows.
     return {'columns': columns_out(f.columns), 'rows': rows[:MAX_PREVIEW_ROWS], 'total': len(rows)}
 
 
@@ -293,17 +299,39 @@ FORMATS = {
 }
 
 
-@router.get('/reports/interactions/export', summary='Скачать отчёт по взаимодействиям (xlsx, xls, pdf)')
+@router.get(
+    '/reports/interactions/export',
+    summary='Скачать полный отчёт по взаимодействиям (xlsx, xls, pdf, json)',
+    description=(
+        'Фильтры и повторяемый параметр `column` совпадают с предпросмотром. '
+        'Файл содержит все доступные пользователю строки, включая строки после первых 200 в предпросмотре. '
+        'JSON: UTF-8 объект с `schema_version`, `generated_at` (UTC), `organization`, '
+        '`filters`, `columns`, `total` и `rows`; выбранные поля в строках сохраняют типы значений. '
+        'Область доступа к вузам проверяется сервером, экспорт записывается в журнал.'
+    ),
+)
 def export_interactions_report(
     request: Request,
-    format: Literal['xlsx', 'xls', 'pdf'] = Query(),
+    format: Literal['xlsx', 'xls', 'pdf', 'json'] = Query(),
     f: ReportFilters = Depends(report_filters),
     auth: AuthContext = Depends(any_role),
     db: Session = Depends(get_db),
 ):
     rows = build_report(db, auth.user, f)
     columns = columns_out(f.columns)
-    if format == 'pdf':
+    if format == 'json':
+        # This is a downloadable snapshot, not the 200-row preview. Keep the same builder and
+        # selected columns as the other formats to avoid divergent access or filter semantics.
+        content = {
+            'schema_version': 1,
+            'generated_at': datetime.now(timezone.utc).isoformat(),
+            'organization': organization_name(db),
+            'filters': f.as_payload(),
+            'columns': columns,
+            'total': len(rows),
+            'rows': rows,
+        }
+    elif format == 'pdf':
         period = ' — '.join(d.strftime('%d.%m.%Y') if d else '…' for d in (f.period_from, f.period_to)) if (f.period_from or f.period_to) else 'весь период'
         subtitle = f'Период: {period} · Взаимодействий: {len(rows)} · Сформирован {datetime.now():%d.%m.%Y %H:%M}, {auth.user.full_name}'
         content, media_type = _pdf(columns, rows, subtitle, organization_name(db)), 'application/pdf'
@@ -315,4 +343,7 @@ def export_interactions_report(
                  payload={'format': format, 'rows': len(rows), 'columns': f.columns, 'filters': f.as_payload()})
     db.commit()
     filename = f'interactions-report-{date.today():%Y%m%d}.{format}'
-    return Response(content, media_type=media_type, headers={'Content-Disposition': f'attachment; filename="{filename}"'})
+    headers = {'Content-Disposition': f'attachment; filename="{filename}"', 'Cache-Control': 'no-store'}
+    if format == 'json':
+        return JSONResponse(content, headers=headers)
+    return Response(content, media_type=media_type, headers=headers)

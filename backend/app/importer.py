@@ -176,7 +176,8 @@ def _split_header(cells, *, allow_empty_rows=False):
     known = {synonym for _, _, synonyms in FIELDS.values() for synonym in synonyms}
     header_index = None
     for index, row in enumerate(cells[:HEADER_SEARCH_ROWS]):
-        # A title row may precede the table; the header is the first row naming at least two known fields.
+        # Customer spreadsheets can have a title or note above the table. Two recognized names
+        # reduce the risk of treating a single mention of a field in that note as the header.
         if sum(1 for value in row if normalize_header(value) in known) >= 2:
             header_index = index
             break

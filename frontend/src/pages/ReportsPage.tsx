@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Download, FileSpreadsheet, FileText } from "lucide-react";
+import { Download, FileJson, FileSpreadsheet, FileText } from "lucide-react";
 import { useItDirections, useItProducts, useUniversities } from "../api/catalogs";
 import { reportExportUrl, useReportOptions, useReportPreview, type ReportFormat, type ReportParams } from "../api/reports";
 import { MultiSelect } from "../components/MultiSelect";
@@ -18,12 +18,13 @@ const FORMATS: { format: ReportFormat; label: string; icon: typeof FileText }[] 
   { format: "xlsx", label: "Excel (.xlsx)", icon: FileSpreadsheet },
   { format: "xls", label: "Excel 97 (.xls)", icon: FileSpreadsheet },
   { format: "pdf", label: "PDF", icon: FileText },
+  { format: "json", label: "JSON", icon: FileJson },
 ];
 
 /**
  * Report on interactions with universities (specification: "generate reports for the selected
  * period ... in xls, xlsx, pdf formats according to selected columns"; D-221). The preview and
- * the downloads use the same query string, so the file is exactly what's on screen.
+ * downloads share filters and column selection; the downloads contain all rows, not the preview's first 200.
  */
 export function ReportsPage() {
   const options = useReportOptions();

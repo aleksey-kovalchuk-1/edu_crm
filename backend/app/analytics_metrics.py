@@ -9,6 +9,8 @@ from .workflows import STAGE_GROUPS, stage_group
 
 def first_implementation_at(changes: Iterable[tuple[int | None, int, datetime]]) -> datetime | None:
     """First recorded move from before training into training, never an inferred start date."""
+    # A record created already in Training has previous=None and must not invent an
+    # implementation timestamp. Later repeats also count only once via min().
     dates = [
         changed_at for previous, current, changed_at in changes
         if previous is not None and stage_group(previous) < 3 and stage_group(current) == 3
@@ -37,6 +39,8 @@ def monthly_implementations(
 
 def funnel_counts(reached: Iterable[tuple[int, int]]) -> list[dict[str, str | int]]:
     """A university contributes once to its furthest stage and all earlier stages."""
+    # Collapse multiple programs/events at the same university first; counting raw transitions
+    # would inflate the funnel and could make a later stage larger than an earlier one.
     furthest: dict[int, int] = {}
     for university_id, group in reached:
         furthest[university_id] = max(group, furthest.get(university_id, -1))

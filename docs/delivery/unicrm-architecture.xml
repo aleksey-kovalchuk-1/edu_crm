@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<model xmlns="http://www.opengroup.org/xsd/archimate/3.0/"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       identifier="unicrm-model" version="3.0">
+  <name xml:lang="ru">UniCRM — компонентная архитектура</name>
+  <documentation xml:lang="ru">Реализованная система на 28.09.2026. LMS и сайт заказчика не подключены.</documentation>
+  <elements>
+    <element identifier="cam" xsi:type="BusinessRole">
+      <name xml:lang="ru">КАМ — менеджер по вузам</name>
+    </element>
+    <element identifier="head" xsi:type="BusinessRole">
+      <name xml:lang="ru">Руководитель менеджеров</name>
+    </element>
+    <element identifier="administrator" xsi:type="BusinessRole">
+      <name xml:lang="ru">Администратор платформы</name>
+    </element>
+    <element identifier="web" xsi:type="ApplicationComponent">
+      <name xml:lang="ru">Веб-интерфейс React</name>
+    </element>
+    <element identifier="proxy" xsi:type="ApplicationComponent">
+      <name xml:lang="ru">Nginx: статические файлы и маршрутизация</name>
+    </element>
+    <element identifier="api" xsi:type="ApplicationComponent">
+      <name xml:lang="ru">FastAPI: функции UniCRM и права доступа</name>
+    </element>
+    <element identifier="catalog-function" xsi:type="ApplicationFunction">
+      <name xml:lang="ru">Каталог вузов и ИТ-продуктов</name>
+    </element>
+    <element identifier="interaction-function" xsi:type="ApplicationFunction">
+      <name xml:lang="ru">Взаимодействия и этапы</name>
+    </element>
+    <element identifier="task-function" xsi:type="ApplicationFunction">
+      <name xml:lang="ru">Задачи и workflow</name>
+    </element>
+    <element identifier="analytics-function" xsi:type="ApplicationFunction">
+      <name xml:lang="ru">Аналитика и отчёты</name>
+    </element>
+    <element identifier="import-function" xsi:type="ApplicationFunction">
+      <name xml:lang="ru">Импорт файлов и сигналы антифрода</name>
+    </element>
+    <element identifier="keycloak" xsi:type="ApplicationComponent">
+      <name xml:lang="ru">Keycloak: вход и роли</name>
+    </element>
+    <element identifier="database" xsi:type="SystemSoftware">
+      <name xml:lang="ru">PostgreSQL 16</name>
+    </element>
+    <element identifier="crm-data" xsi:type="DataObject">
+      <name xml:lang="ru">Каталог, взаимодействия, задачи и журнал</name>
+    </element>
+    <element identifier="identity-data" xsi:type="DataObject">
+      <name xml:lang="ru">Учётные записи Keycloak</name>
+    </element>
+    <element identifier="attachments" xsi:type="Artifact">
+      <name xml:lang="ru">Том вложений</name>
+    </element>
+    <element identifier="report" xsi:type="DataObject">
+      <name xml:lang="ru">Отчёт JSON / XLS / XLSX / PDF</name>
+    </element>
+  </elements>
+  <relationships>
+    <relationship identifier="web-serves-cam" source="web" target="cam" xsi:type="Serving">
+      <name xml:lang="ru">Рабочее место КАМ</name>
+    </relationship>
+    <relationship identifier="web-serves-head" source="web" target="head" xsi:type="Serving">
+      <name xml:lang="ru">Контроль работы</name>
+    </relationship>
+    <relationship identifier="web-serves-administrator" source="web" target="administrator" xsi:type="Serving">
+      <name xml:lang="ru">Сопровождение платформы</name>
+    </relationship>
+    <relationship identifier="proxy-serves-web" source="proxy" target="web" xsi:type="Serving">
+      <name xml:lang="ru">Отдаёт интерфейс</name>
+    </relationship>
+    <relationship identifier="web-calls-api" source="web" target="api" xsi:type="Flow">
+      <name xml:lang="ru">HTTP-запросы</name>
+    </relationship>
+    <relationship identifier="api-catalog" source="api" target="catalog-function" xsi:type="Assignment">
+      <name xml:lang="ru">Реализует каталог</name>
+    </relationship>
+    <relationship identifier="api-interaction" source="api" target="interaction-function" xsi:type="Assignment">
+      <name xml:lang="ru">Реализует взаимодействия</name>
+    </relationship>
+    <relationship identifier="api-task" source="api" target="task-function" xsi:type="Assignment">
+      <name xml:lang="ru">Реализует задачи</name>
+    </relationship>
+    <relationship identifier="api-analytics" source="api" target="analytics-function" xsi:type="Assignment">
+      <name xml:lang="ru">Реализует аналитику и отчёты</name>
+    </relationship>
+    <relationship identifier="api-import" source="api" target="import-function" xsi:type="Assignment">
+      <name xml:lang="ru">Реализует импорт и проверку сигналов</name>
+    </relationship>
+    <relationship identifier="api-calls-identity" source="api" target="keycloak" xsi:type="Flow">
+      <name xml:lang="ru">Проверка входа и управление ролями</name>
+    </relationship>
+    <relationship identifier="api-reads-data" source="api" target="crm-data" xsi:type="Access" accessType="ReadWrite">
+      <name xml:lang="ru">Доступ по роли и вузу</name>
+    </relationship>
+    <relationship identifier="identity-reads-data" source="keycloak" target="identity-data" xsi:type="Access" accessType="ReadWrite">
+      <name xml:lang="ru">Учётные записи и сессии</name>
+    </relationship>
+    <relationship identifier="api-produces-report" source="api" target="report" xsi:type="Access" accessType="Write">
+      <name xml:lang="ru">Формирование файла</name>
+    </relationship>
+    <relationship identifier="api-reads-attachments" source="api" target="attachments" xsi:type="Access" accessType="ReadWrite">
+      <name xml:lang="ru">Вложения</name>
+    </relationship>
+    <relationship identifier="database-serves-api" source="database" target="api" xsi:type="Serving">
+      <name xml:lang="ru">Хранение данных CRM</name>
+    </relationship>
+  </relationships>
+</model>
