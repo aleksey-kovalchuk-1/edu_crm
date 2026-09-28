@@ -32,6 +32,9 @@ class Settings:
     public_base_url: str
     session_encryption_key: str
     learner_data_encryption_key: str = ''
+    # Learners, supplier companies, course applications and customer imports are archived (2026-09-28):
+    # their API is served only when CUSTOMER_DATA_ENABLED is set. Fraud alerts are not affected.
+    customer_data_enabled: bool = False
     fraud_match_key: str = ''
     fraud_match_key_version: int = 1
     fraud_match_coverage_complete: bool = False
@@ -158,6 +161,7 @@ def load_settings(environ=None):
         if any(other and decoded == base64.urlsafe_b64decode(other) for other in other_keys):
             raise SettingsError('FRAUD_MATCH_KEY must differ from encryption keys')
     fraud_coverage = _boolean(environ, 'FRAUD_MATCH_COVERAGE_COMPLETE', False)
+    customer_data_enabled = _boolean(environ, 'CUSTOMER_DATA_ENABLED', False)
     if fraud_coverage and not fraud_key:
         raise SettingsError('FRAUD_MATCH_COVERAGE_COMPLETE requires FRAUD_MATCH_KEY')
 
@@ -175,6 +179,7 @@ def load_settings(environ=None):
         public_base_url=normalize_origin(environ['PUBLIC_BASE_URL'], 'PUBLIC_BASE_URL'),
         session_encryption_key=encryption_key,
         learner_data_encryption_key=learner_key,
+        customer_data_enabled=customer_data_enabled,
         fraud_match_key=fraud_key,
         fraud_match_key_version=_positive_int(environ, 'FRAUD_MATCH_KEY_VERSION', 1),
         fraud_match_coverage_complete=fraud_coverage,

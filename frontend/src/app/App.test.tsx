@@ -409,3 +409,11 @@ describe("overview", () => {
     expect(document.querySelectorAll(".metric svg")).toHaveLength(0);
   });
 });
+
+describe("archived customer-data pages", () => {
+  it.each(["/learners", "/vendors", "/applications", "/customer-imports"])("%s is no longer a page", async (path) => {
+    mockApi();
+    renderApp(path);
+    expect(await screen.findByRole("heading", { level: 1, name: "Страница не найдена" })).toBeTruthy();
+  });
+});

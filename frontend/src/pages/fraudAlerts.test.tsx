@@ -24,7 +24,9 @@ describe("fraud review", () => {
     fireEvent.change(screen.getByLabelText("Статус"), { target: { value: "open" } });
     await waitFor(() => expect(api.calls.some((call) => call.path.includes("status=open"))).toBe(true));
     fireEvent.click(await screen.findByRole("button", { name: /Сигнал 8/ }));
-    expect(await screen.findByRole("link", { name: /Открыть анкету/ })).toBeTruthy();
+    // The learner, application and supplier pages are archived: the alert names the record without a dead link.
+    expect(await screen.findByText(/Анкета #\d+ · раздел в архиве/)).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Открыть анкету/ })).toBeNull();
     fireEvent.change(screen.getByLabelText("Решение"), { target: { value: "cleared" } });
     fireEvent.change(screen.getByLabelText("Причина"), { target: { value: "false_positive" } });
     fireEvent.click(screen.getByRole("button", { name: "Сохранить решение" }));

@@ -147,9 +147,12 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.include_router(report_router)
     app.include_router(task_router)
     app.include_router(workflow_router)
-    app.include_router(vendor_router)
-    app.include_router(learner_router)
-    app.include_router(customer_import_router)
+    if settings.customer_data_enabled:
+        # Archived feature (learners, supplier companies, course applications, customer imports): off
+        # unless CUSTOMER_DATA_ENABLED is set; its screens live in archive/customer-data.
+        app.include_router(vendor_router)
+        app.include_router(learner_router)
+        app.include_router(customer_import_router)
     app.include_router(fraud_router)
 
     @app.get('/api/v1/health')
