@@ -26,14 +26,30 @@ describe("styles.css design tokens", () => {
     expect(sizes.filter((s) => !/var\(--text-|:\s*0$/.test(s))).toEqual([]);
   });
 
-  it("has no text token smaller than 11px", () => {
-    const px = [...tokens.matchAll(/--text-[\w]+:\s*(\d+)px/g)].map((m) => Number(m[1]));
-    expect(px.length).toBeGreaterThan(0);
-    expect(Math.min(...px)).toBeGreaterThanOrEqual(11);
-  });
 
   it("gives the organization line in the dark sidebar the sidebar's muted colour (readable contrast)", () => {
     const rule = withoutComments(rules).match(/\.sidebar \.brand-org\s*\{([^}]*)\}/);
     expect(rule?.[1]).toMatch(/color:\s*var\(--sidebar-text-muted\)/);
+  });
+  it("has no text token smaller than 12px", () => {
+    const px = [...tokens.matchAll(/--text-[\w]+:\s*(\d+)px/g)].map((m) => Number(m[1]));
+    expect(px.length).toBeGreaterThan(0);
+    expect(Math.min(...px)).toBeGreaterThanOrEqual(12);
+  });
+
+  it("uses the Rostelecom Purple light accent", () => {
+    expect(tokens).toMatch(/--atmr-accent-default:\s*#7700ff;/);
+    expect(tokens).toMatch(/--atmr-fg-default:\s*#101828;/);
+  });
+
+  it("points every legacy colour token at a Rostelecom or UniCRM token", () => {
+    const legacy = [...tokens.matchAll(/--(?:color|chart|sidebar)-[\w-]+:\s*([^;]+);/g)].map((m) => m[1].trim());
+    expect(legacy.length).toBeGreaterThan(30);
+    expect(legacy.filter((v) => !/^var\(--(?:atmr|crm)-[\w-]+\)$/.test(v))).toEqual([]);
+  });
+
+  it("draws focus as a 2px accent ring with a 2px gap (6.5:1 on white)", () => {
+    expect(tokens).toMatch(/--crm-focus-ring:\s*0 0 0 2px var\(--atmr-bg-surface1\), 0 0 0 4px var\(--atmr-accent-default\);/);
+    expect(tokens).toMatch(/--focus-ring:\s*var\(--crm-focus-ring\);/);
   });
 });
