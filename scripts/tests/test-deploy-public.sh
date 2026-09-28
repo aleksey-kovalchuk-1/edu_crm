@@ -84,6 +84,14 @@ PY
 rg -q '^https://unicrm.tech/api/v1/auth/login$' "$tmp/curl.log"
 
 : > "$tmp/docker.log"
+# Without an argument the script labels the backup itself; that label must pass its own [a-z0-9-] check.
+"$root/scripts/deploy-public.sh" >/dev/null
+python3 - "$tmp/status/status.json" <<'PY'
+import json, re, sys
+source = json.load(open(sys.argv[1]))['backups'][0]['source']
+assert re.fullmatch(r'deploy-[0-9]{8}-[0-9]{6}', source), source
+PY
+
 if FAIL_ATTACHMENT=1 "$root/scripts/deploy-public.sh" synthetic-attachment-fail >/dev/null 2>&1; then
   echo 'deployment continued after attachment backup failed' >&2; exit 1
 fi

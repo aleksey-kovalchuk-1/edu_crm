@@ -33,7 +33,7 @@ backup_age_recipient_preflight
 backup_private_directory
 docker compose version >/dev/null
 
-label="${1:-deploy-$(date -u +%Y%m%dT%H%M%SZ)}"
+label="${1:-deploy-$(date -u +%Y%m%d-%H%M%S)}"
 [[ "$label" =~ ^[a-z0-9-]+$ ]] || { echo 'label must match [a-z0-9-]+' >&2; exit 2; }
 attempts="${DEPLOY_HEALTH_ATTEMPTS:-30}"
 [[ "$attempts" =~ ^[1-9][0-9]*$ ]] || { echo 'DEPLOY_HEALTH_ATTEMPTS must be positive' >&2; exit 2; }
