@@ -23,7 +23,8 @@
 - Keep every menu entry's name, icon, role rule and order within its group; keep «Демонстрационный контур» and «Рабочий шаблон · Данные вымышлены» texts and their `VITE_DEMO_MODE` condition.
 - LMS and website APIs are permanent mocks. No new features.
 - Verification runs only against an isolated Compose project `edu-crm-verify` (port 18080, own volumes, throwaway Keycloak passwords), torn down afterwards. Never against production.
-- No push, merge, deploy or launch-agent install without the owner's explicit approval. Each stage ends with a report and stops for owner review.
+- No merge, deploy or launch-agent install without the owner's explicit approval. **Owner decision 28 Sep 2026:** Stages 1, 2, 3 and 3S (Settings) run consecutively without approval stops; each ends with a progress report. After 3S: screenshots, test results, remaining issues and a draft PR to `main` (push of the branch approved); no deployment until the owner reviews the combined result.
+- `ui-ux-pro-max` (installed with approval into `.claude/skills`, untracked) is used for targeted UX checks; the Rostelecom rules take precedence. Findings applied: focusable error summary plus inline errors on failed save; contextual announcement of the unread count; ≥ 8 px between touch targets; sticky top bar must not hide the focused element (`scroll-padding-top`); no flashing loaders for near-instant work; empty states with a next action.
 - Commits end with `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`.
 
 ## Review Focus
@@ -1420,11 +1421,11 @@ Expected: no `edu-crm-verify` containers or volumes; production still running.
 
 - [ ] **Step 7: Report and stop**
 
-Report to the owner: commits, test counts, audit summary before/after per role, before/after screenshots of the shell at 1440, 1280×600, 1024, 768 and 375 px, open findings for Stage 2, and anything not verified. **Stop until the owner approves Stage 1.** No push or deploy.
+Report progress to the owner: commits, test counts, audit summary before/after per role, open findings for Stage 2, and anything not verified. Continue to Stage 2 (owner decision); keep the isolated stack for later stages or recreate it.
 
 ---
 
-## Stage 2 — Common controls (detailed plan written after Stage 1 approval)
+## Stage 2 — Common controls
 
 **Scope:** buttons (`primary`, `secondary`, `danger`, `text-button`, `icon-button`), inputs, native selects and date fields (restyled, still native), textareas, checkboxes and switches with 44 px hit areas, chips (`filter-pill`), segmented view switches, tags and badges (stage colour dot + text), inline notifications (`ErrorAlert`, `QueryState`), toasts, tables (`data-table`, `table-wrap`: size M, sticky header, framed horizontal scroll), pagination, dialogs (`Modal.tsx`: focus trap, Esc, backdrop), empty and loading states, field hints and errors (`field-hint`, `field-error` with `aria-describedby`).
 **Acceptance:** every class listed restyled with `--atmr-*`/`--crm-*` tokens only; the audit reports zero phone controls under 44 px across all pages; no text below AA; all existing tests pass; before/after screenshots.
@@ -1434,6 +1435,37 @@ Report to the owner: commits, test counts, audit summary before/after per role, 
 **Scope:** Overview (figures strip, «Ближайшие задачи», «Программы в работе», «Последние действия», demo chart labelled), Universities list and detail (existing columns and actions only), Contracts, Interactions register as the default view with the stage board one click away, Interaction detail with status timeline, Tasks (list, deadlines, planner, filters, bulk actions) and Task detail. Body text rises to 16 px here; tables stay 14 px. Phone layouts use stacked rows for the main lists.
 **Acceptance:** each role completes: create an interaction, change its stage, add a task, complete a task, open a university and its interactions, add a contract; no lost actions (compare the action inventory before/after); audit clean.
 
+## Stage 3S — Settings (brought forward from Stage 5 by owner decision)
+
+**Scope:** Личный профиль (with sender addresses and phone verification), Организация, Уведомления, Безопасность, Резервное копирование; plus the shared Settings frame (heading, the in-menu «Настройки» group from Stage 1). Pages keep every field, action, permission check and server call; superadmin-only content (users, backups) stays gated.
+
+**Tasks:**
+1. **Settings frame** — one layout for all Settings pages: page heading with a one-line purpose, sections with h2 + description + divider (no nested cards), max content width 880 px for forms, a 44 px tap target for every control below 768 px.
+2. **Forms** — labels above fields, hints, inline errors via `aria-describedby`, a focusable error summary after a failed save (ui-ux-pro-max), save button state (idle / saving / saved) and a success toast; unsaved changes warning only where the page already tracks dirtiness.
+3. **Профиль** — fields grouped «Имя», «Контакты», «Мессенджеры», «Часовой пояс»; phone verification and sender addresses as their own sections with their current states (pending / confirmed / approved / rejected) shown as tags with text.
+4. **Организация** — sections for requisites and contacts; read-only view for roles that cannot edit (current rule kept).
+5. **Уведомления** — event types grouped as today, each with a visible label and description; the pause control shows its end time and a «Возобновить» action; preference saves confirmed.
+6. **Безопасность** — sessions list as a table (stacked rows on phones) with device, IP, last activity and a clearly labelled end-session action with confirmation; login history table; password policy as a read-only list; the messages for shared / not-ended Keycloak sessions kept.
+7. **Резервное копирование** — last run status as an inline notification (success / running / failed with stage), history table with «Проверена» tag in `success-700`, the manual backup button with its requested → running → done states and the existing 409 message.
+8. **States** — each page: loading (skeleton rows), empty (sentence + next action), error (what failed + retry), permission denied (existing message).
+
+**Tests:** every existing Settings test keeps passing; new tests for the error summary focus, the pause end-time text, the end-session confirmation, the backup status notification variants and each empty/error state.
+
+**Acceptance:** audit clean on all Settings pages for superadmin, admin and manager at 375/768/1024/1440 px; keyboard pass of each form; permissions unchanged (superadmin-only pages and actions still hidden and refused).
+
+## Notifications — end-to-end verification (isolated stack only)
+
+On `edu-crm-verify` with the `notifications` profile (the `notifier` service) running:
+1. Trigger an event for a recipient (e.g. the supervisor assigns a task to `manager_1`) and confirm, as `manager_1`, the notification appears in the bell, the unread count increments, and «прочитать» / «прочитать все» clear it (API and UI).
+2. Turn that event type off in `manager_1`'s preferences, repeat the trigger, confirm no new notification; turn it back on.
+3. Pause notifications until a time in the future, trigger, confirm nothing is created or shown during the pause and the Settings page shows the pause end; resume.
+4. Scheduled reminder: create a task due within the reminder window, run one notifier pass, confirm exactly one reminder appears and a second pass does not duplicate it.
+5. Record which of these were verified on production (expected: none by Claude — production sign-in is not used; the production notifier's recent passes created 0 notifications).
+
+## Delivery after Stages 1–3 and 3S
+
+Push `ai/redesign-stages-1-3` and open a **draft** PR to `main` with: before/after screenshots (shell, Overview, Universities, Interactions, Tasks, Settings pages at 1440 and 375 px), test counts, audit summary per role, notifications verification results, remaining issues, and a deployment checklist. Do not merge or deploy.
+
 ## Stage 4 — Analytics, reports and the remaining pages
 
 **Scope:** Analytics with its agreed structure (period and university filter, «Вузы по этапам», «Внедрённые программы по месяцам», «Рейтинг вузов» top 5, «Скачать PDF»); charts with one-line summaries, direct labels and a second-series pattern; Reports with filters, column choice and xlsx/xls/PDF/JSON downloads; Catalogs, Companies, Learners, Applications, Customer imports, Fraud alerts, Imports, Workflows (drag and drop kept on `@dnd-kit`), Task plan templates.
@@ -1441,5 +1473,5 @@ Report to the owner: commits, test counts, audit summary before/after per role, 
 
 ## Stage 5 — Settings, sign-in and clean-up
 
-**Scope:** all Settings pages (profile, sender addresses, organisation, universities, notifications, security, users and roles, personal data, backups, account), the in-app sign-in and logged-out screens («Войти через Keycloak»), the Keycloak login theme (spec §7: theme folder, compose mount, `scripts/keycloak-set-login-theme.sh`, realm `loginTheme`, Russian messages, pages: sign-in, update password, reset password, error, logout confirm), removal of all legacy token aliases, final `docs/design/tokens.md`.
+**Scope:** the remaining Settings pages (universities, users and roles, personal data, account; the five main ones are in Stage 3S), the in-app sign-in and logged-out screens («Войти через Keycloak»), the Keycloak login theme (spec §7: theme folder, compose mount, `scripts/keycloak-set-login-theme.sh`, realm `loginTheme`, Russian messages, pages: sign-in, update password, reset password, error, logout confirm), removal of all legacy token aliases, final `docs/design/tokens.md`.
 **Acceptance:** Keycloak pages screenshotted at 375 and 1440 px on the isolated stack, keyboard-only sign-in works, rollback tested (theme switched back); no legacy alias left (`styles.test.ts` guard); full audit clean for all roles; release checklist with rollback written; **separate owner approval before publishing**.
