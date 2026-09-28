@@ -52,4 +52,14 @@ describe("styles.css design tokens", () => {
     expect(tokens).toMatch(/--crm-focus-ring:\s*0 0 0 2px var\(--atmr-bg-surface1\), 0 0 0 4px var\(--atmr-accent-default\);/);
     expect(tokens).toMatch(/--focus-ring:\s*var\(--crm-focus-ring\);/);
   });
+  it("loads Rostelecom Basis from the app's own files, not Google Fonts", () => {
+    expect(css).not.toMatch(/fonts\.googleapis\.com/);
+    for (const [weight, file] of [[400, "Regular"], [500, "Medium"], [700, "Bold"]] as const) {
+      expect(css).toMatch(
+        new RegExp(
+          `@font-face\\s*\\{\\s*font-family:\\s*"Rostelecom Basis";\\s*src:\\s*url\\("\\./assets/fonts/RostelecomBasis-${file}\\.woff2"\\) format\\("woff2"\\);\\s*font-weight:\\s*${weight};`,
+        ),
+      );
+    }
+  });
 });
