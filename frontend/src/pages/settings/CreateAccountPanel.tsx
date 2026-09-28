@@ -1,3 +1,4 @@
+import { SettingsPanel } from "./SettingsPanel";
 import type { FormEvent } from "react";
 import { useCreateAccount, type NewAccount } from "../../api/admin";
 import { ErrorAlert } from "../../components/QueryState";
@@ -22,13 +23,11 @@ export function CreateAccountPanel() {
   }
 
   return (
-    <section className="panel" aria-labelledby="create-account-title">
-      <div className="section-head">
-        <div>
-          <h2 id="create-account-title">Новая учётная запись</h2>
-          <p>Создайте менеджера или администратора. Пароль потребуется передать сотруднику лично.</p>
-        </div>
-      </div>
+    <SettingsPanel
+      titleId="create-account-title"
+      title="Новая учётная запись"
+      description="Создайте менеджера или администратора. Пароль потребуется передать сотруднику лично."
+    >
       <form aria-label="Новая учётная запись" onSubmit={submit}>
         <div className="form-row">
           <label>
@@ -57,7 +56,7 @@ export function CreateAccountPanel() {
         <label>
           Роль
           <select name="role" defaultValue="crm-user">
-            <option value="crm-user">Менеджер</option>
+            <option value="crm-user">КАМ</option>
             <option value="crm-admin">Администратор</option>
           </select>
         </label>
@@ -76,6 +75,6 @@ export function CreateAccountPanel() {
           </p>
         </div>
       )}
-    </section>
+    </SettingsPanel>
   );
 }

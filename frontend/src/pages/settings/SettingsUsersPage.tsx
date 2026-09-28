@@ -3,7 +3,9 @@ import { CheckCircle2 } from "lucide-react";
 import { useChangeUserRole, usePendingRegistrations, type AssignableRole } from "../../api/admin";
 import { AdminUsersPanel } from "../../components/AdminUsersPanel";
 import { ErrorAlert, queryFallback, RefreshError } from "../../components/QueryState";
+import { Notice } from "../../components/Notice";
 import { CreateAccountPanel } from "./CreateAccountPanel";
+import { SettingsPanel } from "./SettingsPanel";
 
 /**
  * A "pending registration" is a Keycloak account that can already sign in but has no CRM role
@@ -22,29 +24,27 @@ function PendingRegistrations() {
   }
 
   return (
-    <section className="panel" aria-labelledby="pending-registrations-title">
-      <div className="section-head">
-        <div>
-          <h2 id="pending-registrations-title">Заявки на доступ</h2>
-          <p>Учётные записи Keycloak, у которых пока нет ни одной роли CRM.</p>
-        </div>
-      </div>
+    <SettingsPanel
+      titleId="pending-registrations-title"
+      title="Заявки на доступ"
+      description="Учётные записи Keycloak, у которых пока нет ни одной роли CRM."
+    >
       {changeRole.error && <ErrorAlert error={changeRole.error} />}
       {queryFallback([pending]) ??
         (data && (
           <>
             <RefreshError queries={[pending]} />
             {!data.available && (
-              <p className="muted">
+              <Notice tone="info">
                 Keycloak Admin API не настроен в этом окружении — заявки на доступ недоступны.
-              </p>
+              </Notice>
             )}
             {data.available && data.pending.length === 0 && (
               <p className="empty">Заявок на доступ нет.</p>
             )}
             {data.available && data.pending.length > 0 && (
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table stack-table users-table">
                   <thead>
                     <tr>
                       <th scope="col">Логин</th>
@@ -57,16 +57,16 @@ function PendingRegistrations() {
                   <tbody>
                     {data.pending.map((p) => (
                       <tr key={p.keycloak_id}>
-                        <td>
-                          <strong className="cell-title">{p.email}</strong>
+                        <td data-label="Логин">
+                          <strong className="cell-title wrap-anywhere">{p.email}</strong>
                         </td>
-                        <td className="muted">{p.username}</td>
-                        <td className="row-actions">
-                          <form aria-label={`Доступ пользователя ${p.username}`} onSubmit={(event) => grantAccess(event, p.keycloak_id)}>
+                        <td data-label="Имя пользователя Keycloak" className="muted wrap-anywhere">{p.username}</td>
+                        <td data-label="Доступ" className="role-editor-cell">
+                          <form className="role-editor" aria-label={`Доступ пользователя ${p.username}`} onSubmit={(event) => grantAccess(event, p.keycloak_id)}>
                             <label>
                               Роль
                               <select name="role" defaultValue="crm-user">
-                                <option value="crm-user">Менеджер</option>
+                                <option value="crm-user">КАМ</option>
                                 <option value="crm-admin">Администратор</option>
                               </select>
                             </label>
@@ -84,7 +84,7 @@ function PendingRegistrations() {
             )}
           </>
         ))}
-    </section>
+    </SettingsPanel>
   );
 }
 

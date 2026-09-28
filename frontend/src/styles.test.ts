@@ -176,5 +176,27 @@ describe("styles.css design tokens", () => {
       expect(phone).toMatch(/\.checkbox-row\s*\{[^}]*min-height:\s*44px/);
     });
   });
+
+  describe("settings alignment and users table (regression)", () => {
+    const clean = withoutComments(rules);
+
+    it("gives every Settings section the same content width, with tables still full width", () => {
+      expect(clean).toMatch(/\.settings-body > :not\(\.table-wrap\),\s*\.settings-panel \.wizard-body > :not\(\.table-wrap\)\s*\{[^}]*max-width:\s*880px/);
+    });
+
+    it("spaces the rows of forms nested inside a Settings section", () => {
+      expect(clean).toMatch(/\.settings-body form:not\(\.role-editor\)\s*\{[^}]*display:\s*flex;[^}]*gap:\s*var\(--atmr-spacing-4x\)/);
+    });
+
+    it("left-aligns Settings actions so buttons stay with their fields", () => {
+      expect(clean).toMatch(/\.settings-body \.wizard-actions,\s*\.settings-panel \.wizard-actions\s*\{[^}]*justify-content:\s*flex-start/);
+    });
+
+    it("lets the users table wrap so long logins and emails never push the role editor off screen", () => {
+      expect(rule(".users-table")).toMatch(/white-space:\s*normal/);
+      expect(rule(".wrap-anywhere")).toMatch(/overflow-wrap:\s*anywhere/);
+      expect(rule(".role-editor")).toMatch(/flex-wrap:\s*wrap/);
+    });
+  });
 });
 
