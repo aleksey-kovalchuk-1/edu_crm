@@ -121,4 +121,63 @@ describe("settings users page", () => {
     await waitFor(() => expect(api.callsTo("PATCH", "/admin/users/kc-new/role")).toHaveLength(1));
     expect(api.callsTo("PATCH", "/admin/users/kc-new/role")[0].body).toEqual({ role: "crm-admin" });
   });
+
+  describe("users table", () => {
+    const LONG = "konstantin.dlinnofamilnyy-verkhnepyshminskiy@verkhnepyshminskiy-politekhnicheskiy-universitet.example.ru";
+    const users = () => ({
+      available: true, total: 3,
+      users: [
+        { keycloak_id: "kc-irina", username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина Руководитель", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null },
+        { keycloak_id: "kc-long", username: "konstantin.dlinnofamilnyy-verkhnepyshminskiy", email: LONG, full_name: "Константин Длиннофамильный", roles: ["crm-user"], is_active: true, last_login_at: null },
+        { keycloak_id: "kc-admin", username: "admin_1", email: "admin_1@example.test", full_name: "Администратор 1", roles: ["crm-user", "crm-admin"], is_active: true, last_login_at: null },
+      ],
+    });
+
+    it("shows one short role label per user, and only «Суперадминистратор» for Irina", async () => {
+      mockApi({ "GET /auth/me": ADMIN_SESSION, "GET /admin/pending-registrations": () => ({ available: true, pending: [] }), "GET /admin/users": users });
+      renderApp("/settings/users");
+      const table = await within(await screen.findByRole("region", { name: "Пользователи CRM" })).findByRole("table");
+      const roleOf = (login: string) => {
+        const row = within(table).getByText(login).closest("tr") as HTMLElement;
+        return (row.querySelector('td[data-label="Роль"]') as HTMLElement).textContent;
+      };
+      expect(roleOf("irina_super_admin")).toBe("Суперадминистратор");
+      expect(roleOf("konstantin.dlinnofamilnyy-verkhnepyshminskiy")).toBe("КАМ");
+      expect(roleOf("admin_1")).toBe("Администратор");
+      expect(table.textContent).not.toMatch(/,\s*(Руководитель|Администратор)/);
+    });
+
+    it("keeps Irina's role protected and every other user's role editor labelled", async () => {
+      mockApi({ "GET /auth/me": ADMIN_SESSION, "GET /admin/pending-registrations": () => ({ available: true, pending: [] }), "GET /admin/users": users });
+      renderApp("/settings/users");
+      const table = await within(await screen.findByRole("region", { name: "Пользователи CRM" })).findByRole("table");
+      const irina = within(table).getByText("irina_super_admin").closest("tr") as HTMLElement;
+      expect(within(irina).getByText("Защищённая роль")).toBeTruthy();
+      const editor = screen.getByRole("form", { name: "Роль пользователя konstantin.dlinnofamilnyy-verkhnepyshminskiy" });
+      expect(within(editor).getByLabelText("Новая роль")).toBeTruthy();
+      expect(within(editor).getByRole("button", { name: "Сохранить роль" })).toBeTruthy();
+    });
+
+    it("stacks into labelled rows on phones and lets long logins and emails wrap", async () => {
+      mockApi({ "GET /auth/me": ADMIN_SESSION, "GET /admin/pending-registrations": () => ({ available: true, pending: [] }), "GET /admin/users": users });
+      renderApp("/settings/users");
+      const table = await within(await screen.findByRole("region", { name: "Пользователи CRM" })).findByRole("table");
+      expect(table.className).toContain("stack-table");
+      expect(table.className).toContain("users-table");
+      const row = within(table).getByText(LONG).closest("tr") as HTMLElement;
+      expect([...row.querySelectorAll("td")].map((c) => c.getAttribute("data-label"))).toEqual(["Пользователь", "Роль", "Статус", "Последний вход", "Изменить роль"]);
+      expect(within(row).getByText(LONG).className).toContain("wrap-anywhere");
+    });
+
+    it("frames every section of the page like the other Settings pages", async () => {
+      mockApi({ "GET /auth/me": ADMIN_SESSION, "GET /admin/pending-registrations": () => ({ available: true, pending: [] }), "GET /admin/users": users });
+      renderApp("/settings/users");
+      for (const name of ["Новая учётная запись", "Заявки на доступ", "Пользователи CRM"]) {
+        const section = await screen.findByRole("region", { name });
+        expect(section.className).toContain("settings-panel");
+        expect(section.querySelector(".settings-body")).toBeTruthy();
+      }
+    });
+  });
 });
+

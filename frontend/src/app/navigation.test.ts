@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ROLES } from "../lib/user";
-import { pages, paths, settingsPages } from "./navigation";
+import { navGroups, pages, paths, settingsPages, visiblePages } from "./navigation";
 
 describe("sidebar placement", () => {
   it("keeps Процессы (workflows) as the last non-hidden entry in pages", () => {
@@ -49,5 +49,52 @@ describe("settings navigation data", () => {
     const settingsPaths = settingsPages.map((p) => p.path);
     expect(new Set(settingsPaths).size).toBe(9);
     expect(settingsPaths.every((p) => p.startsWith("/settings/"))).toBe(true);
+  });
+});
+
+describe("menu groups", () => {
+  const allRoles = [ROLES.user, ROLES.supervisor, ROLES.admin, ROLES.superadmin];
+
+  it("puts every visible page in exactly one group", () => {
+    const grouped = navGroups(allRoles).flatMap((g) => g.pages.map((p) => p.path));
+    expect([...grouped].sort()).toEqual(visiblePages(allRoles).map((p) => p.path).sort());
+    expect(new Set(grouped).size).toBe(grouped.length);
+  });
+
+  it("keeps the current order of pages inside each group", () => {
+    const order = pages.map((p) => p.path);
+    for (const g of navGroups(allRoles)) {
+      const idx = g.pages.map((p) => order.indexOf(p.path));
+      expect(idx).toEqual([...idx].sort((a, b) => a - b));
+    }
+  });
+
+  it("labels the groups Работа, Анализ, Данные клиентов, Администрирование, with Настройки in the last", () => {
+    const groups = navGroups(allRoles);
+    expect(groups.map((g) => g.label)).toEqual(["Работа", "Анализ", "Данные клиентов", "Администрирование"]);
+    expect(groups.map((g) => g.hasSettings)).toEqual([false, false, false, true]);
+  });
+
+  it("shows a manager the pages their role allows, grouped", () => {
+    const names = Object.fromEntries(navGroups([ROLES.user]).map((g) => [g.label, g.pages.map((p) => p.name)]));
+    expect(names).toEqual({
+      "Работа": ["Обзор", "Учебные заведения", "Договоры", "Взаимодействия", "Задачи"],
+      "Анализ": ["Аналитика", "Отчёты"],
+      "Администрирование": ["Справочники"],
+    });
+  });
+
+  it("no longer lists the archived customer-data pages", () => {
+    const names = navGroups(allRoles).flatMap((g) => g.pages.map((p) => p.name));
+    for (const archived of ["Слушатели", "Компании", "Заявки на курсы", "Загрузка данных"]) {
+      expect(names).not.toContain(archived);
+    }
+    expect(names).toContain("Проверка сигналов");
+  });
+
+  it("drops a group whose pages are all hidden, but keeps Администрирование for Настройки", () => {
+    const groups = navGroups(["no-such-role"]);
+    expect(groups.find((g) => g.id === "admin")?.hasSettings).toBe(true);
+    expect(groups.every((g) => g.pages.length > 0 || g.hasSettings)).toBe(true);
   });
 });

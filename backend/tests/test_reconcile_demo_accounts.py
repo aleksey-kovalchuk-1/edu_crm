@@ -58,15 +58,18 @@ def test_reconcile_demo_accounts_preserves_subjects_and_task_history(database_ur
     users = {u.username: u for u in client.list_users() if u.email}
     assert set(users) == {'irina_super_admin', 'manager_1', 'manager_2', 'admin_1', 'admin_2', 'real.person'}
     assert users['irina_super_admin'].id == 'irina-id'
-    assert set(users['irina_super_admin'].roles) == {'crm-superadmin', 'crm-supervisor', 'crm-admin'}
+    # Irina holds only crm-superadmin directly; crm-admin and crm-supervisor come from the composite role.
+    assert set(users['irina_super_admin'].roles) == {'crm-superadmin'}
     assert set(users['manager_1'].roles) == set(users['manager_2'].roles) == {'crm-user'}
     assert set(users['admin_1'].roles) == set(users['admin_2'].roles) == {'crm-admin'}
     assert client.count_users_with_role('crm-superadmin') == 1
-    assert client.count_users_with_role('crm-supervisor') == 1
+    assert client.count_users_with_role('crm-supervisor') == 0
     assert fake.admin_users['real-id']['email'] == 'real@company.ru'
     with database(database_url) as db:
         assert db.scalar(select(Task.creator_id)) == db.scalar(select(User.id).where(User.keycloak_sub == 'anna-id'))
         assert db.scalar(select(User.email).where(User.keycloak_sub == 'irina-id')) == 'irina_super_admin@educrm-demo.ru'
+        # The CRM keeps her effective roles until her next sign-in refreshes them from the token.
+        assert db.scalar(select(User.roles).where(User.keycloak_sub == 'irina-id')) == ['crm-admin', 'crm-superadmin', 'crm-supervisor']
         assert db.scalar(select(User.roles).where(User.keycloak_sub == 'pavel-id')) == ['crm-user']
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
     assert set(json.loads(output.read_text())) == {'irina_super_admin', 'manager_1', 'manager_2', 'admin_1', 'admin_2'}

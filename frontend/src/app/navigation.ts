@@ -1,8 +1,6 @@
 import {
   Bell,
   BookMarked,
-  Boxes,
-  ClipboardList,
   Building2,
   ChartNoAxesCombined,
   Columns3,
@@ -12,7 +10,6 @@ import {
   FileText,
   LayoutDashboard,
   FileUp,
-  GraduationCap,
   ListChecks,
   ListTree,
   LogOut,
@@ -35,10 +32,6 @@ export const paths = {
   analytics: "/analytics",
   reports: "/reports",
   catalogs: "/catalogs",
-  vendors: "/vendors",
-  learners: "/learners",
-  applications: "/applications",
-  customerImports: "/customer-imports",
   fraudAlerts: "/fraud-alerts",
   imports: "/imports",
   workflows: "/workflows",
@@ -145,39 +138,6 @@ export const pages: PageMeta[] = [
     heading: "Справочники",
     subtitle: "ИТ-направления и ИТ-продукты, используемые в договорах.",
     create: null,
-  },
-  {
-    path: paths.vendors,
-    name: "Компании",
-    icon: Boxes,
-    heading: "Компании-поставщики",
-    subtitle: "Продукты и контакты поставщиков.",
-    create: null,
-  },
-  {
-    path: paths.learners,
-    name: "Слушатели",
-    icon: GraduationCap,
-    heading: "Слушатели",
-    subtitle: "Анкеты и контактные данные слушателей.",
-    create: null,
-  },
-  {
-    path: paths.applications,
-    name: "Заявки на курсы",
-    icon: ClipboardList,
-    heading: "Заявки на курсы",
-    subtitle: "Курсы и потоки; статус оплаты определяется отдельным источником.",
-    create: null,
-  },
-  {
-    path: paths.customerImports,
-    name: "Загрузка данных",
-    icon: FileUp,
-    heading: "Загрузка данных заказчика",
-    subtitle: "Предварительная проверка и применение файлов.",
-    create: null,
-    roles: [ROLES.supervisor, ROLES.admin],
   },
   {
     path: paths.fraudAlerts,
@@ -333,3 +293,36 @@ export function findPage(pathname: string): PageMeta | undefined {
 /** True on the page itself, false on its nested routes. */
 export const isPageRoot = (page: PageMeta, pathname: string) =>
   page.path === normalize(pathname);
+
+export type NavGroupId = "work" | "analysis" | "customers" | "admin";
+
+export interface NavGroup {
+  id: NavGroupId;
+  label: string;
+  pages: PageMeta[];
+  /** The «Настройки» disclosure sits at the end of this group. */
+  hasSettings: boolean;
+}
+
+/** Menu groups (spec §3.2). Pages keep their order from `pages`; settings pages live in SettingsMenu. */
+const NAV_GROUPS: { id: NavGroupId; label: string; paths: string[] }[] = [
+  { id: "work", label: "Работа", paths: [paths.overview, paths.universities, paths.contracts, paths.interactions, paths.tasks] },
+  { id: "analysis", label: "Анализ", paths: [paths.analytics, paths.reports] },
+  {
+    id: "customers",
+    label: "Данные клиентов",
+    paths: [paths.fraudAlerts],
+  },
+  { id: "admin", label: "Администрирование", paths: [paths.catalogs, paths.imports, paths.workflows] },
+];
+
+/** The side menu for a user's roles: groups with no visible page are dropped, except the one holding «Настройки». */
+export function navGroups(roles: string[]): NavGroup[] {
+  const visible = visiblePages(roles);
+  return NAV_GROUPS.map((g) => ({
+    id: g.id,
+    label: g.label,
+    pages: visible.filter((p) => g.paths.includes(p.path)),
+    hasSettings: g.id === "admin",
+  })).filter((g) => g.pages.length > 0 || g.hasSettings);
+}

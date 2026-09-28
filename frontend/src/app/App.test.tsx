@@ -58,6 +58,42 @@ describe("routing", () => {
 });
 
 describe("interactions page", () => {
+  it("shows the register by default, with launch codes", async () => {
+    mockApi();
+    renderApp("/interactions");
+    const table = await screen.findByRole("table");
+    expect(within(table).getByText("ВЗ-0001")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Реестр" }).getAttribute("aria-pressed")).toBe("true");
+    expect(document.querySelector(".board")).toBeNull();
+  });
+
+  it("switches to the stage view and keeps it in the URL", async () => {
+    mockApi();
+    renderApp("/interactions");
+    fireEvent.click(await screen.findByRole("button", { name: "Этапы" }));
+    expect(await screen.findByText("ВЗ-0001")).toBeTruthy();
+    expect(columnOf("ВЗ-0001")).toBe("Документы");
+    expect(screen.getByTestId("location").textContent).toBe("/interactions?view=stages");
+    fireEvent.click(screen.getByRole("button", { name: "Реестр" }));
+    expect(await screen.findByRole("table")).toBeTruthy();
+  });
+
+  it("opens the stage view from a ?view=stages link", async () => {
+    mockApi();
+    renderApp("/interactions?view=stages");
+    await screen.findByText("ВЗ-0001");
+    expect(columnOf("ВЗ-0001")).toBe("Документы");
+  });
+
+  it("says «просрочено» next to an overdue date in the register, not only in red", async () => {
+    mockApi();
+    renderApp("/interactions");
+    const row = (await screen.findByText("ВЗ-0002")).closest("tr")!;
+    expect(row.textContent).toMatch(/просрочено/);
+    const onTime = screen.getByText("ВЗ-0001").closest("tr")!;
+    expect(onTime.textContent).not.toMatch(/просрочено/);
+  });
+
   it("filters by the server overdue flag without recomputing it", async () => {
     mockApi();
     renderApp("/interactions");
@@ -139,7 +175,7 @@ describe("task creation", () => {
 describe("interaction detail navigation", () => {
   it("opens the interaction detail page from the board card", async () => {
     mockApi();
-    renderApp("/interactions");
+    renderApp("/interactions?view=stages");
     await screen.findByText("ВЗ-0001");
     expect(columnOf("ВЗ-0001")).toBe("Документы");
     fireEvent.click(screen.getByRole("link", { name: /Аналитика данных/ }));
@@ -230,16 +266,14 @@ describe("Настройки menu", () => {
     mockApi({ "GET /auth/me": () => sessionFixture(["crm-supervisor"]) });
     renderApp("/");
     const nav = await screen.findByRole("navigation");
-    // "Процессы" is a link; "Настройки" is the SettingsMenu's own button, rendered as the
-    // next element sibling of the "Процессы" link (SettingsMenu's root <div> is the very
-    // next child of <nav> after the mapped NavLinks) — assert direct adjacency, not just
-    // "somewhere after", so a page inserted between them would fail this test.
-    const processesLink = within(nav).getByRole("link", { name: /Процессы/ });
-    const settingsButton = within(nav).getByRole("button", { name: /Настройки/ });
-    expect(processesLink.nextElementSibling?.contains(settingsButton)).toBe(true);
+    const admin = within(nav).getByRole("group", { name: "Администрирование" });
+    const links = within(admin).getAllByRole("link");
+    expect(links.at(-1)?.textContent).toMatch(/Процессы/);
+    const settingsButton = within(admin).getByRole("button", { name: /Настройки/ });
+    expect(links.at(-1)!.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.click(settingsButton);
-    fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
+    fireEvent.click(within(nav).getByRole("link", { name: "Личный профиль" }));
     // The Layout's <h1>/breadcrumb read "Личный профиль" (see the header/breadcrumb regression
     // test below); the page's own content below it is the real phone-verification panel, whose
     // own heading is "Телефон" — level 1 targets the Layout heading, not that inner one.
@@ -255,7 +289,7 @@ describe("Настройки menu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Меню" }));
     expect(sidebar?.className).toContain("mobile-open");
     fireEvent.click(within(nav).getByRole("button", { name: /Настройки/ }));
-    fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
+    fireEvent.click(within(nav).getByRole("link", { name: "Личный профиль" }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
     // Matches what the flat sidebar NavLinks already do on click (closeMenu() + setNavResets):
@@ -274,8 +308,8 @@ describe("Настройки menu", () => {
     renderApp("/");
     const nav = await screen.findByRole("navigation");
     fireEvent.click(within(nav).getByRole("button", { name: /Настройки/ }));
-    expect(within(nav).queryByRole("menuitem", { name: "Пользователи и роли" })).toBeNull();
-    expect(within(nav).queryByRole("menuitem", { name: "Резервное копирование" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Пользователи и роли" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Резервное копирование" })).toBeNull();
   });
 
   it("Персональные данные is a real, distinctly-worded placeholder", async () => {
@@ -323,11 +357,63 @@ describe("topbar account avatar", () => {
     await screen.findByRole("heading", { level: 1 });
     expect(screen.queryByText("ДЕМО")).toBeNull();
     const header = document.querySelector(".topbar-right");
-    const link = header?.querySelector("a.avatar");
+    const link = header?.querySelector("a.profile-link");
     expect(link).toBeTruthy();
     expect(link?.getAttribute("href")).toBe(paths.settingsProfile);
 
     fireEvent.click(link!);
     expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
+  });
+});
+
+describe("stacked phone rows", () => {
+  it("labels university and contract cells with their column names", async () => {
+    mockApi();
+    renderApp("/universities");
+    const uniTable = await screen.findByRole("table");
+    expect(uniTable.className).toContain("stack-table");
+    const city = within((await within(uniTable).findByText("Колледж связи")).closest("tr") as HTMLElement).getAllByRole("cell")[1];
+    expect(city.getAttribute("data-label")).toBe("Город, регион");
+  });
+
+  it("labels contract cells with their column names", async () => {
+    mockApi();
+    renderApp("/contracts");
+    const table = await screen.findByRole("table");
+    expect(table.className).toContain("stack-table");
+    const first = within(table).getAllByRole("row")[1];
+    const labels = within(first).getAllByRole("cell").map((c) => c.getAttribute("data-label"));
+    expect(labels.slice(0, 3)).toEqual(["Номер", "Учебное заведение", "ИТ-продукт"]);
+  });
+});
+
+describe("overview", () => {
+  it("opens the stage cards from «Открыть доску» (the register is now the default view)", async () => {
+    mockApi();
+    renderApp("/");
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть доску/ }));
+    expect((await screen.findByTestId("location")).textContent).toBe("/interactions?view=stages");
+  });
+
+  it("marks the annual interest chart as demonstration data", async () => {
+    mockApi();
+    renderApp("/");
+    const heading = await screen.findByRole("heading", { level: 2, name: /Интерес к обучению/ });
+    expect(heading.closest("section")?.textContent).toMatch(/Демонстрационные данные/);
+  });
+
+  it("shows the four figures without decorative icons", async () => {
+    mockApi();
+    renderApp("/");
+    await screen.findByText("Требуют внимания");
+    expect(document.querySelectorAll(".metric svg")).toHaveLength(0);
+  });
+});
+
+describe("archived customer-data pages", () => {
+  it.each(["/learners", "/vendors", "/applications", "/customer-imports"])("%s is no longer a page", async (path) => {
+    mockApi();
+    renderApp(path);
+    expect(await screen.findByRole("heading", { level: 1, name: "Страница не найдена" })).toBeTruthy();
   });
 });

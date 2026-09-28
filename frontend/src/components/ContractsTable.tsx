@@ -39,7 +39,7 @@ export function ContractsTable({
     <>
       <RefreshError queries={[contracts]} />
       <div className="table-wrap" aria-busy={contracts.isFetching}>
-        <table className="data-table">
+        <table className="data-table stack-table">
           <thead>
             <tr>
               <th scope="col">Номер</th>
@@ -58,23 +58,23 @@ export function ContractsTable({
           <tbody>
             {page.items.map((c) => (
               <tr key={c.id}>
-                <td>
+                <td data-label="Номер">
                   <strong className="cell-title">{c.contract_number}</strong>
                   {c.comment && <small className="cell-note">{c.comment}</small>}
                 </td>
-                {!hideUniversity && <td>{c.university.name}</td>}
-                <td>
+                {!hideUniversity && <td data-label="Учебное заведение">{c.university.name}</td>}
+                <td data-label="ИТ-продукт">
                   {c.it_product.name}
                   <small>{c.it_product.vendor}</small>
                 </td>
-                <td>{formatFullDate(c.signed_at)}</td>
-                <td>
+                <td data-label="Подписан">{formatFullDate(c.signed_at)}</td>
+                <td data-label="Действует до">
                   <span className="validity">
                     {formatFullDate(c.valid_until)} <ValidityBadge contract={c} />
                   </span>
                 </td>
-                <td>{c.transfer_status_label}</td>
-                <td>
+                <td data-label="Статус передачи">{c.transfer_status_label}</td>
+                <td data-label="Менеджер">
                   {c.manager ? (
                     c.manager.full_name
                   ) : c.manager_name ? (
@@ -86,14 +86,14 @@ export function ContractsTable({
                     <span className="muted">Не назначен</span>
                   )}
                 </td>
-                <td>
+                <td data-label="Ответственные от вуза">
                   {c.contacts.length ? (
                     c.contacts.map((p) => p.full_name).join(", ")
                   ) : (
                     <span className="muted">—</span>
                   )}
                 </td>
-                <td>
+                <td className="row-actions">
                   <button
                     type="button"
                     className="icon-button"

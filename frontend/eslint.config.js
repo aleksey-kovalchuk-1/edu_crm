@@ -18,4 +18,10 @@ export default defineConfig([
       globals: globals.browser,
     },
   },
+  {
+    files: ["scripts/**/*.mjs"],
+    extends: [js.configs.recommended],
+    // Node scripts; functions passed to page.evaluate() run in the browser, so both global sets apply.
+    languageOptions: { ecmaVersion: 2024, sourceType: "module", globals: { ...globals.node, ...globals.browser } },
+  },
 ]);

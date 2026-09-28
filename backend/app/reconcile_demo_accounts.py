@@ -33,15 +33,23 @@ class ExistingAccount:
         return f'{self.username}@educrm-demo.ru'
 
 
-# Demote the former second head before granting Irina the sole supervisor role.
+# Demote the former second head. Irina holds only crm-superadmin directly: the realm's crm-superadmin is a
+# composite of crm-admin and crm-supervisor (scripts/keycloak-superadmin-only.sh), so her token keeps both.
 EXISTING = (
     ExistingAccount('pavel.demo@educrm-demo.ru', 'manager_2', 'Менеджер', '2', frozenset({'crm-user'})),
     ExistingAccount('irina.demo@educrm-demo.ru', 'irina_super_admin', 'Ирина', 'Руководитель',
-                    frozenset({'crm-superadmin', 'crm-supervisor', 'crm-admin'})),
+                    frozenset({'crm-superadmin'})),
     ExistingAccount('anna.demo@educrm-demo.ru', 'manager_1', 'Менеджер', '1', frozenset({'crm-user'})),
 )
 NEW_ADMINS = ('admin_1', 'admin_2')
 CRM_ROLES = frozenset({'crm-user', 'crm-supervisor', 'crm-admin', 'crm-superadmin'})
+SUPERADMIN_INCLUDES = frozenset({'crm-admin', 'crm-supervisor'})
+
+
+def effective_roles(direct):
+    """CRM roles a user's token carries: crm-superadmin brings crm-admin and crm-supervisor with it."""
+    direct = frozenset(direct)
+    return direct | SUPERADMIN_INCLUDES if 'crm-superadmin' in direct else direct
 
 
 def _accounts(client):
@@ -151,7 +159,7 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
             if local is not None:
                 local.email = spec.email
                 local.full_name = f'{spec.first_name} {spec.last_name}'
-                local.roles = sorted(spec.roles)
+                local.roles = sorted(effective_roles(spec.roles))
                 if changed:
                     db.execute(update(UserSession).where(
                         UserSession.user_id == local.id, UserSession.revoked_at.is_(None),
@@ -202,7 +210,7 @@ def reconcile_demo_accounts(db, client, *, apply=False, credentials_out=None,
                     db.add(User(keycloak_sub=account.id, email=account.email,
                                 full_name=f'Администратор {username[-1]}', roles=['crm-admin'], is_active=True))
 
-        if client.count_users_with_role('crm-superadmin') != 1 or client.count_users_with_role('crm-supervisor') != 1:
+        if client.count_users_with_role('crm-superadmin') != 1 or client.count_users_with_role('crm-supervisor') != 0:
             raise ValueError('privileged role count changed unexpectedly; stop before committing')
         if changing:
             record_event(db, None, None, 'admin.demo_account_reconcile', entity_type='keycloak_user',

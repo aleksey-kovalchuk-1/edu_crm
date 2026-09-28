@@ -1,5 +1,4 @@
 import { useState } from "react";
-import { Link } from "react-router";
 import { useFraudAlert, useFraudAlerts, useFraudStatus, useReviewFraudAlert,
   type AlertStatus, type ResolutionCode } from "../api/fraudAlerts";
 import { useSession } from "../app/AuthGate";
@@ -31,8 +30,9 @@ const REASONS: { value: ResolutionCode; label: string }[] = [
   { value: "needs_more_information", label: "Нужны дополнительные сведения" },
 ];
 const PRIORITY = { low: "Низкий", medium: "Средний", high: "Высокий" };
-const CARD_PATH: Record<string, string> = {
-  learner: "/learners", course_application: "/applications", vendor_contact: "/vendors",
+/** Record names for alerts about the archived learner, application and supplier pages (no page to open). */
+const ARCHIVED_RECORD: Record<string, string> = {
+  learner: "Анкета", course_application: "Заявка", vendor_contact: "Контакт поставщика",
 };
 
 export function FraudAlertsPage() {
@@ -88,10 +88,10 @@ function FraudAlertsWorkspace() {
       {queryFallback([detail]) ?? (alert ? <>
         <p>{RULES[alert.rule_code] ?? alert.rule_code}. Приоритет: {PRIORITY[alert.priority]}. Статус: {STATUS[alert.status]}.</p>
         {alert.evidence_kind ? <p>Тип совпадения: {alert.evidence_kind === "snils" ? "СНИЛС" : "Паспорт"}.</p> : null}
-        {alert.entity_type && alert.entity_id && CARD_PATH[alert.entity_type] ?
-          <p><Link to={`${CARD_PATH[alert.entity_type]}?id=${alert.entity_id}`}>{alert.entity_type === "learner" ? "Открыть анкету" : "Открыть карточку"} #{alert.entity_id}</Link></p> : null}
-        {alert.related_entity_id && alert.entity_type && CARD_PATH[alert.entity_type] ?
-          <p><Link to={`${CARD_PATH[alert.entity_type]}?id=${alert.related_entity_id}`}>Открыть связанную карточку #{alert.related_entity_id}</Link></p> : null}
+        {alert.entity_type && alert.entity_id && ARCHIVED_RECORD[alert.entity_type] ?
+          <p className="muted">{ARCHIVED_RECORD[alert.entity_type]} #{alert.entity_id} · раздел в архиве</p> : null}
+        {alert.related_entity_id && alert.entity_type && ARCHIVED_RECORD[alert.entity_type] ?
+          <p className="muted">Связанная запись #{alert.related_entity_id} · раздел в архиве</p> : null}
         <div className="customer-toolbar">
           <label>Решение <select value={decision} onChange={(event) => setDecision(event.target.value as AlertStatus | "")}>
             <option value="">Выберите</option>{Object.entries(STATUS).filter(([code]) => NEXT_STATUS[alert.status].includes(code as AlertStatus))

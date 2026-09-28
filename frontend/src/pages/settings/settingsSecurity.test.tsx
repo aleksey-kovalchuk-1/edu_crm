@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { mockApi, renderApp, sessionFixture } from "../../test/utils";
 
@@ -17,6 +17,10 @@ describe("settings security", () => {
     await screen.findByText("Это устройство");
     expect(screen.queryByRole("button", { name: "Завершить сеанс Chrome · Windows" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Завершить сеанс Safari · iOS" }));
+    const confirm = await screen.findByRole("dialog", { name: "Завершить сеанс?" });
+    expect(confirm.textContent).toMatch(/Safari · iOS/);
+    expect(api.callsTo("DELETE", "/security/sessions/cccc3333dddd4444")).toHaveLength(0);
+    fireEvent.click(within(confirm).getByRole("button", { name: "Завершить сеанс" }));
     await screen.findByText(/завершится сам после 30 минут/);
     expect(api.callsTo("DELETE", "/security/sessions/cccc3333dddd4444")).toHaveLength(1);
   });
@@ -28,8 +32,26 @@ describe("settings security", () => {
     });
     renderApp("/settings/security");
     fireEvent.click(await screen.findByRole("button", { name: "Завершить все остальные" }));
+    const confirm = await screen.findByRole("dialog", { name: "Завершить все остальные сеансы?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Завершить все остальные" }));
     await screen.findByText("Все остальные сеансы завершены.");
     expect(api.callsTo("POST", "/security/sessions/terminate-others")).toHaveLength(1);
+  });
+
+  it("does nothing when ending a session is cancelled", async () => {
+    const api = mockApi({ "GET /security/sessions": () => sessions });
+    renderApp("/settings/security");
+    fireEvent.click(await screen.findByRole("button", { name: "Завершить сеанс Safari · iOS" }));
+    const confirm = await screen.findByRole("dialog", { name: "Завершить сеанс?" });
+    fireEvent.click(within(confirm).getByRole("button", { name: "Отмена" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(api.callsTo("DELETE", "/security/sessions/cccc3333dddd4444")).toHaveLength(0);
+  });
+
+  it("announces loading while sessions are fetched", async () => {
+    mockApi({ "GET /security/sessions": () => new Promise(() => {}) });
+    renderApp("/settings/security");
+    expect(await screen.findByText("Загружаем сеансы…")).toBeTruthy();
   });
 
   it("shows CRM sign-ins and says honestly that the Keycloak journal is not enabled", async () => {

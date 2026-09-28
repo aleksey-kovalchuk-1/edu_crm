@@ -91,4 +91,20 @@ describe("organization card editing", () => {
     await screen.findByText("ОГРН — 13 цифр с верной контрольной цифрой");
     expect(screen.queryByText("Изменения сохранены")).toBeNull();
   });
+
+  it("summarises field errors above the form and moves focus to the field from the summary", async () => {
+    mockApi({
+      "GET /auth/me": () => sessionFixture(["crm-admin"]),
+      "PUT /organization": () => apiError(422, "VALIDATION_ERROR", "Проверьте заполненные поля", [
+        { field: "ogrn", message: "ОГРН — 13 цифр с верной контрольной цифрой", type: "value_error" },
+      ]),
+    });
+    renderApp("/settings/organization");
+    fireEvent.change(await screen.findByLabelText("ОГРН"), { target: { value: "1095030001132" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    const summary = await screen.findByRole("group", { name: /Исправьте 1 поле/ });
+    expect(document.activeElement).toBe(summary);
+    fireEvent.click(screen.getByRole("link", { name: /ОГРН: ОГРН — 13 цифр/ }));
+    expect(document.activeElement?.id).toBe("organization-ogrn");
+  });
 });
