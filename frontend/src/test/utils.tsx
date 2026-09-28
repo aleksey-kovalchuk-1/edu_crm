@@ -398,6 +398,9 @@ export function mockApi(extra: Record<string, Handler> = {}) {
     "GET /notifications/unread-count": () => ({ count: 0 }),
     "GET /notifications": () => [],
     "GET /security/sessions": () => [],
+    "GET /admin/backups/run": () => ({
+      available: true, reason: null, last_run: null, pending_request: false, pending_since: null, manual_available: true,
+    }),
     "GET /security/login-history": () => ({ crm: [], keycloak: { available: false, reason: "disabled", events: [] } }),
     "GET /security/password-policy": () => ({
       available: true, rules: ["Не короче 12 символов"], brute_force: null,
