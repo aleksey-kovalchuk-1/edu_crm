@@ -3,7 +3,7 @@
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        identifier="unicrm-model" version="3.0">
   <name xml:lang="ru">UniCRM — компонентная архитектура</name>
-  <documentation xml:lang="ru">Реализованная система на 28.09.2026. LMS и сайт заказчика не подключены.</documentation>
+  <documentation xml:lang="ru">Реализованная система на 28.09.2026. LMS и сайт заказчика по решению владельца всегда остаются заглушками; коннекторы пока не реализованы.</documentation>
   <elements>
     <element identifier="cam" xsi:type="BusinessRole">
       <name xml:lang="ru">КАМ — менеджер по вузам</name>

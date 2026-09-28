@@ -70,7 +70,7 @@ Priority order: owner decisions and the official specification (`docs/specificat
 
 | ID | Task | Depends on | Acceptance criteria | Status |
 |---|---|---|---|---|
-| T-060 | Connector framework; documented **mock** LMS and Laravel site APIs; JSON ingestion into new or existing workflows; idempotency | T-041 | Mock payloads create and update workflows; re-run creates no duplicates; documentation states the contracts are mocks | TODO |
+| T-060 | Permanent, labelled LMS and website stubs from synthetic local fixtures; no external API connector | T-041 | Repeat input is idempotent, rights are checked, provenance stays visible, no mock value enters confirmed reports automatically | TODO — scope changed by owner 28.09.2026 |
 
 ## M7 — Quality, security, documentation, delivery
 

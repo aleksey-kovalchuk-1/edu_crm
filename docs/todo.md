@@ -58,7 +58,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [x] Fill Настройки → Организация and Резервное копирование (status of complete encrypted pairs).
 - [ ] Optional manual backup trigger from the web UI; retain host-side execution and no recovery key in API.
 - [ ] Data scopes admin screen; supervisor reassigns responsible people (T-025).
-- [ ] JSON export of results (T-034).
+- [x] JSON export of full interaction reports (T-034): same filters/columns, server-side scope and audit.
 - [x] Create manager and administrator accounts from Пользователи и роли (superadmin only).
 - [x] Change an existing user's manager/administrator role and assign either role to a pending
       registration from Пользователи и роли (superadmin only; supervisor/superadmin protected).
@@ -66,13 +66,11 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 
 ## 3. Integrations
 
-- [x] Design the LMS and website mock boundary for the no-API-access scenario, including
-      staging, deduplication, review, access control and real-contract questions
-      (`docs/design/lms-cms-mocks.md`, 2026-09-27).
-- [ ] **Rostelecom LMS + Laravel CMS connector (F-001, IMPORTANT)** — build and test source
-      adapters against approved anonymized examples when their contracts are available. The
-      divergent `ai/integration-candidate` prototype has invented fields and must not be
-      deployed as a real connector or merged wholesale.
+- [x] Record the owner's permanent-mock decision for LMS and the website
+      (`docs/design/lms-cms-mocks.md`, 2026-09-28). No real API connector is planned.
+- [ ] Implement **permanent, labelled LMS and website stubs** from versioned synthetic fixtures;
+      keep their data out of confirmed reports, test permissions and repeat handling. The
+      divergent `ai/integration-candidate` must not be deployed as a real connector.
 - [ ] Real SMS and email providers behind the existing injectable senders (D-157, D-210).
 - [ ] Superset profile on the current schema, read-only analytics views (T-074).
 
@@ -103,7 +101,7 @@ and density pass (D-220), reports module (D-221), chart PNG/PDF export (D-222).
    product/direction match nothing until then). Do not seed placeholder catalog data.
 3. Housekeeping section above: PR into `main` after `ai/phone-verification` is merged, protect
    `main`, `scripts/deploy-public.sh`, `CLAUDE.md`.
-4. Then: slide-over task panel, notifications, LMS/CMS connector (F-001), security headers.
+4. Then: slide-over task panel, permanent LMS/website stubs, security headers.
 
 **How to deploy** (the laptop stack *is* production): `scripts/deploy-public.sh <label>` makes
 encrypted database and attachment copies, updates API/web/notifier, and checks local/public health
