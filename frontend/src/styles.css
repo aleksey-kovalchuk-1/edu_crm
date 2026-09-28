@@ -4732,7 +4732,8 @@ footer {
 .settings-panel .wizard-actions {
   justify-content: flex-start;
 }
-.settings-body form:not(.role-editor) {
+.settings-body form:not(.role-editor),
+.settings-panel .wizard-body {
   display: flex;
   flex-direction: column;
   gap: var(--atmr-spacing-4x);
@@ -4764,8 +4765,17 @@ footer {
   gap: var(--atmr-spacing-2x);
 }
 .role-editor select {
-  min-width: 0;
+  min-width: 10rem;
   max-width: 100%;
+}
+/* Settings bodies follow the section heading, whose padding drops to 16px below 800px. */
+@media (max-width: 800px) {
+  .settings-body {
+    padding: 0 var(--atmr-spacing-4x) var(--atmr-spacing-4x);
+  }
+  .settings-body > .table-wrap {
+    margin: 0 calc(-1 * var(--atmr-spacing-4x)) calc(-1 * var(--atmr-spacing-4x));
+  }
 }
 .settings-body .wizard-body {
   padding: 0;
