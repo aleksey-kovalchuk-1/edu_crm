@@ -32,8 +32,8 @@ class Settings:
     public_base_url: str
     session_encryption_key: str
     learner_data_encryption_key: str = ''
-    # Learners, supplier companies, course applications and customer imports are archived (2026-09-28):
-    # their API is served only when CUSTOMER_DATA_ENABLED is set. Fraud alerts are not affected.
+    # Learners, supplier companies, course applications, customer imports and fraud alerts are archived
+    # (2026-09-28): their API is served only when CUSTOMER_DATA_ENABLED is set.
     customer_data_enabled: bool = False
     fraud_match_key: str = ''
     fraud_match_key_version: int = 1
