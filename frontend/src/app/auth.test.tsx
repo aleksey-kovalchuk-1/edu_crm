@@ -232,7 +232,7 @@ describe("csrf and permissions", () => {
   });
 
   it.each([
-    [["crm-user"], "Менеджер", true],
+    [["crm-user"], "КАМ", true],
     [["crm-supervisor"], "Руководитель", true],
     [["crm-user", "crm-admin"], "Администратор", true],
   ])("roles %j: label %s, can add universities: %s", async (roles, label, canCreate) => {

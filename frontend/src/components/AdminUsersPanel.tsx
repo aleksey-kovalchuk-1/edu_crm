@@ -1,18 +1,17 @@
 import type { FormEvent } from "react";
 import { useAdminUsers, useChangeUserRole, type AdminUser, type AssignableRole } from "../api/admin";
 import { formatDateTime } from "../lib/format";
+import { roleLabel } from "../lib/user";
+import { SettingsPanel } from "../pages/settings/SettingsPanel";
+import { Notice } from "./Notice";
 import { ErrorAlert, queryFallback, RefreshError } from "./QueryState";
 
-const ROLE_LABELS: Record<string, string> = {
-  "crm-user": "Менеджер",
-  "crm-supervisor": "Руководитель",
-  "crm-admin": "Администратор",
-  "crm-superadmin": "Суперадминистратор",
-};
+const PROTECTED = new Set(["crm-supervisor", "crm-superadmin"]);
 
 /**
  * Superadmin-only account directory (GET /admin/users): total count and every user's login.
  * Shared by Настройки → Аккаунт (quick glance) and Настройки → Пользователи и роли (full page).
+ * One short label per user — the highest CRM role — never a list of inherited roles.
  */
 export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
   const users = useAdminUsers();
@@ -27,29 +26,25 @@ export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
   }
 
   return (
-    <section className="panel" aria-labelledby="admin-users-title">
-      <div className="section-head">
-        <div>
-          <h2 id="admin-users-title">Пользователи CRM</h2>
-          <p>{users.data?.available ? `Всего: ${users.data.total}` : "Учётные записи и роли."}</p>
-        </div>
-      </div>
+    <SettingsPanel
+      titleId="admin-users-title"
+      title="Пользователи CRM"
+      description={users.data?.available ? `Всего: ${users.data.total}` : "Учётные записи и роли."}
+    >
       {change.error && <ErrorAlert error={change.error} />}
-      {change.data && <p role="status">Роль пользователя {change.data.username} изменена.</p>}
+      {change.data && <Notice tone="success">Роль пользователя {change.data.username} изменена.</Notice>}
       {queryFallback([users]) ??
         (list && (
           <>
             <RefreshError queries={[users]} />
-            {!users.data?.available && <p className="muted">Список учётных записей Keycloak сейчас недоступен.</p>}
+            {!users.data?.available && <Notice tone="info">Список учётных записей Keycloak сейчас недоступен.</Notice>}
             {users.data?.available && (
               <div className="table-wrap">
-                <table className="data-table">
+                <table className="data-table stack-table users-table">
                   <thead>
                     <tr>
-                      <th scope="col">Логин</th>
-                      <th scope="col">Почта</th>
-                      <th scope="col">Имя</th>
-                      <th scope="col">Роли</th>
+                      <th scope="col">Пользователь</th>
+                      <th scope="col">Роль</th>
                       <th scope="col">Статус</th>
                       <th scope="col">Последний вход</th>
                       {editable && <th scope="col">Изменить роль</th>}
@@ -58,22 +53,24 @@ export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
                   <tbody>
                     {list.map((u) => (
                       <tr key={u.keycloak_id}>
-                        <td><strong className="cell-title">{u.username}</strong></td>
-                        <td>{u.email}</td>
-                        <td>{u.full_name}</td>
-                        <td>{u.roles.map((r) => ROLE_LABELS[r] ?? r).join(", ") || <span className="muted">—</span>}</td>
-                        <td>{u.is_active ? "Активен" : "Отключён"}</td>
-                        <td className="muted">{u.last_login_at ? formatDateTime(u.last_login_at) : "—"}</td>
+                        <td data-label="Пользователь">
+                          <strong className="cell-title wrap-anywhere">{u.username}</strong>
+                          {u.full_name && <span className="user-name">{u.full_name}</span>}
+                          <span className="user-email wrap-anywhere">{u.email}</span>
+                        </td>
+                        <td data-label="Роль">{roleLabel(u.roles) ?? <span className="muted">—</span>}</td>
+                        <td data-label="Статус">{u.is_active ? "Активен" : "Отключён"}</td>
+                        <td data-label="Последний вход" className="muted">{u.last_login_at ? formatDateTime(u.last_login_at) : "—"}</td>
                         {editable && (
-                          <td>
-                            {u.roles.some((role) => role === "crm-supervisor" || role === "crm-superadmin") ? (
+                          <td data-label="Изменить роль" className="role-editor-cell">
+                            {u.roles.some((role) => PROTECTED.has(role)) ? (
                               <span className="muted">Защищённая роль</span>
                             ) : (
-                              <form aria-label={`Роль пользователя ${u.username}`} onSubmit={(event) => saveRole(event, u)}>
+                              <form className="role-editor" aria-label={`Роль пользователя ${u.username}`} onSubmit={(event) => saveRole(event, u)}>
                                 <label>
-                                  Новая роль
+                                  <span className="visually-hidden">Новая роль</span>
                                   <select name="role" defaultValue={u.roles.includes("crm-admin") ? "crm-admin" : "crm-user"}>
-                                    <option value="crm-user">Менеджер</option>
+                                    <option value="crm-user">КАМ</option>
                                     <option value="crm-admin">Администратор</option>
                                   </select>
                                 </label>
@@ -91,6 +88,6 @@ export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
             )}
           </>
         ))}
-    </section>
+    </SettingsPanel>
   );
 }

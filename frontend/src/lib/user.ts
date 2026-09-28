@@ -7,10 +7,10 @@ export const ROLES = {
 
 /** Highest role first. */
 const ROLE_LABELS: [string, string][] = [
-  [ROLES.superadmin, "Главный администратор"],
+  [ROLES.superadmin, "Суперадминистратор"],
   [ROLES.admin, "Администратор"],
   [ROLES.supervisor, "Руководитель"],
-  [ROLES.user, "Менеджер"],
+  [ROLES.user, "КАМ"],
 ];
 
 /** Russian label of the highest CRM role, or null when the user has none. */

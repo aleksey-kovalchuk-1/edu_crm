@@ -4717,8 +4717,55 @@ footer {
   display: flex;
   flex-direction: column;
   gap: var(--atmr-spacing-4x);
-  max-width: 880px;
   padding: 0 var(--atmr-spacing-6x) var(--atmr-spacing-6x);
+}
+/* One content width for every Settings section; tables keep the full card width. */
+.settings-body > :not(.table-wrap),
+.settings-panel .wizard-body > :not(.table-wrap) {
+  max-width: 880px;
+}
+.settings-body > .table-wrap {
+  margin: 0 calc(-1 * var(--atmr-spacing-6x)) calc(-1 * var(--atmr-spacing-6x));
+  border-top: 1px solid var(--atmr-border-soft);
+}
+.settings-body .wizard-actions,
+.settings-panel .wizard-actions {
+  justify-content: flex-start;
+}
+.settings-body form:not(.role-editor) {
+  display: flex;
+  flex-direction: column;
+  gap: var(--atmr-spacing-4x);
+}
+.users-table {
+  white-space: normal;
+}
+.users-table td {
+  vertical-align: top;
+}
+.users-table th:first-child,
+.users-table td:first-child {
+  width: 40%;
+}
+.wrap-anywhere {
+  overflow-wrap: anywhere;
+}
+.user-name,
+.user-email {
+  display: block;
+}
+.user-email {
+  color: var(--atmr-fg-soft);
+}
+.role-editor {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atmr-spacing-2x);
+}
+.role-editor select {
+  min-width: 0;
+  max-width: 100%;
 }
 .settings-body .wizard-body {
   padding: 0;
@@ -4827,6 +4874,19 @@ footer {
 @media (max-width: 767px) {
   .settings-body {
     padding: 0 var(--atmr-spacing-4x) var(--atmr-spacing-4x);
+  }
+  .settings-body > .table-wrap {
+    margin: 0 calc(-1 * var(--atmr-spacing-4x)) calc(-1 * var(--atmr-spacing-4x));
+  }
+  .users-table th:first-child,
+  .users-table td:first-child {
+    width: 100%;
+  }
+  .role-editor,
+  .role-editor label,
+  .role-editor select,
+  .role-editor button {
+    width: 100%;
   }
   .form-row {
     grid-template-columns: 1fr;
