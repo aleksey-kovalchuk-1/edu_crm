@@ -51,6 +51,8 @@
       },
       {
         "name": "crm-superadmin",
+        "composite": true,
+        "composites": { "realm": ["crm-admin", "crm-supervisor"] },
         "description": "Полный административный доступ: пользователи, роли, безопасность, конфигурация системы"
       }
     ]
@@ -169,7 +171,7 @@
       "credentials": [
         { "type": "password", "value": "${EDU_CRM_IRINA_PASSWORD}", "temporary": true }
       ],
-      "realmRoles": ["default-roles-edu-crm", "crm-admin", "crm-supervisor", "crm-superadmin"]
+      "realmRoles": ["default-roles-edu-crm", "crm-superadmin"]
     },
     {
       "username": "admin_1",

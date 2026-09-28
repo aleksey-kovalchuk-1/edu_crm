@@ -1,22 +1,30 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { ApiError, errorText } from "../../api/client";
 import { contactStatus, useProfile, useUpdateProfile, type Profile } from "../../api/profile";
+import { ErrorSummary } from "../../components/ErrorSummary";
+import { Notice } from "../../components/Notice";
+import { ErrorAlert } from "../../components/QueryState";
 import { PhoneVerificationPanel } from "./PhoneVerificationPanel";
 import { SenderAddressPanel } from "./SenderAddressPanel";
+import { SettingsPanel } from "./SettingsPanel";
 
 const TIME_ZONES: string[] =
   typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : ["Europe/Moscow"];
 
 type Form = Pick<Profile, "first_name" | "middle_name" | "last_name" | "timezone" | "telegram" | "whatsapp">;
 const FIELD_KEYS = ["first_name", "middle_name", "last_name", "timezone", "telegram", "whatsapp"] as const;
+const FIELD_LABELS: Record<(typeof FIELD_KEYS)[number], string> = {
+  first_name: "Имя", middle_name: "Отчество", last_name: "Фамилия", timezone: "Часовой пояс", telegram: "Telegram", whatsapp: "WhatsApp",
+};
+const fieldId = (key: string) => `profile-${key}`;
 
 export function SettingsProfilePage() {
   const profile = useProfile();
   if (profile.isError) {
-    return <section className="panel"><p className="danger" role="alert">{errorText(profile.error)}</p></section>;
+    return <section className="panel settings-panel"><ErrorAlert error={profile.error} onRetry={() => void profile.refetch()} /></section>;
   }
   if (!profile.data) {
-    return <section className="panel"><p className="muted">Загрузка…</p></section>;
+    return <section className="panel settings-panel"><div className="loading" role="status">Загружаем профиль…</div></section>;
   }
   return (
     <>
@@ -68,22 +76,26 @@ function PersonalDataForm({ profile }: { profile: Profile }) {
     return (
       <label>
         {label}
-        <input value={form[key]} onChange={(e) => set(key, e.target.value)}
+        <input id={fieldId(key)} value={form[key]} onChange={(e) => set(key, e.target.value)}
           aria-invalid={message ? true : undefined} {...props} />
         {message && <small className="field-error danger">{message}</small>}
       </label>
     );
   }
 
+  const problems = FIELD_KEYS.flatMap((key) => {
+    const message = fieldError(key);
+    return message ? [{ id: fieldId(key), label: FIELD_LABELS[key], message }] : [];
+  });
+
   return (
-    <form className="panel" onSubmit={submit} aria-labelledby="profile-personal-title" noValidate>
-      <div className="section-head">
-        <div>
-          <h2 id="profile-personal-title">Личные данные</h2>
-          <p>Имя, отчество и фамилия сохраняются в учётной записи для входа.</p>
-        </div>
-      </div>
-      <div className="wizard-body">
+    <SettingsPanel
+      titleId="profile-personal-title"
+      title="Личные данные"
+      description="Имя, отчество и фамилия сохраняются в учётной записи для входа."
+      onSubmit={submit}
+    >
+        <ErrorSummary errors={problems} />
         <div className="form-row">
           {field("first_name", "Имя", { maxLength: 100, autoComplete: "given-name" })}
           {field("middle_name", "Отчество", { maxLength: 100, autoComplete: "additional-name" })}
@@ -96,7 +108,7 @@ function PersonalDataForm({ profile }: { profile: Profile }) {
         </label>
         <label>
           Часовой пояс
-          <select value={form.timezone} onChange={(e) => set("timezone", e.target.value)}
+          <select id={fieldId("timezone")} value={form.timezone} onChange={(e) => set("timezone", e.target.value)}
             aria-invalid={fieldError("timezone") ? true : undefined}>
             {zones.map((zone) => <option key={zone} value={zone}>{zone.replace(/_/g, " ")}</option>)}
           </select>
@@ -117,12 +129,11 @@ function PersonalDataForm({ profile }: { profile: Profile }) {
           Контакты только сохраняются в профиле: CRM не отправляет сообщения в мессенджеры.
         </small>
 
-        {error && !hasFieldError && <p className="danger" role="alert">{errorText(error)}</p>}
-        {saved && <p className="text-green" role="status">Изменения сохранены</p>}
+        {error && !hasFieldError && <Notice tone="error">{errorText(error)}</Notice>}
+        {saved && <Notice tone="success">Изменения сохранены</Notice>}
         <div className="wizard-actions">
           <button className="primary" disabled={update.isPending}>{update.isPending ? "Сохраняем…" : "Сохранить"}</button>
         </div>
-      </div>
-    </form>
+    </SettingsPanel>
   );
 }

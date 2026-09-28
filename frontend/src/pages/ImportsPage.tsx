@@ -306,7 +306,7 @@ function ImportWorkspace() {
 
           {step === 4 && applied && (
             <>
-              <div className="notice-success" role="status">
+              <div className="notice notice-success import-success" role="status">
                 <CheckCircle2 size={18} />
                 <span>
                   Загрузка «{upload?.filename}» применена: записано строк —{" "}

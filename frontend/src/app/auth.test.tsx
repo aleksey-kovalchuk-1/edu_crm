@@ -232,7 +232,7 @@ describe("csrf and permissions", () => {
   });
 
   it.each([
-    [["crm-user"], "Менеджер", true],
+    [["crm-user"], "КАМ", true],
     [["crm-supervisor"], "Руководитель", true],
     [["crm-user", "crm-admin"], "Администратор", true],
   ])("roles %j: label %s, can add universities: %s", async (roles, label, canCreate) => {
@@ -240,7 +240,8 @@ describe("csrf and permissions", () => {
     renderApp("/universities");
     expect(await screen.findByText(label)).toBeTruthy();
     expect(screen.getByText("Анна Петрова")).toBeTruthy();
-    expect(screen.getAllByText("АП")).toHaveLength(2);
+    // One avatar: the initials inside the top-bar profile link.
+    expect(screen.getAllByText("АП")).toHaveLength(1);
     // Every signed-in role can register a new university for its first task.
     expect(await screen.findByText("Колледж связи")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Добавить заведение/ }) !== null).toBe(
