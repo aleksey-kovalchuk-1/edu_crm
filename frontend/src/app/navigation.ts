@@ -14,7 +14,6 @@ import {
   ListTree,
   LogOut,
   ShieldCheck,
-  ShieldAlert,
   UserRound,
   Users,
   Workflow,
@@ -32,7 +31,6 @@ export const paths = {
   analytics: "/analytics",
   reports: "/reports",
   catalogs: "/catalogs",
-  fraudAlerts: "/fraud-alerts",
   imports: "/imports",
   workflows: "/workflows",
   statusBoard: "/interactions/board",
@@ -138,15 +136,6 @@ export const pages: PageMeta[] = [
     heading: "Справочники",
     subtitle: "ИТ-направления и ИТ-продукты, используемые в договорах.",
     create: null,
-  },
-  {
-    path: paths.fraudAlerts,
-    name: "Проверка сигналов",
-    icon: ShieldAlert,
-    heading: "Проверка сигналов",
-    subtitle: "Противоречия в данных, ожидающие решения руководителя.",
-    create: null,
-    roles: [ROLES.supervisor, ROLES.admin],
   },
   {
     path: paths.imports,
@@ -294,7 +283,7 @@ export function findPage(pathname: string): PageMeta | undefined {
 export const isPageRoot = (page: PageMeta, pathname: string) =>
   page.path === normalize(pathname);
 
-export type NavGroupId = "work" | "analysis" | "customers" | "admin";
+export type NavGroupId = "work" | "analysis" | "admin";
 
 export interface NavGroup {
   id: NavGroupId;
@@ -308,11 +297,6 @@ export interface NavGroup {
 const NAV_GROUPS: { id: NavGroupId; label: string; paths: string[] }[] = [
   { id: "work", label: "Работа", paths: [paths.overview, paths.universities, paths.contracts, paths.interactions, paths.tasks] },
   { id: "analysis", label: "Анализ", paths: [paths.analytics, paths.reports] },
-  {
-    id: "customers",
-    label: "Данные клиентов",
-    paths: [paths.fraudAlerts],
-  },
   { id: "admin", label: "Администрирование", paths: [paths.catalogs, paths.imports, paths.workflows] },
 ];
 

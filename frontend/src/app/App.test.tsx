@@ -411,7 +411,7 @@ describe("overview", () => {
 });
 
 describe("archived customer-data pages", () => {
-  it.each(["/learners", "/vendors", "/applications", "/customer-imports"])("%s is no longer a page", async (path) => {
+  it.each(["/learners", "/vendors", "/applications", "/customer-imports", "/fraud-alerts"])("%s is no longer a page", async (path) => {
     mockApi();
     renderApp(path);
     expect(await screen.findByRole("heading", { level: 1, name: "Страница не найдена" })).toBeTruthy();

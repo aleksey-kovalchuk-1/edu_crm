@@ -37,9 +37,10 @@ describe("shell", () => {
     mockApi({ "GET /auth/me": () => sessionFixture(["crm-supervisor"]) });
     renderApp("/");
     const nav = await screen.findByRole("navigation");
-    for (const name of ["Работа", "Анализ", "Данные клиентов", "Администрирование"]) {
+    for (const name of ["Работа", "Анализ", "Администрирование"]) {
       expect(within(nav).getByRole("group", { name })).toBeTruthy();
     }
+    expect(within(nav).queryByRole("group", { name: "Данные клиентов" })).toBeNull();
   });
 
   it("opens and closes the phone menu with the menu button and Escape", async () => {
