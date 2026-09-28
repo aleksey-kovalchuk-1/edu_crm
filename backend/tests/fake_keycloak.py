@@ -53,6 +53,7 @@ class FakeKeycloak:
         self.fail_session_delete = False
         self.registration_email_as_username = False
         self.edit_username_allowed = True
+        self.session_delete_calls = 0
         # Malformed-response simulation for the admin API, settable per test:
         #   'not_json'    -> GET /users returns 200 with a non-JSON body.
         #   'wrong_shape' -> GET /users returns 200 with a JSON object instead of a JSON array.
@@ -274,6 +275,7 @@ class FakeKeycloak:
                 'editUsernameAllowed': self.edit_username_allowed,
             })
         if suffix.startswith('sessions/') and request.method == 'DELETE':
+            self.session_delete_calls += 1
             if self.fail_session_delete:
                 return httpx.Response(503)
             sid = suffix[len('sessions/'):]
