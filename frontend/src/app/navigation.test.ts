@@ -69,10 +69,10 @@ describe("menu groups", () => {
     }
   });
 
-  it("labels the groups Работа, Анализ, Данные клиентов, Администрирование, with Настройки in the last", () => {
+  it("labels the groups Работа, Анализ, Администрирование, with Настройки in the last", () => {
     const groups = navGroups(allRoles);
-    expect(groups.map((g) => g.label)).toEqual(["Работа", "Анализ", "Данные клиентов", "Администрирование"]);
-    expect(groups.map((g) => g.hasSettings)).toEqual([false, false, false, true]);
+    expect(groups.map((g) => g.label)).toEqual(["Работа", "Анализ", "Администрирование"]);
+    expect(groups.map((g) => g.hasSettings)).toEqual([false, false, true]);
   });
 
   it("shows a manager the pages their role allows, grouped", () => {
@@ -86,10 +86,9 @@ describe("menu groups", () => {
 
   it("no longer lists the archived customer-data pages", () => {
     const names = navGroups(allRoles).flatMap((g) => g.pages.map((p) => p.name));
-    for (const archived of ["Слушатели", "Компании", "Заявки на курсы", "Загрузка данных"]) {
+    for (const archived of ["Слушатели", "Компании", "Заявки на курсы", "Загрузка данных", "Проверка сигналов"]) {
       expect(names).not.toContain(archived);
     }
-    expect(names).toContain("Проверка сигналов");
   });
 
   it("drops a group whose pages are all hidden, but keeps Администрирование for Настройки", () => {
