@@ -171,6 +171,13 @@ export const TRANSITION_LABELS: Partial<Record<TaskStatus, Partial<Record<TaskSt
 /** Transitions where the server requires a non-empty comment (returning work needs a reason). */
 export const NEEDS_COMMENT = new Set<string>(["awaiting_review:in_progress"]);
 
+/** Transitions only the task's author or a supervisor/admin may make; the others are open to an assignee
+ * too (TRANSITIONS in backend/app/task_routes.py). */
+export const MANAGER_TRANSITIONS = new Set<string>([
+  "new:cancelled", "in_progress:cancelled", "deferred:cancelled",
+  "awaiting_review:completed", "awaiting_review:in_progress", "completed:in_progress",
+]);
+
 /** Statuses shown as columns on the personal "Мой план" board — every status except the terminal
  * `cancelled`, which belongs in the List/Deadline views, not day-to-day personal planning. */
 export const PLANNER_STATUSES: TaskStatus[] = ["new", "in_progress", "awaiting_review", "deferred", "completed"];
