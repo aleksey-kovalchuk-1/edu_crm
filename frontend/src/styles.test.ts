@@ -133,6 +133,10 @@ describe("styles.css design tokens", () => {
       expect(phone).toMatch(/\.stack-table td:first-child a\s*\{[^}]*min-height:\s*44px/);
     });
 
+    it("sets body text at 16px (tables and fields stay at 14px)", () => {
+      expect(tokens).toMatch(/--text-base:\s*16px;/);
+    });
+
     it("turns panels into flat frames without shadows", () => {
       expect(rule(".panel")).toMatch(/border:\s*1px solid var\(--atmr-border-soft\)/);
       expect(rule(".panel")).toMatch(/border-radius:\s*var\(--atmr-border-radius-l\)/);
