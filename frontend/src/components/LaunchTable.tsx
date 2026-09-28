@@ -2,7 +2,7 @@ import { ChevronRight } from "lucide-react";
 import { Link } from "react-router";
 import type { Launch } from "../api/types";
 import { launchPath } from "../app/navigation";
-import { formatDate, initials, stageGroup } from "../lib/format";
+import { formatDate, initials, launchCode, stageGroup } from "../lib/format";
 
 export function LaunchTable({
   rows,
@@ -13,7 +13,7 @@ export function LaunchTable({
 }) {
   return (
     <div className="table-wrap">
-      <table>
+      <table className="stack-table">
         <thead>
           <tr>
             <th>Программа / учебное заведение</th>
@@ -27,28 +27,32 @@ export function LaunchTable({
         <tbody>
           {rows.map((l) => (
             <tr key={l.id}>
-              <td>
+              <td data-label="Программа / учебное заведение">
                 <Link className="table-link" to={launchPath(l.id)}>
                   {l.program}
                 </Link>
-                <small>{l.university}</small>
+                <small>
+                  {l.university} · <span className="launch-code">{launchCode(l.id)}</span>
+                </small>
               </td>
-              <td>
+              <td data-label="Этап">
                 <span className={`badge badge-${stageGroup(l.stage)}`}>
                   {stages[l.stage]}
                 </span>
               </td>
-              <td>
+              <td data-label="Ответственный">
                 <span className="owner">
                   <span className="avatar tiny">{initials(l.owner)}</span>
                   {l.owner}
                 </span>
               </td>
-              <td>{l.students}</td>
-              <td className={l.overdue ? "danger" : ""}>
+              <td data-label="Обучающиеся">{l.students}</td>
+              <td data-label="Срок запуска" className={l.overdue ? "danger" : ""}>
                 {formatDate(l.deadline)}
+                {/* Colour alone does not say it: the word does. */}
+                {l.overdue && <span className="overdue-note">просрочено</span>}
               </td>
-              <td>
+              <td className="row-open">
                 <Link
                   className="icon-button"
                   to={launchPath(l.id)}
