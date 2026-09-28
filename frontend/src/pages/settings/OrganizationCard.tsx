@@ -3,6 +3,12 @@ import { ApiError, errorText } from "../../api/client";
 import {
   useOrganization, useUpdateOrganization, type Organization, type OrganizationInput,
 } from "../../api/organization";
+import { ErrorSummary } from "../../components/ErrorSummary";
+import { Notice } from "../../components/Notice";
+import { ErrorAlert } from "../../components/QueryState";
+import { SettingsPanel } from "./SettingsPanel";
+
+const fieldId = (key: string) => `organization-${key}`;
 
 const FIELDS: { key: keyof OrganizationInput; label: string; long?: boolean; type?: string }[] = [
   { key: "name", label: "Название" },
@@ -33,10 +39,10 @@ function toInput(org: Organization): OrganizationInput {
 export function OrganizationCard({ canEdit }: { canEdit: boolean }) {
   const organization = useOrganization();
   if (organization.isError) {
-    return <section className="panel"><p className="danger" role="alert">{errorText(organization.error)}</p></section>;
+    return <section className="panel settings-panel"><ErrorAlert error={organization.error} onRetry={() => void organization.refetch()} /></section>;
   }
   if (!organization.data) {
-    return <section className="panel"><p className="muted">Загрузка…</p></section>;
+    return <section className="panel settings-panel"><div className="loading" role="status">Загружаем сведения об организации…</div></section>;
   }
   return canEdit ? <OrganizationForm organization={organization.data} /> : <OrganizationView organization={organization.data} />;
 }
@@ -45,8 +51,7 @@ function OrganizationView({ organization }: { organization: Organization }) {
   const value = (key: keyof OrganizationInput) =>
     key === "phone" ? organization.phone_display : key === "registration_date" ? formatDate(organization.registration_date) : organization[key];
   return (
-    <section className="panel" aria-labelledby="organization-title">
-      <h2 id="organization-title">Организация</h2>
+    <SettingsPanel titleId="organization-title" title="Организация" description="Реквизиты и контакты. Изменяет администратор.">
       <dl className="organization-details">
         {FIELDS.map((f) => (
           <div key={f.key}>
@@ -55,7 +60,7 @@ function OrganizationView({ organization }: { organization: Organization }) {
           </div>
         ))}
       </dl>
-    </section>
+    </SettingsPanel>
   );
 }
 
@@ -79,15 +84,23 @@ function OrganizationForm({ organization }: { organization: Organization }) {
   }
 
   return (
-    <form className="panel" onSubmit={submit} aria-labelledby="organization-title" noValidate>
-      <h2 id="organization-title">Организация</h2>
-      <div className="wizard-body">
+    <SettingsPanel
+      titleId="organization-title"
+      title="Организация"
+      description="Реквизиты и контакты организации; сохраняются одним действием."
+      onSubmit={submit}
+    >
+        <ErrorSummary errors={FIELDS.flatMap((f) => {
+          const message = fieldError(f.key);
+          return message ? [{ id: fieldId(f.key), label: f.label, message }] : [];
+        })} />
         {FIELDS.map((f) => {
           const message = fieldError(f.key);
           return (
             <label key={f.key}>
               {f.label}
               <input
+                id={fieldId(f.key)}
                 type={f.type ?? "text"}
                 value={form[f.key]}
                 maxLength={f.long ? 500 : 200}
@@ -98,12 +111,11 @@ function OrganizationForm({ organization }: { organization: Organization }) {
             </label>
           );
         })}
-        {error && !hasFieldError && <p className="danger" role="alert">{errorText(error)}</p>}
-        {saved && <p className="text-green" role="status">Изменения сохранены</p>}
+        {error && !hasFieldError && <Notice tone="error">{errorText(error)}</Notice>}
+        {saved && <Notice tone="success">Изменения сохранены</Notice>}
         <div className="wizard-actions">
           <button className="primary" disabled={update.isPending}>{update.isPending ? "Сохраняем…" : "Сохранить"}</button>
         </div>
-      </div>
-    </form>
+    </SettingsPanel>
   );
 }

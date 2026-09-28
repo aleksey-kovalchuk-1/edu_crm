@@ -54,6 +54,27 @@ describe("settings backups", () => {
     await screen.findByText(/Последний запуск завершился ошибкой: не удалось создать копию вложений/);
   });
 
+  it("shows the latest run as a notice whose tone matches the result", async () => {
+    for (const [result, tone] of [["failure", "notice-error"], ["success", "notice-success"], ["running", "notice-info"]] as const) {
+      mockApi({
+        ...superadmin,
+        "GET /admin/backups": () => history(hoursAgo(1)),
+        "GET /admin/backups/run": () => runStatus({ last_run: lastRun(result, result === "failure" ? "verification_failed" : null) }),
+      });
+      const view = renderApp("/settings/backups");
+      const status = await screen.findByText(/Последний запуск|Выполняется запуск/);
+      expect(status.closest(".notice")?.className).toContain(tone);
+      view.unmount();
+    }
+  });
+
+  it("marks a verified pair with a success tag, not colour alone", async () => {
+    mockApi({ ...superadmin, "GET /admin/backups": () => history(hoursAgo(1)) });
+    renderApp("/settings/backups");
+    const tag = await screen.findByText("Проверена");
+    expect(tag.className).toContain("badge-3");
+  });
+
   it("requests a manual copy and shows it as requested", async () => {
     let requested = false;
     const api = mockApi({

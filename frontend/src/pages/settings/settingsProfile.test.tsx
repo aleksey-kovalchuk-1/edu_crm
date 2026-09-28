@@ -52,6 +52,32 @@ describe("settings profile — personal data", () => {
     await screen.findByText("Имя пользователя Telegram: 5–32 символа");
   });
 
+  it("summarises field errors above the form, takes focus and links to the field", async () => {
+    mockApi({
+      "PATCH /profile": () =>
+        apiError(422, "VALIDATION_ERROR", "Проверьте заполненные поля", [
+          { field: "telegram", message: "Имя пользователя Telegram: 5–32 символа", type: "value_error" },
+        ]),
+    });
+    renderApp("/settings/profile");
+    fireEvent.change(await screen.findByLabelText("Telegram"), { target: { value: "ab" } });
+    fireEvent.click(screen.getByRole("button", { name: "Сохранить" }));
+    const summary = await screen.findByRole("group", { name: /Исправьте 1 поле/ });
+    await waitFor(() => expect(document.activeElement).toBe(summary));
+    fireEvent.click(screen.getByRole("link", { name: /Telegram: Имя пользователя Telegram/ }));
+    expect(document.activeElement?.id).toBe("profile-telegram");
+  });
+
+  it("announces loading and offers a retry when the profile cannot be loaded", async () => {
+    let fail = true;
+    mockApi({ "GET /profile": () => (fail ? apiError(503, "SERVICE_UNAVAILABLE", "Профиль недоступен") : profileFixture()) });
+    renderApp("/settings/profile");
+    expect(await screen.findByText(/Профиль недоступен/)).toBeTruthy();
+    fail = false;
+    fireEvent.click(screen.getByRole("button", { name: /Повторить/ }));
+    expect(await screen.findByLabelText("Фамилия")).toBeTruthy();
+  });
+
   it("shows a contact as saved only after it is saved, then shows the server-normalized value", async () => {
     mockApi({ "PATCH /profile": () => profileFixture({ telegram: "anna_demo" }) });
     renderApp("/settings/profile");

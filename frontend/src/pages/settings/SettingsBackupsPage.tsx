@@ -1,8 +1,10 @@
 import { isStale, isStuck, useBackupRun, useBackupStatus, useRequestBackup, type BackupItem, type LastBackupRun } from "../../api/backups";
 import { errorText } from "../../api/client";
 import { useSession } from "../../app/AuthGate";
+import { Notice, type NoticeTone } from "../../components/Notice";
 import { formatDateTime } from "../../lib/format";
 import { ROLES } from "../../lib/user";
+import { SettingsPanel } from "./SettingsPanel";
 
 function kind(source: string): string {
   if (source.startsWith("daily-")) return "Ежедневная копия";
@@ -22,7 +24,7 @@ function BackupRow({ item }: { item: BackupItem }) {
         <strong>{kind(item.source)}</strong>
         <div className="muted">{formatDateTime(item.created_at)} · база {size(item.database_bytes)} · вложения {size(item.attachments_bytes)}</div>
       </div>
-      <span className={item.verified ? "text-green" : "muted"}>
+      <span className={item.verified ? "badge badge-3" : "badge badge-4"}>
         {item.verified ? "Проверена" : "Сохранена, без проверки"}
       </span>
     </li>
@@ -32,7 +34,7 @@ function BackupRow({ item }: { item: BackupItem }) {
 export function SettingsBackupsPage() {
   const { user } = useSession();
   if (!user.roles.includes(ROLES.superadmin)) {
-    return <section className="panel"><p role="alert">Нет доступа к резервному копированию.</p></section>;
+    return <section className="panel settings-panel"><Notice tone="warning">Нет доступа к резервному копированию.</Notice></section>;
   }
   return <BackupStatusPanel />;
 }
@@ -54,6 +56,10 @@ function runText(run: LastBackupRun): string {
   return `Последний запуск ${how} успешен: ${formatDateTime(run.finished_at ?? run.started_at)}`;
 }
 
+const RUN_TONES: Record<LastBackupRun["result"], NoticeTone> = {
+  success: "success", running: "info", failure: "error", interrupted: "error",
+};
+
 /** Latest run, stale warning and the manual request (added beside the pair history below). */
 function BackupRunPanel({ newest }: { newest: string | null | undefined }) {
   const runQuery = useBackupRun();
@@ -64,24 +70,24 @@ function BackupRunPanel({ newest }: { newest: string | null | undefined }) {
   const stale = newest !== undefined && isStale(newest);
   return (
     <>
-      {stale && <p className="danger" role="alert">Последняя копия старше 36 часов — проверьте службу копирования на сервере.</p>}
+      {stale && <Notice tone="warning">Последняя копия старше 36 часов — проверьте службу копирования на сервере.</Notice>}
       {run?.last_run && (
-        <p role="status" className={run.last_run.result === "failure" || run.last_run.result === "interrupted" ? "danger" : "muted"}>
+        <Notice tone={RUN_TONES[run.last_run.result] ?? "info"} role="status">
           {runText(run.last_run)}
-        </p>
+        </Notice>
       )}
-      {run?.reason === "unavailable" && <p className="muted">Сведения о последнем запуске сейчас недоступны.</p>}
+      {run?.reason === "unavailable" && <Notice tone="info">Сведения о последнем запуске сейчас недоступны.</Notice>}
       {run?.manual_available && (
         <div className="wizard-actions">
           <button type="button" className="primary" disabled={busy} onClick={() => request.mutate()}>Создать копию сейчас</button>
         </div>
       )}
       {run?.pending_request && !running && (isStuck(run) ? (
-        <p role="alert" className="danger">Служба копирования не отвечает: запрос ждёт больше 5 минут. Проверьте агент копирования на сервере.</p>
+        <Notice tone="error">Служба копирования не отвечает: запрос ждёт больше 5 минут. Проверьте агент копирования на сервере.</Notice>
       ) : (
-        <p role="status" className="muted">Копия запрошена — служба копирования начнёт её в течение минуты.</p>
+        <Notice tone="info">Копия запрошена — служба копирования начнёт её в течение минуты.</Notice>
       ))}
-      {request.isError && <p className="danger" role="alert">{errorText(request.error)}</p>}
+      {request.isError && <Notice tone="error">{errorText(request.error)}</Notice>}
     </>
   );
 }
@@ -91,18 +97,20 @@ function BackupStatusPanel() {
   const status = query.data;
   const newest = status?.available ? (status.backups[0]?.created_at ?? null) : undefined;
   return (
-    <section className="panel" aria-labelledby="backup-status-title">
-      <h2 id="backup-status-title">Состояние резервных копий</h2>
-      <p className="muted">Сохраняются зашифрованные копии базы данных и вложений. Ключ восстановления и сами архивы хранятся вне CRM.</p>
+    <SettingsPanel
+      titleId="backup-status-title"
+      title="Состояние резервных копий"
+      description="Сохраняются зашифрованные копии базы данных и вложений. Ключ восстановления и сами архивы хранятся вне CRM."
+    >
       <BackupRunPanel newest={newest} />
-      {query.isPending && <p>Загрузка…</p>}
-      {query.isError && <p className="danger" role="alert">{errorText(query.error)}</p>}
+      {query.isPending && <div className="loading" role="status">Загружаем сведения о копиях…</div>}
+      {query.isError && <Notice tone="error">{errorText(query.error)}</Notice>}
       {status && !status.available && (
-        <p role="status">{status.reason === "unavailable"
+        <Notice tone="info">{status.reason === "unavailable"
           ? "Сведения о резервных копиях сейчас недоступны."
-          : "Сведения о резервных копиях пока не поступили с сервера."}</p>
+          : "Сведения о резервных копиях пока не поступили с сервера."}</Notice>
       )}
-      {status?.available && status.backups.length === 0 && <p role="status">Сохранённых пар копий пока нет.</p>}
+      {status?.available && status.backups.length === 0 && <Notice tone="info">Сохранённых пар копий пока нет.</Notice>}
       {status?.available && status.backups.length > 0 && (
         <>
           <h3>Последние копии</h3>
@@ -112,6 +120,6 @@ function BackupStatusPanel() {
           <p className="muted">«Проверена» означает, что архивы удалось расшифровать и прочитать. Это не заменяет проверку восстановления системы.</p>
         </>
       )}
-    </section>
+    </SettingsPanel>
   );
 }

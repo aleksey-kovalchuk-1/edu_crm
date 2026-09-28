@@ -3,7 +3,10 @@ import { errorText } from "../../api/client";
 import {
   useNotificationPreferences, useSavePreferences, useSetPause, type NotificationPreferences, type PauseDuration,
 } from "../../api/notifications";
+import { Notice } from "../../components/Notice";
+import { ErrorAlert } from "../../components/QueryState";
 import { formatDateTime } from "../../lib/format";
+import { SettingsPanel } from "./SettingsPanel";
 
 const PAUSE_OPTIONS: { value: Exclude<PauseDuration, "off">; label: string }[] = [
   { value: "1h", label: "На 1 час" },
@@ -19,10 +22,10 @@ const isActive = (until: string | null): until is string => Boolean(until) && ne
 export function SettingsNotificationsPage() {
   const prefs = useNotificationPreferences();
   if (prefs.isError) {
-    return <section className="panel"><p className="danger" role="alert">{errorText(prefs.error)}</p></section>;
+    return <section className="panel settings-panel"><ErrorAlert error={prefs.error} onRetry={() => void prefs.refetch()} /></section>;
   }
   if (!prefs.data) {
-    return <section className="panel"><p className="muted">Загрузка…</p></section>;
+    return <section className="panel settings-panel"><div className="loading" role="status">Загружаем настройки уведомлений…</div></section>;
   }
   return (
     <>
@@ -38,22 +41,22 @@ function PausePanel({ pausedUntil }: { pausedUntil: string | null }) {
   const paused = isActive(pausedUntil);
 
   return (
-    <section className="panel" aria-labelledby="pause-title">
-      <h2 id="pause-title">Пауза</h2>
-      <p className="muted">
-        Пока пауза действует, новые уведомления не создаются и не копятся. Отмеченные ниже события не меняются.
-      </p>
+    <SettingsPanel
+      titleId="pause-title"
+      title="Пауза"
+      description="Пока пауза действует, новые уведомления не создаются и не копятся. Отмеченные ниже события не меняются."
+    >
       {paused ? (
-        <div className="wizard-body">
-          <p role="status">
+        <>
+          <Notice tone="warning" role="status">
             {isIndefinite(pausedUntil) ? "Уведомления приостановлены до выключения паузы" : `Уведомления приостановлены до ${formatDateTime(pausedUntil)}`}
-          </p>
+          </Notice>
           <div className="wizard-actions">
             <button type="button" className="primary" disabled={setPause.isPending} onClick={() => setPause.mutate("off")}>
               Возобновить уведомления
             </button>
           </div>
-        </div>
+        </>
       ) : (
         <div className="form-row">
           <label>
@@ -67,8 +70,8 @@ function PausePanel({ pausedUntil }: { pausedUntil: string | null }) {
           </button>
         </div>
       )}
-      {setPause.isError && <p className="danger" role="alert">{errorText(setPause.error)}</p>}
-    </section>
+      {setPause.isError && <Notice tone="error">{errorText(setPause.error)}</Notice>}
+    </SettingsPanel>
   );
 }
 
@@ -86,10 +89,12 @@ function PreferencesForm({ prefs }: { prefs: NotificationPreferences }) {
   }
 
   return (
-    <form className="panel" onSubmit={submit} aria-labelledby="events-title">
-      <h2 id="events-title">События</h2>
-      <p className="muted">Отмеченные события приходят уведомлением в колокольчик справа вверху.</p>
-      <div className="wizard-body">
+    <SettingsPanel
+      titleId="events-title"
+      title="События"
+      description="Отмеченные события приходят уведомлением в колокольчик справа вверху."
+      onSubmit={submit}
+    >
         {prefs.groups.map((group) => (
           <fieldset key={group.key} className="notification-group">
             <legend>{group.label}</legend>
@@ -105,12 +110,11 @@ function PreferencesForm({ prefs }: { prefs: NotificationPreferences }) {
             ))}
           </fieldset>
         ))}
-        {save.isError && <p className="danger" role="alert">{errorText(save.error)}</p>}
-        {saved && <p className="text-green" role="status">Настройки сохранены</p>}
+        {save.isError && <Notice tone="error">{errorText(save.error)}</Notice>}
+        {saved && <Notice tone="success">Настройки сохранены</Notice>}
         <div className="wizard-actions">
           <button className="primary" disabled={save.isPending}>{save.isPending ? "Сохраняем…" : "Сохранить"}</button>
         </div>
-      </div>
-    </form>
+    </SettingsPanel>
   );
 }
