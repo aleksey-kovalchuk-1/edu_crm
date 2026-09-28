@@ -1,14 +1,5 @@
 import { useNavigate } from "react-router";
-import {
-  ArrowRight,
-  ArrowUpRight,
-  BookOpen,
-  Building2,
-  ChartNoAxesCombined,
-  CircleCheck,
-  Clock3,
-  Users,
-} from "lucide-react";
+import { ArrowRight, ArrowUpRight, CircleCheck } from "lucide-react";
 import { useDashboard, useLaunches, useStages } from "../api/queries";
 import { useTaskList } from "../api/tasks";
 import { paths } from "../app/navigation";
@@ -35,34 +26,27 @@ export function OverviewPage() {
   if (fallback || !d || !launchList || !taskList || !stageNames)
     return fallback;
 
-  const metrics = [
+  const metrics: { label: string; value: number; caption: string; alert?: boolean }[] = [
     {
       label: "Учебных заведений",
       value: d.universities,
-      icon: Building2,
       caption: "В едином реестре",
-      color: "purple",
     },
     {
       label: "Программ в работе",
       value: d.launches,
-      icon: BookOpen,
       caption: "На всех этапах взаимодействия",
-      color: "blue",
     },
     {
       label: "Обучающихся",
       value: d.students,
-      icon: Users,
       caption: "По текущим запускам",
-      color: "green",
     },
     {
       label: "Требуют внимания",
       value: d.overdue,
-      icon: Clock3,
       caption: "Срок подготовки истёк",
-      color: "orange",
+      alert: true,
     },
   ];
   const inGroup = (i: number) =>
@@ -73,16 +57,10 @@ export function OverviewPage() {
       <RefreshError queries={queries} />
       <section className="metrics">
         {metrics.map((m) => (
-          <article className="metric" key={m.label}>
-            <div className="metric-top">
-              <span>{m.label}</span>
-              <m.icon size={19} className={`text-${m.color}`} />
-            </div>
+          <article className={m.alert && m.value > 0 ? "metric metric-alert" : "metric"} key={m.label}>
+            <span className="metric-label">{m.label}</span>
             <strong>{formatNumber(m.value)}</strong>
-            <small>
-              <span className={`dot ${m.color}`} />
-              {m.caption}
-            </small>
+            <small>{m.caption}</small>
           </article>
         ))}
       </section>
@@ -97,7 +75,7 @@ export function OverviewPage() {
               <ChartDownloads chart="interactions-by-status" title="Цикл взаимодействия" />
               <button
                 className="text-button"
-                onClick={() => navigate(paths.interactions)}
+                onClick={() => navigate(`${paths.interactions}?view=stages`)}
               >
                 Открыть доску <ArrowUpRight size={16} />
               </button>
@@ -108,7 +86,7 @@ export function OverviewPage() {
               <button
                 className={`pipeline-stage stage-${i}`}
                 key={g}
-                onClick={() => navigate(paths.interactions)}
+                onClick={() => navigate(`${paths.interactions}?view=stages`)}
               >
                 <span className="pipeline-index">0{i + 1}</span>
                 <strong>{inGroup(i)}</strong>
@@ -134,7 +112,7 @@ export function OverviewPage() {
               <h2>Интерес к обучению</h2>
               <p>Заявки и обучающиеся</p>
             </div>
-            <ChartNoAxesCombined size={20} className="muted" />
+            <span className="demo-tag">Демонстрационные данные</span>
           </div>
           <AnnualChart annual={d.annual} />
         </section>
