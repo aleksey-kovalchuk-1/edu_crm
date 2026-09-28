@@ -71,4 +71,47 @@ if BACKUP_CONFIG_FILE="$tmp/wrong-recipient.env" "$root/scripts/scheduled-backup
   echo 'daily backup accepted a recipient that cannot be recovered' >&2; exit 1
 fi
 test -f "$old_dump" && test -f "$old_archive"
+# Latest-run report (last-run.json) next to the pair history: success, failure stage, early failure, manual.
+python3 - "$tmp/status/last-run.json" <<'PY'
+import json, sys
+run = json.load(open(sys.argv[1]))
+assert run['result'] != 'running', run  # every earlier run in this test finished and reported
+PY
+: > "$tmp/docker.log"
+# Each extra run gets its own label: the backup scripts refuse to overwrite an existing file.
+BACKUP_LABEL=daily-20260101 "$root/scripts/scheduled-backup.sh" >/dev/null
+python3 - "$tmp/status/last-run.json" <<'PY'
+import json, sys
+run = json.load(open(sys.argv[1]))
+assert run['result'] == 'success' and run['trigger'] == 'scheduled' and run['label'] == 'daily-20260101', run
+assert run['error'] is None and run['finished_at'], run
+PY
+if FAIL_ATTACHMENT=1 BACKUP_LABEL=daily-20260102 "$root/scripts/scheduled-backup.sh" >/dev/null 2>&1; then
+  echo 'failing attachment backup reported success' >&2; exit 1
+fi
+python3 - "$tmp/status/last-run.json" <<'PY'
+import json, sys
+run = json.load(open(sys.argv[1]))
+assert run['result'] == 'failure' and run['error'] == 'attachments_backup_failed', run
+PY
+if BACKUP_CONFIG_FILE="$tmp/missing.env" BACKUP_TRIGGER=manual BACKUP_LABEL=manual-20260928-100000 \
+    "$root/scripts/scheduled-backup.sh" >/dev/null 2>&1; then
+  echo 'a run without config succeeded' >&2; exit 1
+fi
+python3 - "$tmp/status/last-run.json" <<'PY'
+import json, sys
+run = json.load(open(sys.argv[1]))
+assert (run['result'], run['error'], run['trigger'], run['label']) == ('failure', 'preflight_failed', 'manual', 'manual-20260928-100000'), run
+PY
+BACKUP_TRIGGER=manual BACKUP_LABEL=manual-20260928-110000 "$root/scripts/scheduled-backup.sh" >/dev/null
+python3 - "$tmp/status/status.json" "$tmp/status/last-run.json" <<'PY'
+import json, sys
+history, run = json.load(open(sys.argv[1])), json.load(open(sys.argv[2]))
+assert history['backups'][0]['source'] == 'manual-20260928-110000', history['backups'][0]
+assert run['result'] == 'success' and run['trigger'] == 'manual', run
+PY
+if BACKUP_LABEL='../evil' "$root/scripts/scheduled-backup.sh" >/dev/null 2>&1; then
+  echo 'an unsafe label was accepted' >&2; exit 1
+fi
+
 echo 'Scheduled backup synthetic checks passed.'
