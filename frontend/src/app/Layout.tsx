@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
 import { ChevronRight, GraduationCap, LogOut, Menu, Plus } from "lucide-react";
 import { useBrand } from "../api/organization";
@@ -42,11 +42,17 @@ export function Layout() {
   const openTasks = taskCounters.data?.open;
   const overdueTasks = taskCounters.data?.overdue ?? 0;
   const closeMenu = () => setMenu(false);
-  // Escape closes the phone menu.
+  const menuButton = useRef<HTMLButtonElement>(null);
+  const menuPanel = useRef<HTMLElement>(null);
+  // The phone menu takes focus when it opens; Escape closes it and returns focus to the menu button.
   useEffect(() => {
     if (!menu) return;
+    menuPanel.current?.querySelector<HTMLElement>("a, button")?.focus();
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setMenu(false);
+      if (e.key === "Escape") {
+        setMenu(false);
+        menuButton.current?.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -66,6 +72,7 @@ export function Layout() {
       <div className="app-shell">
         <header className="topbar">
           <button
+            ref={menuButton}
             className="icon-button menu-button"
             aria-label="Меню"
             aria-expanded={menu}
@@ -111,7 +118,7 @@ export function Layout() {
             </button>
           </div>
         </header>
-        <aside id="app-menu" className={menu ? "sidebar mobile-open" : "sidebar"}>
+        <aside id="app-menu" ref={menuPanel} className={menu ? "sidebar mobile-open" : "sidebar"}>
           <nav aria-label="Разделы">
             {navGroups(user.roles).map((g) => (
               <div key={g.id} className="nav-group" role="group" aria-labelledby={`nav-group-${g.id}`}>

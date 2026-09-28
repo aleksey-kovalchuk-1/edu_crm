@@ -55,4 +55,16 @@ describe("shell", () => {
     expect(button.getAttribute("aria-expanded")).toBe("false");
     expect(menu.className).not.toContain("mobile-open");
   });
+
+  it("moves focus into the phone menu when it opens and back to the menu button on Escape", async () => {
+    mockApi();
+    renderApp("/");
+    const button = await screen.findByRole("button", { name: "Меню" });
+    fireEvent.click(button);
+    const menu = document.getElementById("app-menu")!;
+    expect(menu.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(document.activeElement).toBe(button);
+  });
 });
+
