@@ -1,4 +1,24 @@
-@import url("https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap");
+@font-face {
+  font-family: "Rostelecom Basis";
+  src: url("./assets/fonts/RostelecomBasis-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rostelecom Basis";
+  src: url("./assets/fonts/RostelecomBasis-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rostelecom Basis";
+  src: url("./assets/fonts/RostelecomBasis-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
 :root {
   /* ——— Rostelecom Purple light (Atomaro Gen2), values from .Theme_root_rtk_purple_light in the Storybook.
          Names match the Storybook one to one. See docs/design/tokens.md. ——— */
