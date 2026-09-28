@@ -240,7 +240,8 @@ describe("csrf and permissions", () => {
     renderApp("/universities");
     expect(await screen.findByText(label)).toBeTruthy();
     expect(screen.getByText("Анна Петрова")).toBeTruthy();
-    expect(screen.getAllByText("АП")).toHaveLength(2);
+    // One avatar: the initials inside the top-bar profile link.
+    expect(screen.getAllByText("АП")).toHaveLength(1);
     // Every signed-in role can register a new university for its first task.
     expect(await screen.findByText("Колледж связи")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Добавить заведение/ }) !== null).toBe(
