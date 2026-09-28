@@ -1449,6 +1449,15 @@ Report progress to the owner: commits, test counts, audit summary before/after p
 **Scope:** Overview (figures strip, «Ближайшие задачи», «Программы в работе», «Последние действия», demo chart labelled), Universities list and detail (existing columns and actions only), Contracts, Interactions register as the default view with the stage board one click away, Interaction detail with status timeline, Tasks (list, deadlines, planner, filters, bulk actions) and Task detail. Body text rises to 16 px here; tables stay 14 px. Phone layouts use stacked rows for the main lists.
 **Acceptance:** each role completes: create an interaction, change its stage, add a task, complete a task, open a university and its interactions, add a contract; no lost actions (compare the action inventory before/after); audit clean.
 
+**Tasks:**
+1. *Interactions register* — `InteractionsPage` gets a view switch «Реестр» (default) / «Этапы» (`aria-pressed` buttons; `?view=stages` in the URL so either view can be linked). «Реестр» renders `LaunchTable` extended with the launch code (`ВЗ-0001`) and an overdue marker with the word «просрочено» next to the red date. Search, «Требуют внимания», the count and the «Доска статусов» link are unchanged and apply to both views; «Этапы» is today's grouped cards. Tests: register is the default and shows codes; «Этапы» shows the stage columns; `?view=stages` opens the stage view; the overdue row says «просрочено». Existing tests that read board columns switch to «Этапы» first.
+2. *Stacked rows on phones* — `LaunchTable`, the Universities table and `ContractsTable` add `data-label` to cells; below 768 px `.stack-table` rows render as blocks (title first, label/value pairs after). Test: cells carry their column label.
+3. *Overview* — figures in one divided strip (no cards, no icons), sections separated by dividers, pipeline tiles neutral with a coloured progress line, the demo annual chart keeps its «демонстрационная статистика» note, empty «Ближайшие задачи» offers «Открыть задачи».
+4. *Frames* — `.panel` becomes a frame (1 px `border-soft`, 12 px radius, no shadow), so every page loses the floating-card look without markup changes.
+5. *Universities, university detail, contracts* — page rules moved to tokens; row actions 44 px on phones; no new columns or actions.
+6. *Tasks* — counters, sort headers, quick add, list rows, deadline and planner cards, filters and task detail on tokens; phone targets 44 px.
+7. *Verify* — full suite, type check, lint, build; audit for all roles; workflow script per role on the isolated stack (create an interaction, change its stage, add a task, complete it, open a university and its interactions, add a contract where the role may).
+
 ## Stage 3S — Settings (brought forward from Stage 5 by owner decision)
 
 **Scope:** Личный профиль (with sender addresses and phone verification), Организация, Уведомления, Безопасность, Резервное копирование; plus the shared Settings frame (heading, the in-menu «Настройки» group from Stage 1). Pages keep every field, action, permission check and server call; superadmin-only content (users, backups) stays gated.
