@@ -43,6 +43,8 @@ class Settings:
     allowed_origins: tuple[str, ...] = ()
     attachments_dir: str = '/data/attachments'
     backup_status_file: str = ''
+    # Folder where the API may drop a manual-backup request for the host agent; empty means not offered here.
+    backup_request_dir: str = ''
     # SMS provider for CRM-owned phone verification (D-not-yet-numbered; see docs/design/phone-verification.md).
     # Unset in local dev/CI on purpose: app/sms.py falls back to a logging-only sender so the code is
     # visible (API container log) without any real gateway account. Real credentials are supplied only
@@ -184,6 +186,7 @@ def load_settings(environ=None):
         allowed_origins=allowed_origins,
         attachments_dir=(environ.get('ATTACHMENTS_DIR') or '').strip() or '/data/attachments',
         backup_status_file=(environ.get('BACKUP_STATUS_FILE') or '').strip(),
+        backup_request_dir=(environ.get('BACKUP_REQUEST_DIR') or '').strip(),
         sms_provider_url=(environ.get('SMS_PROVIDER_URL') or '').strip(),
         sms_provider_api_key=(environ.get('SMS_PROVIDER_API_KEY') or '').strip(),
         sms_sender=(environ.get('SMS_SENDER') or '').strip() or 'CRM',
