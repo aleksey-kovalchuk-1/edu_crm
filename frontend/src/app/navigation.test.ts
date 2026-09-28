@@ -80,9 +80,16 @@ describe("menu groups", () => {
     expect(names).toEqual({
       "Работа": ["Обзор", "Учебные заведения", "Договоры", "Взаимодействия", "Задачи"],
       "Анализ": ["Аналитика", "Отчёты"],
-      "Данные клиентов": ["Компании", "Слушатели", "Заявки на курсы"],
       "Администрирование": ["Справочники"],
     });
+  });
+
+  it("no longer lists the archived customer-data pages", () => {
+    const names = navGroups(allRoles).flatMap((g) => g.pages.map((p) => p.name));
+    for (const archived of ["Слушатели", "Компании", "Заявки на курсы", "Загрузка данных"]) {
+      expect(names).not.toContain(archived);
+    }
+    expect(names).toContain("Проверка сигналов");
   });
 
   it("drops a group whose pages are all hidden, but keeps Администрирование for Настройки", () => {

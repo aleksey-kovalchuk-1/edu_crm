@@ -2,10 +2,6 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation } from "react-route
 import { AnalyticsPage } from "../pages/AnalyticsPage";
 import { ReportsPage } from "../pages/ReportsPage";
 import { CatalogsPage } from "../pages/CatalogsPage";
-import { VendorsPage } from "../pages/VendorsPage";
-import { LearnersPage } from "../pages/LearnersPage";
-import { ApplicationsPage } from "../pages/ApplicationsPage";
-import { CustomerImportsPage } from "../pages/CustomerImportsPage";
 import { FraudAlertsPage } from "../pages/FraudAlertsPage";
 import { ContractsPage } from "../pages/ContractsPage";
 import { ImportsPage } from "../pages/ImportsPage";
@@ -48,10 +44,6 @@ export function AppRoutes() {
           <Route path="universities/:id" element={<UniversityPage />} />
           <Route path="contracts" element={<ContractsPage />} />
           <Route path="catalogs" element={<CatalogsPage />} />
-          <Route path="vendors" element={<VendorsPage />} />
-          <Route path="learners" element={<LearnersPage />} />
-          <Route path="applications" element={<ApplicationsPage />} />
-          <Route path="customer-imports" element={<CustomerImportsPage />} />
           <Route path="fraud-alerts" element={<FraudAlertsPage />} />
           <Route path="imports" element={<ImportsPage />} />
           <Route path="interactions" element={<InteractionsPage />} />
