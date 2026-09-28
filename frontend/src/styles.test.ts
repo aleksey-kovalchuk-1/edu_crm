@@ -185,7 +185,15 @@ describe("styles.css design tokens", () => {
     });
 
     it("spaces the rows of forms nested inside a Settings section", () => {
-      expect(clean).toMatch(/\.settings-body form:not\(\.role-editor\)\s*\{[^}]*display:\s*flex;[^}]*gap:\s*var\(--atmr-spacing-4x\)/);
+      expect(clean).toMatch(/\.settings-body form:not\(\.role-editor\),\s*\.settings-panel \.wizard-body\s*\{[^}]*display:\s*flex;[^}]*gap:\s*var\(--atmr-spacing-4x\)/);
+    });
+
+    it("lines the Settings body up with its heading at every width", () => {
+      expect(clean).toMatch(/@media \(max-width: 800px\)\s*\{\s*\.settings-body\s*\{[^}]*padding:\s*0 var\(--atmr-spacing-4x\) var\(--atmr-spacing-4x\)/);
+    });
+
+    it("keeps role names whole in the role editor", () => {
+      expect(rule(".role-editor select")).toMatch(/min-width:\s*10rem/);
     });
 
     it("left-aligns Settings actions so buttons stay with their fields", () => {
