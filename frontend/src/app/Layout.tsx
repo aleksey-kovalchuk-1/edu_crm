@@ -1,12 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router";
-import {
-  ChevronRight,
-  GraduationCap,
-  LogOut,
-  PanelLeftClose,
-  Plus,
-} from "lucide-react";
+import { ChevronRight, GraduationCap, LogOut, Menu, Plus } from "lucide-react";
 import { useBrand } from "../api/organization";
 import { NotificationBell } from "../components/NotificationBell";
 import { useTaskCounters } from "../api/tasks";
@@ -20,7 +14,7 @@ import {
   isPageRoot,
   paths,
   settingsPages,
-  visiblePages,
+  navGroups,
   type CreateKind,
 } from "./navigation";
 import { SettingsMenu } from "./SettingsMenu";
@@ -48,6 +42,19 @@ export function Layout() {
   const openTasks = taskCounters.data?.open;
   const overdueTasks = taskCounters.data?.overdue ?? 0;
   const closeMenu = () => setMenu(false);
+  // Escape closes the phone menu.
+  useEffect(() => {
+    if (!menu) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenu(false);
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [menu]);
+  const navigate = () => {
+    closeMenu();
+    setNavResets((n) => n + 1);
+  };
   const initials = userInitials(user);
   // The server enforces roles; the interface only hides actions that would be refused.
   const createKind =
@@ -57,121 +64,92 @@ export function Layout() {
   return (
     <>
       <div className="app-shell">
-        <aside className={menu ? "sidebar mobile-open" : "sidebar"}>
+        <header className="topbar">
+          <button
+            className="icon-button menu-button"
+            aria-label="Меню"
+            aria-expanded={menu}
+            aria-controls="app-menu"
+            onClick={() => setMenu(!menu)}
+          >
+            <Menu size={20} aria-hidden="true" />
+          </button>
           <Link to={paths.overview} className="brand" onClick={closeMenu}>
-            <span className="brand-mark">
-              <GraduationCap size={27} />
+            <span className="brand-mark" aria-hidden="true">
+              <GraduationCap size={20} />
             </span>
             <span className="brand-text">
               <span>UniCRM</span>
               {brand.data?.name && <small className="brand-org">{brand.data.name}</small>}
             </span>
           </Link>
-          <p className="nav-label">УПРАВЛЕНИЕ</p>
-          <nav>
-            {visiblePages(user.roles).map((p) => (
-              <NavLink
-                key={p.path}
-                to={p.path}
-                end={p.path === paths.overview}
-                className={({ isActive }) =>
-                  isActive ? "nav-item active" : "nav-item"
-                }
-                onClick={() => {
-                  closeMenu();
-                  setNavResets((n) => n + 1);
-                }}
-              >
-                <p.icon size={19} />
-                {p.name}
-                {p.path === paths.tasks && openTasks !== undefined && (
-                  <span
-                    className={overdueTasks > 0 ? "nav-count nav-count-alert" : "nav-count"}
-                    title={overdueTasks > 0 ? `Открытых: ${openTasks}, просрочено: ${overdueTasks}` : `Открытых: ${openTasks}`}
-                  >
-                    {openTasks}
-                  </span>
-                )}
-              </NavLink>
-            ))}
-            <SettingsMenu
-              pages={settingsPages}
-              currentPath={location.pathname}
-              userRoles={user.roles}
-              onNavigate={() => {
-                closeMenu();
-                setNavResets((n) => n + 1);
-              }}
-            />
-          </nav>
-          <div className="sidebar-bottom">
-            {isDemoMode && (
-              <div className="sidebar-note">
-                <span className="status-dot" /> Демонстрационный контур
-                <p>
-                  Единое пространство
-                  <br />
-                  для работы с образованием
-                </p>
-              </div>
-            )}
-            <div className="profile">
-              <Link
-                to={paths.settingsProfile}
-                className="profile-link"
-                onClick={closeMenu}
-              >
-                <span className="avatar" aria-hidden="true">
-                  {initials}
-                </span>
-                <div>
-                  <strong>{user.full_name || user.email}</strong>
-                  <small>{roleLabel(user.roles)}</small>
-                </div>
-              </Link>
-              <button
-                className="icon-button logout-button"
-                onClick={() => logout.mutate()}
-                disabled={logout.isPending || logout.isSuccess}
-                aria-label="Выйти"
-                title="Выйти"
-              >
-                <LogOut size={17} />
-              </button>
-            </div>
-          </div>
-        </aside>
-        <div className="main-shell">
-          <header className="topbar">
+          {inSettings && (
             <div className="breadcrumbs">
-              <button
-                className="icon-button"
-                aria-label="Меню"
-                onClick={() => setMenu(!menu)}
-              >
-                <PanelLeftClose size={19} />
-              </button>
-              {/* Only inside Настройки does a trail add context; elsewhere the heading says it all. */}
-              {inSettings && (
-                <>
-                  <span>Настройки</span>
-                  <ChevronRight size={15} />
-                  <strong>{page?.name ?? NOT_FOUND_TITLE}</strong>
-                </>
-              )}
+              <span>Настройки</span>
+              <ChevronRight size={15} aria-hidden="true" />
+              <strong>{page?.name ?? NOT_FOUND_TITLE}</strong>
             </div>
-            <div className="topbar-right">
-              <NotificationBell />
-              <Link
-                to={paths.settingsProfile}
-                className="avatar"
-                aria-label="Настройки аккаунта"
-                title="Настройки аккаунта"
-              >
-                {initials}
-              </Link>
-            </div>
-          </header>
+          )}
+          <div className="topbar-right">
+            {isDemoMode && <span className="demo-badge">Демонстрационный контур</span>}
+            <NotificationBell />
+            <Link to={paths.settingsProfile} className="profile-link" onClick={closeMenu}>
+              <span className="avatar" aria-hidden="true">{initials}</span>
+              <span className="profile-text">
+                <strong>{user.full_name || user.email}</strong>
+                <small>{roleLabel(user.roles)}</small>
+              </span>
+            </Link>
+            <button
+              className="icon-button logout-button"
+              onClick={() => logout.mutate()}
+              disabled={logout.isPending || logout.isSuccess}
+              aria-label="Выйти"
+              title="Выйти"
+            >
+              <LogOut size={20} aria-hidden="true" />
+            </button>
+          </div>
+        </header>
+        <aside id="app-menu" className={menu ? "sidebar mobile-open" : "sidebar"}>
+          <nav aria-label="Разделы">
+            {navGroups(user.roles).map((g) => (
+              <div key={g.id} className="nav-group" role="group" aria-labelledby={`nav-group-${g.id}`}>
+                <div className="nav-group-label" id={`nav-group-${g.id}`}>{g.label}</div>
+                {g.pages.map((p) => (
+                  <NavLink
+                    key={p.path}
+                    to={p.path}
+                    end={p.path === paths.overview}
+                    className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
+                    onClick={navigate}
+                  >
+                    <p.icon size={20} aria-hidden="true" />
+                    {p.name}
+                    {p.path === paths.tasks && openTasks !== undefined && (
+                      <span
+                        className={overdueTasks > 0 ? "nav-count nav-count-alert" : "nav-count"}
+                        title={overdueTasks > 0 ? `Открытых: ${openTasks}, просрочено: ${overdueTasks}` : `Открытых: ${openTasks}`}
+                      >
+                        {openTasks}
+                      </span>
+                    )}
+                  </NavLink>
+                ))}
+                {g.hasSettings && (
+                  <SettingsMenu
+                    pages={settingsPages}
+                    currentPath={location.pathname}
+                    userRoles={user.roles}
+                    onNavigate={navigate}
+                  />
+                )}
+              </div>
+            ))}
+          </nav>
+        </aside>
+        {menu && <div className="menu-backdrop" aria-hidden="true" onClick={closeMenu} />}
+        <div className="main-shell">
           <main>
             <div className="page-heading">
               <div>
@@ -179,7 +157,7 @@ export function Layout() {
               </div>
               {createKind && canCreate && (
                 <button className="primary" onClick={() => setCreate(createKind)}>
-                  <Plus size={18} />
+                  <Plus size={18} aria-hidden="true" />
                   {CREATE_LABELS[createKind]}
                 </button>
               )}

@@ -321,7 +321,7 @@ describe("topbar account avatar", () => {
     await screen.findByRole("heading", { level: 1 });
     expect(screen.queryByText("ДЕМО")).toBeNull();
     const header = document.querySelector(".topbar-right");
-    const link = header?.querySelector("a.avatar");
+    const link = header?.querySelector("a.profile-link");
     expect(link).toBeTruthy();
     expect(link?.getAttribute("href")).toBe(paths.settingsProfile);
 
