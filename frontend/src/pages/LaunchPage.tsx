@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useParams } from "react-router";
-import { ArrowLeft, Columns3, Plus, RefreshCw } from "lucide-react";
-import { useLaunchTasks, type LaunchTask } from "../api/launchTasks";
+import { ArrowLeft, Columns3, Pencil, Plus, RefreshCw } from "lucide-react";
+import { useLaunchTasks, type LaunchTask, type LaunchTasksResponse } from "../api/launchTasks";
 import { useItProducts } from "../api/catalogs";
 import { useLaunches, useSetLaunchProduct } from "../api/queries";
 import { errorText } from "../api/client";
@@ -18,18 +18,28 @@ import { ErrorAlert, RefreshError, queryFallback } from "../components/QueryStat
 import { StatusChangeDialog } from "../components/StatusChangeDialog";
 import { StatusTimeline } from "../components/StatusTimeline";
 import { TaskCreateForm } from "../components/forms/TaskCreateForm";
+import { LaunchTaskEditDialog } from "../components/tasks/LaunchTaskEditDialog";
 import { formatDate, launchCode } from "../lib/format";
 
-function LaunchTaskItem({ task }: { task: LaunchTask }) {
+function LaunchTaskItem({ task, onEdit }: { task: LaunchTask; onEdit: () => void }) {
   return (
-    <li>
-      <Link to={taskPath(task.id)}>{task.title}</Link>
-      {" — "}{TASK_STATUS_LABELS[task.status]}
-      {task.assignee && ` · ${task.assignee.full_name}`}
-      {task.deadline && ` · ${formatDate(task.deadline)}`}
+    <li className="launch-task-item">
+      <span>
+        <Link to={taskPath(task.id)}>{task.title}</Link>
+        {" — "}{TASK_STATUS_LABELS[task.status]}
+        {task.assignee && ` · ${task.assignee.full_name}`}
+        {task.deadline && ` · ${formatDate(task.deadline)}`}
+      </span>
+      <button type="button" className="text-button" onClick={onEdit} aria-label={`Изменить задачу «${task.title}»`}>
+        <Pencil size={15} aria-hidden="true" />
+        Изменить
+      </button>
     </li>
   );
 }
+
+const hasTasks = (data: LaunchTasksResponse) =>
+  data.uncategorized.length > 0 || data.categories.some((c) => c.tasks.length > 0);
 
 /** The catalog IT product this interaction is reported under; changing it saves immediately. */
 function LaunchProductField({ launchId, value }: { launchId: number; value: number | null }) {
@@ -69,6 +79,8 @@ export function LaunchPage() {
   const launchTasks = useLaunchTasks(launchId);
   const [changing, setChanging] = useState(false);
   const [creating, setCreating] = useState(false);
+  // null = closed; undefined = opened from the header (pick a task); a number = that task's row.
+  const [editing, setEditing] = useState<number | undefined | null>(null);
   const queries = [launches, workflows];
   const fallback = queryFallback(queries);
   if (fallback || !launches.data || !workflows.data) return fallback;
@@ -117,6 +129,14 @@ export function LaunchPage() {
             <button className="secondary" onClick={() => setCreating(true)}>
               <Plus size={17} />
               Создать задачу
+            </button>
+            <button
+              className="secondary"
+              onClick={() => setEditing(undefined)}
+              disabled={!launchTasks.data || !hasTasks(launchTasks.data)}
+            >
+              <Pencil size={17} />
+              Изменить задачу
             </button>
             <button className="primary" onClick={() => setChanging(true)} disabled={!workflow}>
               <RefreshCw size={17} />
@@ -195,7 +215,7 @@ export function LaunchPage() {
                 ) : (
                   <ul>
                     {c.tasks.map((t) => (
-                      <LaunchTaskItem key={t.id} task={t} />
+                      <LaunchTaskItem key={t.id} task={t} onEdit={() => setEditing(t.id)} />
                     ))}
                   </ul>
                 )}
@@ -206,7 +226,7 @@ export function LaunchPage() {
                 <h3>Без категории</h3>
                 <ul>
                   {launchTasks.data.uncategorized.map((t) => (
-                    <LaunchTaskItem key={t.id} task={t} />
+                    <LaunchTaskItem key={t.id} task={t} onEdit={() => setEditing(t.id)} />
                   ))}
                 </ul>
               </div>
@@ -220,6 +240,14 @@ export function LaunchPage() {
           workflow={workflow}
           currentStatusId={status?.id}
           close={() => setChanging(false)}
+        />
+      )}
+      {editing !== null && launchTasks.data && (
+        <LaunchTaskEditDialog
+          launchId={launch.id}
+          tasks={launchTasks.data}
+          initialTaskId={editing}
+          close={() => setEditing(null)}
         />
       )}
       {creating && (
