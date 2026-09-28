@@ -80,4 +80,42 @@ describe("styles.css design tokens", () => {
   it("has no hover flyout styles left", () => {
     expect(css).not.toMatch(/\.settings-menu-panel/);
   });
+
+  describe("common controls (Stage 2)", () => {
+    const clean = withoutComments(rules);
+    const phone = [...clean.matchAll(/@media \(max-width: 767px\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join("\n");
+
+    it("draws keyboard focus as a 2px accent outline with a 2px gap", () => {
+      expect(clean).toMatch(/:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--atmr-accent-default\);[^}]*outline-offset:\s*2px;/);
+    });
+
+    it("keeps the focused element clear of the sticky top bar", () => {
+      expect(rule("html")).toMatch(/scroll-padding-top:\s*80px/);
+    });
+
+    it("never hides text with font-size 0 (the phone create button keeps its label)", () => {
+      expect(clean).not.toMatch(/font-size:\s*0\s*;/);
+    });
+
+    it("sets table cells in 14px default text and headers in 14px soft text", () => {
+      expect(rule("td")).toMatch(/font:\s*var\(--atmr-font-body-s\)/);
+      expect(rule("td")).toMatch(/color:\s*var\(--atmr-fg-default\)/);
+      expect(rule("th")).toMatch(/font:\s*var\(--atmr-font-body-s-strong\)/);
+      expect(rule("th")).toMatch(/color:\s*var\(--atmr-fg-soft\)/);
+    });
+
+    it("gives shared controls at least 44px on phones", () => {
+      expect(phone).toMatch(/\.primary,\s*\.secondary,\s*\.filter,\s*\.filter-pill,\s*\.icon-button,\s*\.text-button,\s*\.tab\s*\{[^}]*min-height:\s*44px/);
+      expect(phone).toMatch(/\.icon-button\s*\{[^}]*min-width:\s*44px/);
+    });
+
+    it("wraps the page heading on phones so the labelled create button gets its own line", () => {
+      expect(phone).toMatch(/\.page-heading\s*\{[^}]*flex-wrap:\s*wrap/);
+    });
+
+    it("uses 16px text in phone form fields so iOS does not zoom", () => {
+      expect(phone).toMatch(/input:not\(\[type="checkbox"\]\):not\(\[type="radio"\]\):not\(\[type="file"\]\),\s*select:not\(\[multiple\]\),\s*textarea:not\(\[disabled\]\)\s*\{[^}]*font-size:\s*var\(--text-md\);[^}]*min-height:\s*44px/);
+    });
+  });
 });
+

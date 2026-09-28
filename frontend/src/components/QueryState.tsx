@@ -23,7 +23,7 @@ export function ErrorAlert({
       {errorText(error)}
       {onRetry && (
         <button onClick={onRetry}>
-          <RefreshCw size={16} />
+          <RefreshCw size={16} aria-hidden="true" />
           Повторить
         </button>
       )}
@@ -52,7 +52,11 @@ export function queryFallback(queries: QueryLike[]): ReactNode | null {
     );
   }
   if (queries.some((q) => q.isPending)) {
-    return <div className="loading">Загружаем рабочее пространство…</div>;
+    return (
+      <div className="loading" role="status">
+        Загружаем рабочее пространство…
+      </div>
+    );
   }
   return null;
 }
