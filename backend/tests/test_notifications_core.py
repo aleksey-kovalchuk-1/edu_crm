@@ -18,15 +18,17 @@ def test_migration_round_trip(empty_database_url):
     command.upgrade(config, '0027')
 
 
-def test_catalog_has_twenty_events_in_four_groups_with_owner_defaults():
-    assert len(EVENT_TYPES) == 20
+def test_catalog_has_twenty_one_events_in_four_groups_with_owner_defaults():
+    assert len(EVENT_TYPES) == 21
     assert [g for g, _ in GROUPS] == ['universities', 'launches', 'tasks', 'contracts']
     on = {key for key, e in EVENT_TYPES.items() if e.default}
     assert on == {
         'university_assigned', 'university_unassigned', 'task_assigned', 'task_unassigned', 'task_deadline_changed',
         'task_due_today', 'task_overdue', 'task_commented', 'task_submitted_for_approval', 'task_review_decided',
-        'task_closed',
+        'task_closed', 'university_created',
     }
+    assert EVENT_TYPES['university_created'].label == 'Создали новый вуз'
+    assert EVENT_TYPES['university_created'].group == 'universities'
 
 
 def _setup(db, *, roles=('crm-user',)):

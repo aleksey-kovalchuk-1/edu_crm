@@ -29,6 +29,7 @@ class EventType:
 
 
 EVENT_TYPES = {
+    'university_created': EventType('universities', 'Создали новый вуз', True),
     'university_assigned': EventType('universities', 'Вас назначили ответственным за вуз', True),
     'university_unassigned': EventType('universities', 'Вас сняли с ответственности за вуз', True),
     'university_contacts_changed': EventType('universities', 'Изменили контакты закреплённого за вами вуза', False),
@@ -55,7 +56,9 @@ EVENT_TYPES = {
 LINK_TYPES = ('university', 'launch', 'task', 'contract')
 # Sent to someone who is losing access: created without the visibility check and listed without a link
 # once the record is no longer visible (the text only names what the person already knew).
-UNSCOPED_EVENTS = frozenset({'university_unassigned', 'task_unassigned'})
+# These short notices remain visible after scope changes. For university_created, only the school name
+# is exposed; its link is returned only to a user who can currently open the university.
+UNSCOPED_EVENTS = frozenset({'university_unassigned', 'task_unassigned', 'university_created'})
 
 
 def is_enabled(db, user_id, event_type) -> bool:
@@ -78,7 +81,7 @@ def can_see(db, user, link_type, link_id, university_id) -> bool:
 
 
 def visible_notifications(user):
-    """SQL filter: notifications about records `user` can see now, plus the removal notices (UNSCOPED_EVENTS).
+    """SQL filter: notifications about records `user` can see now, plus the explicit scope-free notices.
     One query for any number of rows, so the list and the unread count agree and stay cheap to poll."""
     task_visible = exists().where(Task.id == Notification.link_id, visible_tasks_query(user))
     university_visible = exists().where(University.id == Notification.university_id, university_scope(University.id, user))
