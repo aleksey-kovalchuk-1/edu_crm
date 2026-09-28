@@ -2139,6 +2139,33 @@ dialog.wide {
 .launch-task-category .muted {
   margin-top: var(--space-2);
 }
+.launch-task-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+.launch-task-item > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.launch-task-item .text-button {
+  flex: none;
+}
+/* People checkboxes in a modal form: a row per person, not the stacked field-label layout. */
+.modal form .assignee-picker-list .toggle {
+  flex-direction: row;
+  align-items: center;
+  margin-bottom: 0;
+  font-weight: var(--weight-regular);
+  color: var(--color-text-secondary);
+  white-space: normal;
+}
+@media (max-width: 767px) {
+  .modal form .assignee-picker-list .toggle {
+    min-height: 44px;
+  }
+}
 .timeline {
   list-style: none;
   margin: 0;
