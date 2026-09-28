@@ -354,65 +354,6 @@ svg {
   background: var(--color-accent);
   box-shadow: var(--shadow-accent);
 }
-.settings-menu-root {
-  position: relative;
-}
-.settings-menu-chevron {
-  margin-left: auto;
-}
-.settings-menu-panel {
-  position: absolute;
-  /* Grows upward from the trigger rather than downward — safe because the trigger is
-     always the sidebar's bottom-most row, so there's always clear space above it, unlike
-     below it where a short viewport or a longer item list could run off-screen. */
-  bottom: 0;
-  left: 100%;
-  /* Zero gap: no margin between trigger and panel — this padding extends the panel's own
-     hoverable box (it's still a DOM descendant of .settings-menu-root, so hovering it never
-     fires the root's mouseleave) instead of leaving dead space the pointer could slip through. */
-  padding-left: var(--space-2);
-  min-width: 220px;
-  z-index: 40;
-}
-.settings-menu-panel-inner {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
-  box-shadow: var(--shadow-accent);
-  padding: var(--space-1_5);
-  animation: settings-menu-in 120ms ease-out;
-  /* Defensive: keeps a long item list from running off-screen (still relevant even with
-     the upward-growing anchor above) by scrolling internally instead. */
-  max-height: 70vh;
-  overflow-y: auto;
-}
-@keyframes settings-menu-in {
-  from {
-    opacity: 0;
-    transform: translateX(-4px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(0);
-  }
-}
-.settings-menu-item {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-3);
-  border-radius: var(--radius-sm);
-  color: var(--color-text-secondary);
-  font-size: var(--text-base);
-  font-weight: var(--weight-semibold);
-  white-space: nowrap;
-  text-decoration: none;
-}
-.settings-menu-item:hover,
-.settings-menu-item:focus-visible {
-  background: var(--color-accent-soft);
-  color: var(--color-text);
-}
 .nav-count {
   margin-left: auto;
   font-size: var(--text-xs);
@@ -1559,15 +1500,6 @@ dialog::backdrop {
   .main-shell {
     margin-left: 0;
     width: 100%;
-  }
-  /* On the narrow slide-over sidebar there's no room for a side flyout — render the
-     submenu in-flow below the trigger instead, so it can't overflow off the right edge. */
-  .settings-menu-panel {
-    position: static;
-    left: auto;
-    bottom: auto;
-    padding-left: 0;
-    padding-top: var(--space-1_5);
   }
   .breadcrumbs .icon-button {
     display: inline-grid;

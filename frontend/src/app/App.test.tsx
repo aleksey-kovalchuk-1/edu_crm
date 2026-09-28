@@ -230,16 +230,14 @@ describe("Настройки menu", () => {
     mockApi({ "GET /auth/me": () => sessionFixture(["crm-supervisor"]) });
     renderApp("/");
     const nav = await screen.findByRole("navigation");
-    // "Процессы" is a link; "Настройки" is the SettingsMenu's own button, rendered as the
-    // next element sibling of the "Процессы" link (SettingsMenu's root <div> is the very
-    // next child of <nav> after the mapped NavLinks) — assert direct adjacency, not just
-    // "somewhere after", so a page inserted between them would fail this test.
-    const processesLink = within(nav).getByRole("link", { name: /Процессы/ });
-    const settingsButton = within(nav).getByRole("button", { name: /Настройки/ });
-    expect(processesLink.nextElementSibling?.contains(settingsButton)).toBe(true);
+    const admin = within(nav).getByRole("group", { name: "Администрирование" });
+    const links = within(admin).getAllByRole("link");
+    expect(links.at(-1)?.textContent).toMatch(/Процессы/);
+    const settingsButton = within(admin).getByRole("button", { name: /Настройки/ });
+    expect(links.at(-1)!.compareDocumentPosition(settingsButton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 
     fireEvent.click(settingsButton);
-    fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
+    fireEvent.click(within(nav).getByRole("link", { name: "Личный профиль" }));
     // The Layout's <h1>/breadcrumb read "Личный профиль" (see the header/breadcrumb regression
     // test below); the page's own content below it is the real phone-verification panel, whose
     // own heading is "Телефон" — level 1 targets the Layout heading, not that inner one.
@@ -255,7 +253,7 @@ describe("Настройки menu", () => {
     fireEvent.click(screen.getByRole("button", { name: "Меню" }));
     expect(sidebar?.className).toContain("mobile-open");
     fireEvent.click(within(nav).getByRole("button", { name: /Настройки/ }));
-    fireEvent.click(within(nav).getByRole("menuitem", { name: "Личный профиль" }));
+    fireEvent.click(within(nav).getByRole("link", { name: "Личный профиль" }));
 
     expect(await screen.findByRole("heading", { level: 1, name: "Личный профиль" })).toBeTruthy();
     // Matches what the flat sidebar NavLinks already do on click (closeMenu() + setNavResets):
@@ -274,8 +272,8 @@ describe("Настройки menu", () => {
     renderApp("/");
     const nav = await screen.findByRole("navigation");
     fireEvent.click(within(nav).getByRole("button", { name: /Настройки/ }));
-    expect(within(nav).queryByRole("menuitem", { name: "Пользователи и роли" })).toBeNull();
-    expect(within(nav).queryByRole("menuitem", { name: "Резервное копирование" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Пользователи и роли" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Резервное копирование" })).toBeNull();
   });
 
   it("Персональные данные is a real, distinctly-worded placeholder", async () => {
