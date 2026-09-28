@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>tech.unicrm.backup-request</string>
+  <key>ProgramArguments</key>
+  <array><string>/Users/alex/dev/edu-crm/scripts/run-requested-backup.sh</string></array>
+  <key>WatchPaths</key>
+  <array><string>/Users/alex/dev/edu-crm/deploy/local/backup-requests</string></array>
+  <key>StandardOutPath</key><string>/Users/alex/Library/Logs/edu-crm-backup-request.out.log</string>
+  <key>StandardErrorPath</key><string>/Users/alex/Library/Logs/edu-crm-backup-request.err.log</string>
+</dict>
+</plist>

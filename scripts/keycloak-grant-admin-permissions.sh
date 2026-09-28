@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Grants the edu-crm-admin service account the least-privilege realm-management permissions the
-# CRM's Keycloak Admin integration needs: listing users, assigning/removing realm roles, and
-# reading the realm's password policy. Run once after the edu-crm-admin client exists in the
+# CRM's Keycloak Admin integration needs: listing users, assigning/removing realm roles, reading the
+# realm's password policy, and reading the user's own login events (view-events, Настройки → Безопасность). Run once after the edu-crm-admin client exists in the
 # running realm (deploy/keycloak/realm-edu-crm.json) — safe to re-run (both grants below are
 # idempotent: add-roles per role, and re-posting an already-present scope-mapping is a no-op).
 #
@@ -58,4 +58,4 @@ scope_roles_json+="]"
 echo "$scope_roles_json" | docker compose exec -T keycloak /opt/keycloak/bin/kcadm.sh create \
   "clients/$admin_client_id/scope-mappings/clients/$realm_management_id" -r edu-crm -f -
 
-echo "Granted view-users, manage-users, view-realm to $service_account_username (user role mapping + client scope mapping)."
+echo "Granted view-users, manage-users, view-realm, view-events to $service_account_username (user role mapping + client scope mapping)."
