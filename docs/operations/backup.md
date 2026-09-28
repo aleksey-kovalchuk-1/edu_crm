@@ -30,7 +30,33 @@ BACKUP_DIR=/защищённый/каталог BACKUP_AGE_RECIPIENT=age1... scr
 
 Каждый запуск `scheduled-backup.sh` дополнительно пишет `last-run.json` (итог и этап ошибки, без путей) рядом со `status.json`; `status.json` по-прежнему ведёт `scripts/record-backup-status.py`. Кнопка «Создать копию сейчас» в «Настройки → Резервное копирование» создаёт флаг в каталоге запросов, который монтируется в `api` через `compose.public.yaml` (`${BACKUP_REQUEST_DIR:-./deploy/local/backup-requests}`).
 
-Установка при выпуске: `mkdir -m 755 deploy/local/backup-requests` (контейнер `api` работает от пользователя с uid 1000 и должен иметь право записи — проверьте создание флага из контейнера), скопировать `deploy/launchd/tech.unicrm.backup-request.plist` в `~/Library/LaunchAgents/`, `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/tech.unicrm.backup-request.plist`, пересоздать `api`. Логи агента: `~/Library/Logs/edu-crm-backup-request.*.log`.
+Установка при выпуске:
+
+1. Каталог запросов создаёт пользователь Mac, от имени которого работает LaunchAgent: `mkdir -m 700 deploy/local/backup-requests`. На рабочем Mac (Docker Desktop) запись контейнера в bind mount выполняется от имени этого пользователя Mac, поэтому API (пользователь `crm`, uid 1000) может создать флаг, а агент — забрать и удалить его; режим каталога на это не влияет, достаточно `700`. Проверено 28.09.2026 на фактическом пути `/Users/alex/dev/edu-crm/deploy/local/backup-requests`: при режимах 700, 755, 775 и 1777 файл, созданный из контейнера, на Mac принадлежит `alex:staff`.
+2. На Linux-сервере (обычный bind mount, uid сохраняется) этого недостаточно: дайте запись uid 1000 и пользователю агента, например `chgrp 1000 deploy/local/backup-requests && chmod 2770 deploy/local/backup-requests`, либо `setfacl -m u:1000:rwx,d:u:1000:rwx deploy/local/backup-requests`.
+3. Проверка перед включением кнопки (на фактическом монтировании, без реальной копии):
+   ```bash
+   D="$PWD/deploy/local/backup-requests"
+   docker run --rm --user 1000:1000 --entrypoint python -v "$D:/run/edu-crm-backup-requests" edu-crm-api -c \
+     'import os; os.close(os.open("/run/edu-crm-backup-requests/request.json", os.O_WRONLY|os.O_CREAT|os.O_EXCL, 0o644)); print("created")'
+   printf '#!/bin/sh\necho fake runner\n' > /tmp/fake-runner && chmod +x /tmp/fake-runner
+   BACKUP_REQUEST_DIR="$D" BACKUP_RUNNER=/tmp/fake-runner scripts/run-requested-backup.sh
+   ls -A "$D"   # пусто: флаг забран и удалён
+   ```
+4. Скопировать `deploy/launchd/tech.unicrm.backup-request.plist` в `~/Library/LaunchAgents/`, `launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/tech.unicrm.backup-request.plist`, пересоздать `api`.
+
+### Ручные копии: ограничение и очистка
+
+Ручные копии (`manual-…`) правило хранения не удаляет — это сделано намеренно, чтобы копию перед важным изменением не стёрла ежедневная очистка. Поэтому действует регламент оператора:
+
+- **Ограничение.** Одновременно выполняется только одна копия (CRM отвечает `409`). Ручную копию делают перед рискованным изменением или по запросу, не чаще **3 раз в сутки** и не больше **10 ручных пар** в каталоге копий одновременно; при превышении сначала выполните очистку.
+- **Очистка — раз в месяц** (и перед выпуском, если ручных пар больше 10): ручные пары старше **30 дней** удаляются, если их не оставили явно для выпуска или разбора инцидента (такие пары записывают в журнал выпуска). Сначала просмотрите список, затем удалите:
+  ```bash
+  find "$BACKUP_DIR" -maxdepth 1 -name '*-manual-*.age' -mtime +30 -print          # просмотр
+  find "$BACKUP_DIR" -maxdepth 1 -name '*-manual-*.age' -mtime +30 -delete         # удаление после проверки
+  ```
+  Удаляйте пару целиком (база и вложения с одной меткой). Сведения об удалённых парах уйдут со страницы CRM при следующей записи `status.json`: `record-backup-status.py` отбрасывает строки, файлов которых больше нет.
+- Свободное место на диске с каталогом копий проверяют при той же ежемесячной очистке.
 
 ## Проверить восстановление
 
