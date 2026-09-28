@@ -66,6 +66,9 @@ describe("reports page", () => {
     );
     expect(screen.getByRole("link", { name: /\.xlsx/ }).getAttribute("href")).toContain("format=xlsx");
     expect(screen.getByRole("link", { name: /\.xls\)/ }).getAttribute("href")).toContain("format=xls&");
+    expect(screen.getByRole("link", { name: /JSON/ }).getAttribute("href")).toBe(
+      "/api/v1/reports/interactions/export?format=json&period_from=2026-09-01&owner=%D0%9E%D0%BB%D0%B5%D0%B3+%D0%9A%D1%83%D0%B7%D0%BD%D0%B5%D1%86%D0%BE%D0%B2&column=university&column=program&column=it_product&column=owner",
+    );
   });
 
   it("adds a column in catalog order, not click order", async () => {
@@ -88,6 +91,8 @@ describe("reports page", () => {
     expect(await screen.findByText("Конец периода раньше начала.")).toBeTruthy();
     expect(screen.queryByRole("link", { name: /PDF/ })).toBeNull();
     expect((screen.getByRole("button", { name: /PDF/ }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("link", { name: /JSON/ })).toBeNull();
+    expect((screen.getByRole("button", { name: /JSON/ }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 

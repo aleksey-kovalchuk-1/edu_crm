@@ -10,7 +10,7 @@ import xlrd
 from fastapi.testclient import TestClient
 from sqlalchemy import update
 
-from app.models import AuditEvent, StatusChange
+from app.models import AuditEvent, Launch, StatusChange
 from helpers import database, login
 
 
@@ -202,6 +202,83 @@ def test_export_is_audited(client, keycloak, database_url):
     assert events[0].payload['format'] == 'xlsx'
     assert events[0].payload['rows'] == 2
     assert events[0].payload['filters']['owner'] == ['Ирина Петрова']
+
+
+def test_json_export_is_complete_and_has_machine_readable_metadata(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    data = seed(client, database_url)
+    with database(database_url) as db:
+        db.add_all([
+            Launch(university_id=data['msu']['id'], program=f'Программа {index}', product='Учебная среда',
+                   owner='Ирина Петрова', students=index, deadline=datetime(2026, 9, 10).date(),
+                   workflow_template_id=data['a']['workflow_template_id'], status_id=data['a']['status_id'])
+            for index in range(198)
+        ])
+        db.commit()
+
+    params = {'period_from': '2026-09-01', 'period_to': '2026-09-30',
+              'university_id': data['msu']['id'], 'column': ['university', 'program', 'students']}
+    preview = report(client, **params)
+    assert preview['total'] == 199
+    # Add two more rows to cross the fixed 200-row preview limit.
+    with database(database_url) as db:
+        db.add_all([
+            Launch(university_id=data['msu']['id'], program=f'Сверх лимита {index}', product='Учебная среда',
+                   owner='Ирина Петрова', students=1, deadline=datetime(2026, 9, 10).date(),
+                   workflow_template_id=data['a']['workflow_template_id'], status_id=data['a']['status_id'])
+            for index in range(2)
+        ])
+        db.commit()
+    preview = report(client, **params)
+    assert preview['total'] == 201
+    assert len(preview['rows']) == 200
+
+    response = client.get('/api/v1/reports/interactions/export', params={**params, 'format': 'json'})
+    assert response.status_code == 200, response.text
+    assert response.headers['content-type'].startswith('application/json')
+    assert 'attachment' in response.headers['content-disposition']
+    assert '.json' in response.headers['content-disposition']
+    assert b'\xd0\x90\xd0\xbd\xd0\xb0\xd0\xbb\xd0\xb8\xd1\x82\xd0\xb8\xd0\xba\xd0\xb0' in response.content
+    body = response.json()
+    assert body['schema_version'] == 1
+    assert body['organization'] == 'ИТ Школа Ростелеком'
+    assert body['filters']['period_from'] == '2026-09-01'
+    assert body['filters']['period_to'] == '2026-09-30'
+    assert body['filters']['university_id'] == [data['msu']['id']]
+    assert [column['key'] for column in body['columns']] == ['university', 'program', 'students']
+    assert body['total'] == 201
+    assert len(body['rows']) == 201
+    assert body['rows'][0]['university'] == 'Колледж связи'
+    assert all(set(row) == {'university', 'program', 'students'} for row in body['rows'])
+    assert body['generated_at'].endswith('+00:00')
+    with database(database_url) as db:
+        event = db.query(AuditEvent).filter(AuditEvent.action == 'report.export').one()
+    assert event.payload['format'] == 'json'
+    assert event.payload['rows'] == 201
+
+
+def test_json_export_applies_server_side_university_scope(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    hidden = create_university(client, 'Чужой вуз')
+    create_launch(client, hidden['id'], program='Секретная программа')
+    login(client, keycloak, roles=('crm-user',), subject='kc-report-manager', name='Менеджер', email='manager@demo.local')
+    mine = create_university(client, 'Мой вуз')
+    create_launch(client, mine['id'], program='Доступная программа')
+
+    response = client.get('/api/v1/reports/interactions/export', params={
+        'format': 'json', 'university_id': [mine['id'], hidden['id']], 'column': ['university', 'program'],
+    })
+    assert response.status_code == 200, response.text
+    assert response.json()['total'] == 1
+    assert response.json()['rows'] == [{'university': 'Мой вуз', 'program': 'Доступная программа'}]
+
+
+def test_json_export_rejects_invalid_period(client, keycloak, database_url):
+    login(client, keycloak, roles=('crm-supervisor',))
+    response = client.get('/api/v1/reports/interactions/export', params={
+        'format': 'json', 'period_from': '2026-10-01', 'period_to': '2026-09-01',
+    })
+    assert response.status_code == 422
 
 
 def test_report_options_list_owners_and_statuses_in_scope(client, keycloak, database_url):

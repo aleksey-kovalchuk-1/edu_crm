@@ -21,6 +21,8 @@ def normalize_passport_pair(series, number):
 
 
 def fingerprint(kind, normalized_value, key_bytes):
+    # HMAC permits equality checks without putting a reversible document number in alerts.
+    # The kind prefix prevents an identical digit string in two document fields from matching.
     return hmac.new(key_bytes, f'{kind}:{normalized_value}'.encode('utf-8'), hashlib.sha256).hexdigest()
 
 
@@ -48,6 +50,8 @@ def preview_document_matches(db, values, request, *, learner=None, incoming_lear
                              row_number=None, in_file_index=None):
     """Check submitted identifiers without storing a fingerprint or source value."""
     settings = request.app.state.settings
+    # Before a complete backfill, a missing stored fingerprint is not evidence that a new
+    # document is unique. Keep this comparison off until coverage has been verified.
     if not settings.fraud_match_key or not settings.fraud_match_coverage_complete:
         return []
     cipher = request.app.state.learner_cipher
