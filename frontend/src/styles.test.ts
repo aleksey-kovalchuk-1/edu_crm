@@ -128,6 +128,11 @@ describe("styles.css design tokens", () => {
       expect(phone).toMatch(/\.stack-table thead\s*\{[^}]*position:\s*absolute/);
     });
 
+    it("gives page toolbars, task counters and stacked-row titles 44px on phones", () => {
+      expect(phone).toMatch(/\.toolbar \.primary,\s*\.toolbar \.secondary,\s*\.toolbar \.filter,\s*\.task-toolbar \.primary,\s*\.scope-select select,\s*\.task-search,\s*\.counter-chip,\s*\.th-sort\s*\{[^}]*min-height:\s*44px/);
+      expect(phone).toMatch(/\.stack-table td:first-child a\s*\{[^}]*min-height:\s*44px/);
+    });
+
     it("turns panels into flat frames without shadows", () => {
       expect(rule(".panel")).toMatch(/border:\s*1px solid var\(--atmr-border-soft\)/);
       expect(rule(".panel")).toMatch(/border-radius:\s*var\(--atmr-border-radius-l\)/);

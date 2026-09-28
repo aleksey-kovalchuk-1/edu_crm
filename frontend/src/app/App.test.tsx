@@ -386,3 +386,26 @@ describe("stacked phone rows", () => {
     expect(labels.slice(0, 3)).toEqual(["Номер", "Учебное заведение", "ИТ-продукт"]);
   });
 });
+
+describe("overview", () => {
+  it("opens the stage cards from «Открыть доску» (the register is now the default view)", async () => {
+    mockApi();
+    renderApp("/");
+    fireEvent.click(await screen.findByRole("button", { name: /Открыть доску/ }));
+    expect((await screen.findByTestId("location")).textContent).toBe("/interactions?view=stages");
+  });
+
+  it("marks the annual interest chart as demonstration data", async () => {
+    mockApi();
+    renderApp("/");
+    const heading = await screen.findByRole("heading", { level: 2, name: /Интерес к обучению/ });
+    expect(heading.closest("section")?.textContent).toMatch(/Демонстрационные данные/);
+  });
+
+  it("shows the four figures without decorative icons", async () => {
+    mockApi();
+    renderApp("/");
+    await screen.findByText("Требуют внимания");
+    expect(document.querySelectorAll(".metric svg")).toHaveLength(0);
+  });
+});
