@@ -40,7 +40,8 @@ describe("settings notifications", () => {
   it("pauses for the chosen duration and shows until when", async () => {
     const api = mockApi({
       "GET /notifications/preferences": () => prefs(),
-      "PUT /notifications/pause": () => ({ paused_until: "2026-09-28T05:00:00Z" }),
+      // Relative to now: a fixed date would eventually be in the past and read as "no pause".
+      "PUT /notifications/pause": () => ({ paused_until: new Date(Date.now() + 24 * 3600_000).toISOString() }),
     });
     renderApp("/settings/notifications");
     fireEvent.change(await screen.findByLabelText("Длительность паузы"), { target: { value: "tomorrow" } });
