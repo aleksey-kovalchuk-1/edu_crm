@@ -10,8 +10,12 @@ services:
       OIDC_ISSUER: https://unicrm.tech/auth/realms/edu-crm
       COOKIE_SECURE: 'true'
       BACKUP_STATUS_FILE: /run/edu-crm-backup-status/status.json
+      # Manual backup: the API may only drop a request flag here; the host agent
+      # (deploy/launchd/tech.unicrm.backup-request.plist) runs the real backup script.
+      BACKUP_REQUEST_DIR: /run/edu-crm-backup-requests
     volumes:
       - ${BACKUP_STATUS_DIR:-./deploy/local/backup-status}:/run/edu-crm-backup-status:ro
+      - ${BACKUP_REQUEST_DIR:-./deploy/local/backup-requests}:/run/edu-crm-backup-requests
 
   notifier:
     environment:
