@@ -20,6 +20,14 @@ from .models import CatalogImport, Contract, ITDirection, ITProduct, University,
 
 router = APIRouter(prefix='/api/v1/imports', tags=['Загрузка справочников'])
 importer_role = require_roles(ROLE_SUPERVISOR, ROLE_ADMIN)
+CUSTOMER_FILES_FORBIDDEN = 'Файлы заказчика (книгу и JSON заявок) загружает руководитель'
+
+
+def _require_head(auth):
+    # Owner 29.09.2026 (D-247): the customer's files belong to «Руководитель» (the superadmin role includes it);
+    # the administrator keeps the column import of the contract register.
+    if ROLE_SUPERVISOR not in auth.user.roles:
+        raise AppError(ErrorCode.FORBIDDEN, CUSTOMER_FILES_FORBIDDEN)
 PREVIEW_ROWS = 20
 HISTORY_SIZE = 20
 
@@ -163,6 +171,7 @@ def upload(request: Request, file: UploadFile = File(...), auth: AuthContext = D
     filename = (file.filename or 'upload').replace('\\', '/').rsplit('/', 1)[-1][:255]
     kind = customer_files.detect_kind(filename, content)
     if kind != 'catalog':
+        _require_head(auth)
         return _upload_customer_file(db, auth, filename, content, kind)
     try:
         sheet = read_upload(filename, content)
@@ -213,9 +222,11 @@ def get_import(import_id: int, db: Session = Depends(get_db)):
     return _import_out(_load(db, import_id), db)
 
 
-@router.post('/{import_id}/check', summary='Проверить загрузку без записи', dependencies=[Depends(importer_role)])
-def check_import(import_id: int, data: MappingIn, db: Session = Depends(get_db)):
+@router.post('/{import_id}/check', summary='Проверить загрузку без записи')
+def check_import(import_id: int, data: MappingIn, auth: AuthContext = Depends(importer_role), db: Session = Depends(get_db)):
     record = _load(db, import_id)
+    if record.kind != 'catalog':
+        _require_head(auth)
     mapping = _checked_mapping(record, data.mapping) if record.kind == 'catalog' else None
     report = _writer(record, db, apply=False, mapping=mapping)
     db.rollback()
@@ -225,6 +236,8 @@ def check_import(import_id: int, data: MappingIn, db: Session = Depends(get_db))
 @router.post('/{import_id}/apply', summary='Применить загрузку')
 def apply_import(import_id: int, data: MappingIn, request: Request, auth: AuthContext = Depends(importer_role), db: Session = Depends(get_db)):
     record = _load(db, import_id, lock=True)
+    if record.kind != 'catalog':
+        _require_head(auth)
     if record.status == 'applied':
         raise AppError(ErrorCode.CONFLICT, 'Эта загрузка уже применена')
     mapping = _checked_mapping(record, data.mapping) if record.kind == 'catalog' else None
