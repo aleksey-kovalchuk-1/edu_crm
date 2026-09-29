@@ -130,8 +130,11 @@ def _university_events(db, changes, actor):
             names[university_id] = university.name if university else ''
         return names[university_id]
 
+    from_import = db.info.get('notification_source') == 'import'
     for kind, model, data in changes:
         if model == 'University' and kind == 'new':
+            if from_import:
+                continue  # like imported contracts: a catalogue import doesn't announce each new university
             university_id = data['id']
             for user_id in db.scalars(select(User.id).where(
                 User.is_active.is_(True), User.roles.any('crm-user'),
