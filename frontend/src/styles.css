@@ -4765,6 +4765,28 @@ footer {
   min-width: 10rem;
   max-width: 100%;
 }
+.role-editor-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atmr-spacing-2x);
+}
+/* «Удалить роль»: an outlined destructive action; the confirmation uses the filled one. */
+.secondary.danger {
+  border-color: var(--atmr-error-muted);
+}
+.primary.danger {
+  background: var(--atmr-error-700);
+  border-color: var(--atmr-error-700);
+  color: var(--atmr-accent-on-accent) !important;
+}
+.user-setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atmr-spacing-1x) var(--atmr-spacing-2x);
+  margin-top: var(--atmr-spacing-1x);
+}
 /* Settings bodies follow the section heading, whose padding drops to 16px below 800px. */
 @media (max-width: 800px) {
   .settings-body {
