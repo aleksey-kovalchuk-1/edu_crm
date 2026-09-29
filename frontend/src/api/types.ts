@@ -22,6 +22,8 @@ export interface University {
   city: string;
   region: string;
   website: string;
+  /** The university's own address; employees write to it from their mail program. */
+  email: string;
   /** Legacy free-text contact field. */
   contact: string;
   is_active: boolean;

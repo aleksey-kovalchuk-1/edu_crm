@@ -4,6 +4,7 @@ import { ArrowLeft, Pencil, Plus } from "lucide-react";
 import {
   useSaveContact,
   useSaveUniversity,
+  useSetUniversityEmail,
   useUniversity,
   useUniversityContacts,
 } from "../api/catalogs";
@@ -15,11 +16,72 @@ import { ManagersDialog } from "../components/ManagersDialog";
 import { Modal } from "../components/Modal";
 import { ErrorAlert, RefreshError, queryFallback } from "../components/QueryState";
 import { ContactForm } from "../components/forms/CatalogForms";
+import { FieldError, fieldErrorMessage } from "../components/forms/FormParts";
+import { errorText } from "../api/client";
 import { ContractForm } from "../components/forms/ContractForm";
 import { UniversityForm } from "../components/forms/UniversityForm";
 import { TaskPlanSection } from "../components/tasks/TaskPlanSection";
 import { canEditCatalog } from "../lib/user";
 import { WebsiteLink } from "./UniversitiesPage";
+
+/** The university's own address, editable by every role that can open the card. */
+function UniversityEmailField({ university }: { university: University }) {
+  const [editing, setEditing] = useState(false);
+  const save = useSetUniversityEmail(university.id);
+
+  if (!editing) {
+    return (
+      <span className="inline-edit">
+        {university.email ? (
+          <a className="wrap-anywhere" href={`mailto:${university.email}`}>
+            {university.email}
+          </a>
+        ) : (
+          <span className="muted">Не указан</span>
+        )}
+        <button type="button" className="text-button" onClick={() => setEditing(true)}>
+          <Pencil size={15} aria-hidden="true" />
+          {university.email ? "Изменить адрес" : "Указать адрес"}
+        </button>
+      </span>
+    );
+  }
+  return (
+    <form
+      className="inline-edit-form"
+      aria-label="Электронная почта вуза"
+      onSubmit={(e) => {
+        e.preventDefault();
+        const email = String(new FormData(e.currentTarget).get("email") ?? "").trim();
+        save.mutate(email, { onSuccess: () => setEditing(false) });
+      }}
+    >
+      <input
+        name="email"
+        type="email"
+        aria-label="Электронная почта вуза"
+        defaultValue={university.email}
+        maxLength={254}
+        placeholder="priem@vuz.ru"
+        autoFocus
+      />
+      <FieldError error={save.error} field="email" />
+      {save.error && !fieldErrorMessage(save.error, "email") ? (
+        <p className="danger" role="alert">
+          {errorText(save.error)}
+        </p>
+      ) : null}
+      <div className="inline-edit-actions">
+        <button type="submit" className="primary" disabled={save.isPending}>
+          {save.isPending ? "Сохраняем…" : "Сохранить"}
+        </button>
+        <button type="button" className="secondary" onClick={() => setEditing(false)}>
+          Отмена
+        </button>
+      </div>
+    </form>
+  );
+}
 
 function BackLink() {
   return (
@@ -97,6 +159,12 @@ function UniversityDetail({ university }: { university: University }) {
           )}
         </div>
         <dl className="fields">
+          <div>
+            <dt>Электронная почта вуза</dt>
+            <dd>
+              <UniversityEmailField university={university} />
+            </dd>
+          </div>
           <div>
             <dt>Краткое название</dt>
             <dd>{university.short_name || "—"}</dd>

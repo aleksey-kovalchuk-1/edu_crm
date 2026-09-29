@@ -39,6 +39,7 @@
 | `POST /api/v1/universities` | все авторизованные роли CRM | Тело `{name, city, short_name?, region?, website?, contact?}` → `201 University` |
 | `PATCH /api/v1/universities/{id}` | руководитель, администратор | Те же поля и `is_active` → `University` |
 | `PUT /api/v1/universities/{id}/managers` | руководитель, администратор | Тело `{user_ids: number[]}` — полный список ответственных → `University` |
+| `PUT /api/v1/universities/{id}/email` | все (в области видимости) | Тело `{email}` — адрес вуза для писем сотрудников; пустая строка очищает; неверный адрес → `422` (поле `email`); изменение пишется в журнал (`university.email`) → `University` |
 
 `University`: `{"id": 1, "name": "Северный технологический университет", "short_name": "СТУ", "city": "Санкт-Петербург", "region": "", "website": "", "contact": "", "is_active": true, "managers": [{"id": 5, "full_name": "Анна Демо"}]}`
 
