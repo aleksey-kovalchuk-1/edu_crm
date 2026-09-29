@@ -55,6 +55,8 @@ services:
       KC_HEALTH_ENABLED: 'true'
     volumes:
       - ./deploy/keycloak/realm-edu-crm.json:/opt/keycloak/data/import/realm-edu-crm.json:ro
+      # UniCRM sign-in and registration pages (loginTheme=edu-crm); scripts/keycloak-login-settings.sh selects it on an existing realm.
+      - ./deploy/keycloak/themes/edu-crm:/opt/keycloak/themes/edu-crm:ro
     depends_on:
       keycloak-db-init:
         condition: service_completed_successfully

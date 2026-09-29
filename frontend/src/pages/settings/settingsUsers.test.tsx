@@ -65,7 +65,7 @@ describe("settings users page", () => {
       "GET /admin/users": () => ({ available: false, total: 0, users: [] }),
     });
     renderApp("/settings/users");
-    await screen.findByText(/Keycloak Admin API не настроен/);
+    await screen.findByText(/Сервис входа не подключён/);
   });
 
   it("also shows the full user directory below the pending list", async () => {

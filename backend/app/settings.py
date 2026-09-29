@@ -1,5 +1,6 @@
 import os
 import base64
+import re
 import binascii
 from dataclasses import dataclass
 from urllib.parse import urlsplit
@@ -69,6 +70,14 @@ class Settings:
     email_provider_api_key: str = ''
     email_sender_name: str = 'UniCRM'
     email_sender_address: str = ''
+    # Russian SMTP mailbox (owner decision 2026-09-28: Russian providers only, e.g. smtp.yandex.ru or
+    # smtp.mail.ru). Wins over email_provider_url when set; port 465 is SSL, anything else STARTTLS.
+    email_smtp_host: str = ''
+    email_smtp_port: int = 465
+    email_smtp_user: str = ''
+    email_smtp_password: str = ''
+    # Address named in the acknowledgement e-mail to new sign-ups; empty = the organisation's e-mail.
+    access_contact_email: str = ''
 
     @property
     def callback_url(self):
@@ -94,6 +103,10 @@ def normalize_origin(value, name):
     if parts.scheme not in {'http', 'https'} or not parts.netloc or parts.path or parts.query or parts.fragment:
         raise SettingsError(f'{name} must be an origin such as http://localhost:8080, got {value!r}')
     return value
+
+
+def _is_ru_domain(host):
+    return bool(re.fullmatch(r'(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+ru', host))
 
 
 def _positive_int(environ, name, default):
@@ -161,6 +174,13 @@ def load_settings(environ=None):
         if any(other and decoded == base64.urlsafe_b64decode(other) for other in other_keys):
             raise SettingsError('FRAUD_MATCH_KEY must differ from encryption keys')
     fraud_coverage = _boolean(environ, 'FRAUD_MATCH_COVERAGE_COMPLETE', False)
+    smtp_host = (environ.get('EMAIL_SMTP_HOST') or '').strip().lower()
+    sender_address = (environ.get('EMAIL_SENDER_ADDRESS') or '').strip()
+    if smtp_host:
+        if not _is_ru_domain(smtp_host):
+            raise SettingsError('EMAIL_SMTP_HOST must be a Russian (.ru) mail server')
+        if not _is_ru_domain(sender_address.rpartition('@')[2].lower()):
+            raise SettingsError('EMAIL_SENDER_ADDRESS must be an address in a .ru domain when EMAIL_SMTP_HOST is set')
     customer_data_enabled = _boolean(environ, 'CUSTOMER_DATA_ENABLED', False)
     if fraud_coverage and not fraud_key:
         raise SettingsError('FRAUD_MATCH_COVERAGE_COMPLETE requires FRAUD_MATCH_KEY')
@@ -201,5 +221,10 @@ def load_settings(environ=None):
         email_provider_url=(environ.get('EMAIL_PROVIDER_URL') or '').strip(),
         email_provider_api_key=(environ.get('EMAIL_PROVIDER_API_KEY') or '').strip(),
         email_sender_name=(environ.get('EMAIL_SENDER_NAME') or '').strip() or 'UniCRM',
-        email_sender_address=(environ.get('EMAIL_SENDER_ADDRESS') or '').strip(),
+        email_sender_address=sender_address,
+        email_smtp_host=smtp_host,
+        email_smtp_port=_positive_int(environ, 'EMAIL_SMTP_PORT', 465),
+        email_smtp_user=(environ.get('EMAIL_SMTP_USER') or '').strip(),
+        email_smtp_password=environ.get('EMAIL_SMTP_PASSWORD') or '',
+        access_contact_email=(environ.get('ACCESS_CONTACT_EMAIL') or '').strip(),
     )

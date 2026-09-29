@@ -26,5 +26,5 @@ def describe_policy(policy: str) -> list[str]:
         if template and '{}' in template and match.group(2) is None:
             template = None  # e.g. a bare `length` with Keycloak's implicit default: don't print "None"
         # An unrecognised rule is shown as Keycloak wrote it rather than guessed at.
-        lines.append(template.format(match.group(2)) if template else f'Правило Keycloak: {rule}')
+        lines.append(template.format(match.group(2)) if template else f'Правило сервиса входа: {rule}')
     return lines

@@ -13,9 +13,9 @@ import { ROLES } from "../../lib/user";
 
 const STATES = { active: "Активен", ended: "Завершён", expired: "Истёк" } as const;
 const KEYCLOAK_REASONS: Record<string, string> = {
-  disabled: "Журнал Keycloak недоступен: хранение событий не включено",
-  not_configured: "Журнал Keycloak недоступен: интеграция с Keycloak не настроена",
-  unavailable: "Журнал Keycloak сейчас недоступен, попробуйте позже",
+  disabled: "Журнал входов недоступен: хранение событий не включено",
+  not_configured: "Журнал входов недоступен: сервис входа не подключён",
+  unavailable: "Журнал входов сейчас недоступен, попробуйте позже",
 };
 
 export function SettingsSecurityPage() {
@@ -92,7 +92,7 @@ function HistoryPanel() {
   const history = useLoginHistory();
   const data = history.data;
   return (
-    <SettingsPanel titleId="history-title" title="История входов" description="Входы в CRM за 30 дней и события журнала Keycloak.">
+    <SettingsPanel titleId="history-title" title="История входов" description="Входы в CRM за 30 дней и события сервиса входа.">
       {history.isPending && <div className="loading" role="status">Загружаем историю входов…</div>}
       {history.isError && <ErrorAlert error={history.error} onRetry={() => void history.refetch()} />}
       <h3>Входы в CRM (30 дней)</h3>
@@ -102,7 +102,7 @@ function HistoryPanel() {
           <li key={i}><span>{formatDateTime(e.at)} · {e.device} · IP {e.ip ?? "—"}</span><span className="muted">{STATES[e.state]}</span></li>
         ))}
       </ul>
-      <h3>Журнал Keycloak</h3>
+      <h3>Журнал сервиса входа</h3>
       {data && !data.keycloak.available && <p className="muted">{KEYCLOAK_REASONS[data.keycloak.reason ?? "unavailable"]}</p>}
       {data?.keycloak.available && data.keycloak.events.length === 0 && <p className="muted">Событий пока нет</p>}
       <ul className="sender-queue">
@@ -118,10 +118,10 @@ function PolicyPanel() {
   const policy = usePasswordPolicy();
   const data = policy.data;
   return (
-    <SettingsPanel titleId="policy-title" title="Парольная политика" description="Требования Keycloak к паролям сотрудников.">
+    <SettingsPanel titleId="policy-title" title="Парольная политика" description="Требования к паролям сотрудников.">
       {policy.isPending && <div className="loading" role="status">Загружаем политику…</div>}
       {policy.isError && <ErrorAlert error={policy.error} onRetry={() => void policy.refetch()} />}
-      {data && !data.available && <p className="muted">Политика сейчас недоступна: нет связи с Keycloak.</p>}
+      {data && !data.available && <p className="muted">Политика сейчас недоступна: нет связи с сервисом входа.</p>}
       {data?.available && (
         <ul>
           {data.rules.map((r) => <li key={r}>{r}</li>)}
@@ -132,11 +132,11 @@ function PolicyPanel() {
         <div className="wizard-actions">
           <a className="secondary" href={data.change_password_url} target="_blank" rel="noreferrer">Сменить пароль</a>
           {data.admin_console_url && (
-            <a className="secondary" href={data.admin_console_url} target="_blank" rel="noreferrer">Изменить политику в Keycloak</a>
+            <a className="secondary" href={data.admin_console_url} target="_blank" rel="noreferrer">Изменить политику в консоли входа</a>
           )}
         </div>
       )}
-      {data?.admin_console_url && <p className="muted">Политику меняет администратор в консоли Keycloak (нужна учётная запись администратора Keycloak).</p>}
+      {data?.admin_console_url && <p className="muted">Политику меняет администратор в консоли сервиса входа (нужна отдельная учётная запись администратора).</p>}
     </SettingsPanel>
   );
 }
@@ -168,7 +168,7 @@ function PasswordManager() {
       {queryFallback([users, pending]) ?? (
         <>
           <RefreshError queries={[users, pending]} />
-          {!users.data?.available && !pending.data?.available && <p className="muted">Список учётных записей Keycloak сейчас недоступен.</p>}
+          {!users.data?.available && !pending.data?.available && <p className="muted">Список учётных записей сейчас недоступен.</p>}
           {accounts.length > 0 && (
             <form aria-label="Сброс пароля" onSubmit={submit}>
               <label>

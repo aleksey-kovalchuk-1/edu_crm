@@ -26,6 +26,10 @@ injectable: app/main.py stores the chosen callable on app.state.email_sender (de
 send_email itself), and tests substitute a fake there — same pattern as app.state.sms_sender.
 """
 import logging
+import smtplib
+import ssl
+from email.message import EmailMessage
+from email.utils import formataddr
 
 import httpx
 
@@ -57,7 +61,38 @@ def _http_sender(settings, to, subject, body, *, from_address=None, from_name=No
         raise EmailSendError(f'Email provider request failed: {error}') from error
 
 
+def _smtp_sender(settings, to, subject, body, *, from_address=None, from_name=None):
+    message = EmailMessage()
+    message['From'] = formataddr((from_name or settings.email_sender_name, from_address or settings.email_sender_address))
+    message['To'] = to
+    message['Subject'] = subject
+    message.set_content(body)
+    try:
+        if settings.email_smtp_port == 465:
+            connection = smtplib.SMTP_SSL(settings.email_smtp_host, settings.email_smtp_port,
+                                          timeout=REQUEST_TIMEOUT_SECONDS, context=ssl.create_default_context())
+        else:
+            connection = smtplib.SMTP(settings.email_smtp_host, settings.email_smtp_port, timeout=REQUEST_TIMEOUT_SECONDS)
+        with connection as smtp:
+            if settings.email_smtp_port != 465:
+                smtp.starttls(context=ssl.create_default_context())
+            if settings.email_smtp_user:
+                smtp.login(settings.email_smtp_user, settings.email_smtp_password)
+            smtp.send_message(message)
+    except (smtplib.SMTPException, OSError) as error:
+        raise EmailSendError(f'SMTP delivery failed: {error}') from error
+
+
+def email_configured(settings) -> bool:
+    """Whether a real provider is set up; the log-only fallback never counts as delivery."""
+    return bool(settings.email_smtp_host or settings.email_provider_url)
+
+
 def send_email(settings, to, subject, body, *, from_address: str | None = None, from_name: str | None = None) -> None:
-    """Sends an email to `to`; raises EmailSendError on failure. See module docstring for the contract."""
-    sender = _http_sender if settings.email_provider_url else _log_sender
+    """Sends an email to `to`; raises EmailSendError on failure. See module docstring for the contract.
+    A Russian SMTP mailbox (EMAIL_SMTP_HOST) wins over the generic HTTP provider."""
+    if settings.email_smtp_host:
+        sender = _smtp_sender
+    else:
+        sender = _http_sender if settings.email_provider_url else _log_sender
     sender(settings, to, subject, body, from_address=from_address, from_name=from_name)

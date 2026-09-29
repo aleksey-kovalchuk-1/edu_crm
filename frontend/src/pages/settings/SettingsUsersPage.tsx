@@ -27,7 +27,7 @@ function PendingRegistrations() {
     <SettingsPanel
       titleId="pending-registrations-title"
       title="Заявки на доступ"
-      description="Учётные записи Keycloak, у которых пока нет ни одной роли CRM."
+      description="Люди, которые зарегистрировались, но пока не получили роль CRM."
     >
       {changeRole.error && <ErrorAlert error={changeRole.error} />}
       {queryFallback([pending]) ??
@@ -36,7 +36,7 @@ function PendingRegistrations() {
             <RefreshError queries={[pending]} />
             {!data.available && (
               <Notice tone="info">
-                Keycloak Admin API не настроен в этом окружении — заявки на доступ недоступны.
+                Сервис входа не подключён в этом окружении — заявки на доступ недоступны.
               </Notice>
             )}
             {data.available && data.pending.length === 0 && (
@@ -48,7 +48,7 @@ function PendingRegistrations() {
                   <thead>
                     <tr>
                       <th scope="col">Логин</th>
-                      <th scope="col">Имя пользователя Keycloak</th>
+                      <th scope="col">Логин</th>
                       <th scope="col">
                         <span className="visually-hidden">Действия</span>
                       </th>
@@ -60,7 +60,7 @@ function PendingRegistrations() {
                         <td data-label="Логин">
                           <strong className="cell-title wrap-anywhere">{p.email}</strong>
                         </td>
-                        <td data-label="Имя пользователя Keycloak" className="muted wrap-anywhere">{p.username}</td>
+                        <td data-label="Логин" className="muted wrap-anywhere">{p.username}</td>
                         <td data-label="Доступ" className="role-editor-cell">
                           <form className="role-editor" aria-label={`Доступ пользователя ${p.username}`} onSubmit={(event) => grantAccess(event, p.keycloak_id)}>
                             <label>

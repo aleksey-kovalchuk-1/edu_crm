@@ -15,7 +15,7 @@ describe("organization name in the brand", () => {
   it("shows the organization name on the login screen before sign-in", async () => {
     mockApi({ "GET /auth/me": signedOut });
     renderApp("/?auth_error=NO_ACCESS");
-    await screen.findByRole("button", { name: /Войти через Keycloak/ });
+    await screen.findByRole("button", { name: /Войти/ });
     await screen.findByText("ИТ Школа Ростелеком");
   });
 
@@ -25,7 +25,7 @@ describe("organization name in the brand", () => {
       "GET /organization/brand": () => apiError(503, "SERVICE_UNAVAILABLE", "Недоступно"),
     });
     renderApp("/?auth_error=NO_ACCESS");
-    await screen.findByRole("button", { name: /Войти через Keycloak/ });
+    await screen.findByRole("button", { name: /Войти/ });
     expect(screen.queryByText("ИТ Школа Ростелеком")).toBeNull();
     expect(screen.queryByText(/Недоступно/)).toBeNull();
   });
