@@ -1,10 +1,13 @@
 import { useState } from "react";
 import type {
+  ImportKind,
   ImportReport,
   ImportRowResult,
   ImportRowStatus,
+  ImportSheet,
   ImportStatus,
   ImportSummary,
+  UnmatchedUniversity,
 } from "../api/imports";
 import { formatNumber } from "../lib/format";
 
@@ -28,7 +31,7 @@ const ROW_STATUS: Record<ImportRowStatus, { label: string; className: string }> 
   skipped: { label: "пропущена", className: "badge badge-4" },
 };
 
-export const ACTION_LABELS = { create: "создание", update: "обновление" } as const;
+export const ACTION_LABELS = { create: "создание", update: "обновление", unchanged: "без изменений" } as const;
 
 const ENTITY_LABELS: Record<string, string> = {
   contracts: "Договоры",
@@ -36,7 +39,70 @@ const ENTITY_LABELS: Record<string, string> = {
   it_products: "ИТ-продукты",
   it_directions: "ИТ-направления",
   university_contacts: "Ответственные от вуза",
+  course_applications: "Заявки (номер, курс, поток)",
 };
+
+const SHEET_STATUS: Record<ImportSheet["status"], { label: string; className: string }> = {
+  supported: { label: "загружается", className: "badge badge-3" },
+  not_supported: { label: "не загружается", className: "badge badge-4" },
+  service: { label: "служебный", className: "badge badge-1" },
+  error: { label: "ошибка", className: "badge badge-danger" },
+};
+
+/** Every sheet of the customer workbook with the reason it is or is not imported. */
+export function ImportSheetsTable({ sheets }: { sheets: ImportSheet[] }) {
+  return (
+    <div className="table-wrap">
+      <table className="data-table">
+        <caption className="visually-hidden">Листы книги</caption>
+        <thead>
+          <tr>
+            <th scope="col">Лист</th>
+            <th scope="col">Строк</th>
+            <th scope="col">Загрузка</th>
+            <th scope="col">Причина</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sheets.map((s) => (
+            <tr key={s.name}>
+              <td>{s.name}</td>
+              <td>{formatNumber(s.rows)}</td>
+              <td>
+                <span className={SHEET_STATUS[s.status]?.className ?? "badge"}>
+                  {SHEET_STATUS[s.status]?.label ?? s.status}
+                </span>
+              </td>
+              <td className="wrap">{s.reason || <span className="muted">—</span>}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+/** Workbook universities that are not in the CRM catalogue: listed, skipped on apply, never created. */
+export function UnmatchedUniversities({ items }: { items: UnmatchedUniversity[] }) {
+  if (!items.length) return null;
+  return (
+    <div className="notice" role="note">
+      <div>
+        <strong>
+          Не найдены в каталоге CRM — строки будут пропущены, вузы не создаются: {formatNumber(items.length)}
+        </strong>
+        <ul>
+          {items.map((u) => (
+            <li key={u.external_id}>
+              {u.name}
+              {u.short_name ? ` (${u.short_name})` : ""} · {u.external_id}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
+  );
+}
 
 const entityLabel = (key: string) => ENTITY_LABELS[key] ?? key;
 
@@ -118,12 +184,19 @@ const ROWS_STEP = 200;
 const matchesFilter = (row: ImportRowResult, filter: RowFilter) =>
   filter === "all" || row.status === filter;
 
+const KEY_LABELS: Record<ImportKind, string> = {
+  catalog: "Номер договора",
+  applications: "Номер заявки",
+  workbook: "Идентификатор",
+};
+
 /** Row-by-row results with a status filter; long lists are shown in portions. */
-export function ImportRowsTable({ report }: { report: ImportReport }) {
+export function ImportRowsTable({ report, kind = "catalog" }: { report: ImportReport; kind?: ImportKind }) {
   const [filter, setFilter] = useState<RowFilter>("all");
   const [limit, setLimit] = useState(ROWS_STEP);
   const rows = report.rows.filter((r) => matchesFilter(r, filter));
   const shown = rows.slice(0, limit);
+  const bySheet = kind === "workbook";
 
   return (
     <div className="import-rows">
@@ -151,8 +224,9 @@ export function ImportRowsTable({ report }: { report: ImportReport }) {
           <caption className="visually-hidden">Результаты по строкам файла</caption>
           <thead>
             <tr>
-              <th scope="col">Строка</th>
-              <th scope="col">Номер договора</th>
+              {bySheet && <th scope="col">Лист</th>}
+              <th scope="col">{kind === "applications" ? "Запись" : "Строка"}</th>
+              <th scope="col">{KEY_LABELS[kind]}</th>
               <th scope="col">Результат</th>
               <th scope="col">Действие</th>
               <th scope="col">Сообщения</th>
@@ -160,9 +234,10 @@ export function ImportRowsTable({ report }: { report: ImportReport }) {
           </thead>
           <tbody>
             {shown.map((r) => (
-              <tr key={r.row_number}>
+              <tr key={`${r.sheet ?? ""}-${r.row_number}`}>
+                {bySheet && <td>{r.sheet}</td>}
                 <td>{r.row_number}</td>
-                <td>{r.contract_number || <span className="muted">—</span>}</td>
+                <td>{(r.contract_number ?? r.key) || <span className="muted">—</span>}</td>
                 <td>
                   <span className={ROW_STATUS[r.status]?.className ?? "badge"}>
                     {ROW_STATUS[r.status]?.label ?? r.status}
