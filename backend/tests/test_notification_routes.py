@@ -86,7 +86,8 @@ def test_preferences_show_defaults_and_store_changes(client, keycloak, database_
     body = client.get(f'{BASE}/preferences').json()
     assert [g['key'] for g in body['groups']] == ['universities', 'launches', 'tasks', 'contracts']
     events = {e['key']: e['enabled'] for g in body['groups'] for e in g['events']}
-    assert len(events) == 20 and events['task_assigned'] is True and events['contract_signed'] is False
+    assert len(events) == 21 and events['task_assigned'] is True and events['contract_signed'] is False
+    assert events['university_created'] is True
     assert body['paused_until'] is None
     saved = client.put(f'{BASE}/preferences', json={'preferences': {'contract_signed': True, 'task_assigned': False}})
     assert saved.status_code == 200, saved.text
