@@ -37,6 +37,8 @@ class University(Base):
     short_name: Mapped[str] = mapped_column(russian_text(100), default='', server_default='')
     region: Mapped[str] = mapped_column(russian_text(100), default='', server_default='')
     website: Mapped[str] = mapped_column(String(300), default='', server_default='')
+    # The university's own address; employees write to it from their mail program (no automatic emails).
+    email: Mapped[str] = mapped_column(String(254), default='', server_default='')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     # Initial partner roster is shared with every manager; ordinary new universities stay assigned-only.
     team_visible_to_managers: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
