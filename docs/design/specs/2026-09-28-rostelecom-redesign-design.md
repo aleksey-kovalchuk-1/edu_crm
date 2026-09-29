@@ -1,6 +1,6 @@
 # UniCRM redesign on the Rostelecom design system — design system
 
-Status: **for owner review.** Approved so far (28 Sep 2026): visual direction «A, рабочий реестр» in Rostelecom Purple light; licence in place; no `@atomaro/*` packages (no registry token); Rostelecom Basis may be shipped. The mockups are illustrations, not a functional specification. Implementation starts only after the owner approves this document and the plan `docs/superpowers/plans/2026-09-28-rostelecom-redesign.md`.
+Status: **for owner review.** Approved so far (28 Sep 2026): visual direction «A, рабочий реестр» in Rostelecom Purple light; licence in place; no `@atomaro/*` packages (no registry token); Rostelecom Basis may be shipped. The mockups are illustrations, not a functional specification. Implementation starts only after the owner approves this document.
 
 Audit, sources and mockups: the shared doc «UniCRM interface audit and Rostelecom design system proposal».
 

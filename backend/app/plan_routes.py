@@ -18,11 +18,11 @@ from .db import get_db
 from .errors import AppError, ErrorCode
 from .models import (
     Launch, Task, TaskChecklistItem, TaskEvent, TaskMember, TaskPlanRun, TaskPlanTemplate,
-    TaskPlanTemplateStep, TaskPlanTemplateStepChecklistItem, University, UniversityManager, User, utcnow,
+    TaskPlanTemplateStep, TaskPlanTemplateStepChecklistItem, UniversityManager, User,
 )
 from .owner_links import match_owner_user
 from .task_routes import task_out
-from .task_policy import TaskAction, can, visible_tasks_query
+from .task_policy import visible_tasks_query
 from .workflows import STAGE_GROUPS, launch_in_scope, stage_group
 
 router = APIRouter(prefix='/api/v1', tags=['Шаблоны планов задач'])
