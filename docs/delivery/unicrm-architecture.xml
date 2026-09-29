@@ -3,7 +3,7 @@
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        identifier="unicrm-model" version="3.0">
   <name xml:lang="ru">UniCRM — компонентная архитектура</name>
-  <documentation xml:lang="ru">Реализованная система на 28.09.2026. LMS и сайт заказчика по решению владельца всегда остаются заглушками; коннекторы пока не реализованы.</documentation>
+  <documentation xml:lang="ru">Реализованная система на 29.09.2026. Обмена с LMS и сайтом заказчика нет: есть только предварительная граница интеграции, которая ждёт контракт заказчика (D-233, D-246).</documentation>
   <elements>
     <element identifier="cam" xsi:type="BusinessRole">
       <name xml:lang="ru">КАМ — менеджер по вузам</name>
@@ -36,7 +36,7 @@
       <name xml:lang="ru">Аналитика и отчёты</name>
     </element>
     <element identifier="import-function" xsi:type="ApplicationFunction">
-      <name xml:lang="ru">Загрузка справочников и выгрузок LMS / сайта</name>
+      <name xml:lang="ru">Загрузка справочников (Excel)</name>
     </element>
     <element identifier="keycloak" xsi:type="ApplicationComponent">
       <name xml:lang="ru">Keycloak: вход и роли</name>
@@ -71,9 +71,9 @@
     <element identifier="smtp" xsi:type="SystemSoftware">
       <name xml:lang="ru">Почтовый сервер SMTP (домен .ru)</name>
     </element>
-    <element identifier="lms-site-exports" xsi:type="DataObject">
-      <name xml:lang="ru">Файлы выгрузок LMS и сайта ИТ Школы</name>
-      <documentation xml:lang="ru">Поступают через загрузку справочников; сетевого обмена с LMS и сайтом нет (D-243).</documentation>
+    <element identifier="integration-boundary" xsi:type="ApplicationInterface">
+      <name xml:lang="ru">Граница интеграции LMS и сайта (предварительно, ожидает контракт)</name>
+      <documentation xml:lang="ru">Внутренний пример, не контракт заказчика: GET /api/v1/integrations/contracts и заглушки POST, которые только проверяют формат и ничего не сохраняют (D-246).</documentation>
     </element>
   </elements>
   <relationships>
@@ -146,8 +146,8 @@
     <relationship identifier="keycloak-sends-mail" source="keycloak" target="smtp" xsi:type="Flow">
       <name xml:lang="ru">Подтверждение адреса и установка пароля</name>
     </relationship>
-    <relationship identifier="exports-to-import" source="lms-site-exports" target="import-function" xsi:type="Flow">
-      <name xml:lang="ru">Загрузка файлов выгрузок</name>
+    <relationship identifier="api-integration-boundary" source="api" target="integration-boundary" xsi:type="Composition">
+      <name xml:lang="ru">Предварительная граница, без хранения данных</name>
     </relationship>
   </relationships>
 </model>
