@@ -1,5 +1,6 @@
 """Date-based notifications (spec 2026-09-27-notifications, «Планировщик»): tasks due today, overdue tasks,
-and licences expiring in 30 or 7 days. Runs as the `notifier` Compose service every 15 minutes.
+and licences expiring in 30 or 7 days. Runs as the `notifier` Compose service every 15 minutes; the check for new
+sign-ups (app/registration_watch.py) runs every minute so the superadmin hears about them quickly.
 
 "Today" is each user's own day in their time zone, and nothing fires before 08:00 local time. Every
 notification carries a dedupe key that includes the date it is about, so repeated runs add nothing while a
@@ -24,6 +25,7 @@ from .registration_watch import watch_registrations
 
 logger = logging.getLogger(__name__)
 INTERVAL_SECONDS = 15 * 60
+SIGNUP_INTERVAL_SECONDS = 60
 FIRST_HOUR = clock(8, 0)
 DEFAULT_ZONE = ZoneInfo('Europe/Moscow')
 CLOSED = ('completed', 'cancelled')
@@ -105,7 +107,8 @@ def registration_pass(session_factory, settings, keycloak_admin, sender=send_ema
     (app/registration_watch.py)."""
     return watch_registrations(
         session_factory, keycloak_admin, send=lambda to, subject, body: sender(settings, to, subject, body),
-        contact_email=settings.access_contact_email, email_configured=email_configured(settings))
+        contact_email=settings.access_contact_email, email_configured=email_configured(settings),
+        crm_url=settings.public_base_url)
 
 
 def main():
@@ -121,18 +124,23 @@ def main():
         base_url=settings.keycloak_admin_base_url, client_id=settings.keycloak_admin_client_id,
         client_secret=settings.keycloak_admin_client_secret, http_client=httpx.Client(timeout=10),
     )
+    minute = 0
     while True:
+        if minute % (INTERVAL_SECONDS // SIGNUP_INTERVAL_SECONDS) == 0:
+            try:
+                logger.info('notification scheduler pass created %d notification(s)', run_once(session_factory))
+            except Exception:  # keep the service alive; the next pass retries
+                logger.exception('notification scheduler pass failed')
         try:
-            logger.info('notification scheduler pass created %d notification(s)', run_once(session_factory))
-        except Exception:  # keep the service alive; the next pass retries
-            logger.exception('notification scheduler pass failed')
-        try:
-            logger.info('sign-up check: %s', registration_pass(session_factory, settings, keycloak_admin))
+            result = registration_pass(session_factory, settings, keycloak_admin)
+            if any(result[key] for key in ('notified', 'admin_emailed', 'acknowledged')) or minute % 15 == 0:
+                logger.info('sign-up check: %s', result)
         except Exception:
             logger.exception('sign-up check failed')
         if args.once:
             return
-        time.sleep(INTERVAL_SECONDS)
+        minute += 1
+        time.sleep(SIGNUP_INTERVAL_SECONDS)
 
 
 if __name__ == '__main__':
