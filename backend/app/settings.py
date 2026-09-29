@@ -1,7 +1,5 @@
 import os
-import base64
 import re
-import binascii
 from dataclasses import dataclass
 from urllib.parse import urlsplit
 
@@ -32,15 +30,6 @@ class Settings:
     oidc_client_secret: str
     public_base_url: str
     session_encryption_key: str
-    learner_data_encryption_key: str = ''
-    # Learners, supplier companies, course applications, customer imports and fraud alerts are archived
-    # (2026-09-28): their API is served only when CUSTOMER_DATA_ENABLED is set.
-    customer_data_enabled: bool = False
-    fraud_match_key: str = ''
-    fraud_match_key_version: int = 1
-    fraud_match_coverage_complete: bool = False
-    fraud_batch_row_limit: int = 500
-    fraud_hourly_import_limit: int = 10
     session_ttl_hours: int = 8
     session_revalidate_seconds: int = 120
     cookie_secure: bool = True
@@ -155,27 +144,6 @@ def load_settings(environ=None):
     except (ValueError, TypeError) as error:
         raise SettingsError(f'SESSION_ENCRYPTION_KEY must be a Fernet key; generate one with: {FERNET_KEY_HINT}') from error
 
-    learner_key = (environ.get('LEARNER_DATA_ENCRYPTION_KEY') or '').strip()
-    if learner_key:
-        try:
-            Fernet(learner_key)
-        except (ValueError, TypeError) as error:
-            raise SettingsError('LEARNER_DATA_ENCRYPTION_KEY must be a separate Fernet key') from error
-        if learner_key == encryption_key:
-            raise SettingsError('LEARNER_DATA_ENCRYPTION_KEY must differ from SESSION_ENCRYPTION_KEY')
-
-    fraud_key = (environ.get('FRAUD_MATCH_KEY') or '').strip()
-    if fraud_key:
-        try:
-            decoded = base64.b64decode(fraud_key, altchars=b'-_', validate=True)
-        except (ValueError, binascii.Error) as error:
-            raise SettingsError('FRAUD_MATCH_KEY must encode 32 random bytes') from error
-        if len(decoded) != 32:
-            raise SettingsError('FRAUD_MATCH_KEY must encode 32 random bytes')
-        other_keys = [encryption_key, learner_key]
-        if any(other and decoded == base64.urlsafe_b64decode(other) for other in other_keys):
-            raise SettingsError('FRAUD_MATCH_KEY must differ from encryption keys')
-    fraud_coverage = _boolean(environ, 'FRAUD_MATCH_COVERAGE_COMPLETE', False)
     smtp_host = (environ.get('EMAIL_SMTP_HOST') or '').strip().lower()
     sender_address = (environ.get('EMAIL_SENDER_ADDRESS') or '').strip()
     if smtp_host:
@@ -183,9 +151,6 @@ def load_settings(environ=None):
             raise SettingsError('EMAIL_SMTP_HOST must be a Russian (.ru) mail server')
         if not _is_ru_domain(sender_address.rpartition('@')[2].lower()):
             raise SettingsError('EMAIL_SENDER_ADDRESS must be an address in a .ru domain when EMAIL_SMTP_HOST is set')
-    customer_data_enabled = _boolean(environ, 'CUSTOMER_DATA_ENABLED', False)
-    if fraud_coverage and not fraud_key:
-        raise SettingsError('FRAUD_MATCH_COVERAGE_COMPLETE requires FRAUD_MATCH_KEY')
 
     allowed_origins = tuple(
         normalize_origin(origin, 'ALLOWED_ORIGINS')
@@ -200,13 +165,6 @@ def load_settings(environ=None):
         oidc_client_secret=environ['OIDC_CLIENT_SECRET'].strip(),
         public_base_url=normalize_origin(environ['PUBLIC_BASE_URL'], 'PUBLIC_BASE_URL'),
         session_encryption_key=encryption_key,
-        learner_data_encryption_key=learner_key,
-        customer_data_enabled=customer_data_enabled,
-        fraud_match_key=fraud_key,
-        fraud_match_key_version=_positive_int(environ, 'FRAUD_MATCH_KEY_VERSION', 1),
-        fraud_match_coverage_complete=fraud_coverage,
-        fraud_batch_row_limit=_positive_int(environ, 'FRAUD_BATCH_ROW_LIMIT', 500),
-        fraud_hourly_import_limit=_positive_int(environ, 'FRAUD_HOURLY_IMPORT_LIMIT', 10),
         session_ttl_hours=_positive_int(environ, 'SESSION_TTL_HOURS', 8),
         session_revalidate_seconds=_positive_int(environ, 'SESSION_REVALIDATE_SECONDS', 120),
         cookie_secure=_boolean(environ, 'COOKIE_SECURE', True),

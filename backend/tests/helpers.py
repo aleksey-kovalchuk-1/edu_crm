@@ -26,8 +26,6 @@ def make_settings(database_url, **overrides):
         session_encryption_key=TEST_ENCRYPTION_KEY,
         cookie_secure=False,
         attachments_dir=tempfile.mkdtemp(prefix='edu-crm-attachments-'),
-        # The archived customer-data API stays tested while it is kept in the codebase.
-        customer_data_enabled=True,
     )
     values.update(overrides)
     return Settings(**values)

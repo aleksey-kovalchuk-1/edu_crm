@@ -553,127 +553,17 @@ class VendorContact(Base):
     )
 
 
-class Learner(Base):
-    """Learner profile. Document identifiers are encrypted by the application before persistence."""
-    __tablename__ = 'learners'
-    id: Mapped[int] = mapped_column(primary_key=True)
-    last_name: Mapped[str] = mapped_column(russian_text(200))
-    first_name: Mapped[str] = mapped_column(russian_text(200))
-    middle_name: Mapped[str] = mapped_column(russian_text(200), default='', server_default='')
-    phone: Mapped[str] = mapped_column(String(50), default='', server_default='', index=True)
-    email: Mapped[str] = mapped_column(String(254), default='', server_default='', index=True)
-    snils_encrypted: Mapped[str | None] = mapped_column(Text)
-    passport_series_encrypted: Mapped[str | None] = mapped_column(Text)
-    passport_number_encrypted: Mapped[str | None] = mapped_column(Text)
-    passport_issued_by_encrypted: Mapped[str | None] = mapped_column(Text)
-    passport_issued_at: Mapped[date | None] = mapped_column(Date)
-    passport_department_code_encrypted: Mapped[str | None] = mapped_column(Text)
-    gender: Mapped[str | None] = mapped_column(String(20))
-    birth_date: Mapped[date | None] = mapped_column(Date)
-    registration_region: Mapped[str | None] = mapped_column(russian_text(200))
-    registration_locality: Mapped[str | None] = mapped_column(russian_text(200))
-    registration_street: Mapped[str | None] = mapped_column(russian_text(200))
-    registration_house: Mapped[str | None] = mapped_column(String(50))
-    registration_apartment: Mapped[str | None] = mapped_column(String(50))
-    postal_code: Mapped[str | None] = mapped_column(String(20))
-    dative_first_name: Mapped[str | None] = mapped_column(russian_text(200))
-    dative_last_name: Mapped[str | None] = mapped_column(russian_text(200))
-    dative_middle_name: Mapped[str | None] = mapped_column(russian_text(200))
-    education: Mapped[str | None] = mapped_column(russian_text(200))
-    diploma_profession: Mapped[str | None] = mapped_column(russian_text(200))
-    diploma_institution: Mapped[str | None] = mapped_column(russian_text(200))
-    diploma_last_name: Mapped[str | None] = mapped_column(russian_text(200))
-    diploma_number_encrypted: Mapped[str | None] = mapped_column(Text)
-    diploma_series_encrypted: Mapped[str | None] = mapped_column(Text)
-    diploma_registration_number_encrypted: Mapped[str | None] = mapped_column(Text)
-    diploma_issued_at: Mapped[date | None] = mapped_column(Date)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-
-
 class CourseApplication(Base):
-    """Course request, without an inferred payment state."""
+    """Course application from the customer's JSON (D-247): number, course, stream — no personal data, no payment state."""
     __tablename__ = 'course_applications'
     __table_args__ = (CheckConstraint("payment_status = 'unconfirmed_by_data'", name='payment_status'),)
     id: Mapped[int] = mapped_column(primary_key=True)
     external_number: Mapped[str] = mapped_column(String(100), unique=True)
-    # Applications from the customer's JSON import keep no learner and no personal data (D-247).
-    learner_id: Mapped[int | None] = mapped_column(ForeignKey('learners.id'), index=True)
     course: Mapped[str] = mapped_column(russian_text(200))
     stream_number: Mapped[str] = mapped_column(String(100))
     payment_status: Mapped[str] = mapped_column(String(40), default='unconfirmed_by_data', server_default='unconfirmed_by_data')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    learner: Mapped['Learner | None'] = relationship()
-
-
-class CustomerImportBatch(Base):
-    __tablename__ = 'customer_import_batches'
-    __table_args__ = (CheckConstraint("kind in ('vendors', 'learners', 'applications')", name='kind'),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    kind: Mapped[str] = mapped_column(String(20))
-    template_version: Mapped[str] = mapped_column(String(60))
-    created_by_user_id: Mapped[int] = mapped_column(ForeignKey('users.id'), index=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
-    rows: Mapped[int]
-    valid: Mapped[int]
-    invalid: Mapped[int]
-    skipped: Mapped[int]
-    created: Mapped[int]
-    updated: Mapped[int]
-    record_links: Mapped[list['CustomerImportRowLink']] = relationship(back_populates='batch', order_by='CustomerImportRowLink.row_number')
-
-
-class CustomerImportRowLink(Base):
-    __tablename__ = 'customer_import_row_links'
-    __table_args__ = (
-        CheckConstraint("entity_type in ('vendor_contact', 'learner', 'course_application')", name='entity_type'),
-        CheckConstraint("action in ('created', 'updated')", name='action'),
-    )
-    batch_id: Mapped[int] = mapped_column(ForeignKey('customer_import_batches.id', ondelete='CASCADE'), primary_key=True)
-    row_number: Mapped[int] = mapped_column(primary_key=True)
-    entity_type: Mapped[str] = mapped_column(String(30))
-    entity_id: Mapped[int] = mapped_column(index=True)
-    action: Mapped[str] = mapped_column(String(10))
-    batch: Mapped['CustomerImportBatch'] = relationship(back_populates='record_links')
-
-
-class FraudAlert(Base):
-    __tablename__ = 'fraud_alerts'
-    __table_args__ = (
-        CheckConstraint("priority in ('low', 'medium', 'high')", name='priority'),
-        CheckConstraint("status in ('open', 'in_review', 'cleared', 'confirmed')", name='status'),
-        Index('ix_fraud_alerts_queue', 'status', 'priority', 'created_at'),
-    )
-    id: Mapped[int] = mapped_column(primary_key=True)
-    dedupe_key: Mapped[str] = mapped_column(String(200), unique=True)
-    rule_code: Mapped[str] = mapped_column(String(60))
-    rule_version: Mapped[int]
-    evidence_kind: Mapped[str | None] = mapped_column(String(30))
-    priority: Mapped[str] = mapped_column(String(10))
-    status: Mapped[str] = mapped_column(String(20), default='open', server_default='open')
-    entity_type: Mapped[str | None] = mapped_column(String(30))
-    entity_id: Mapped[int | None]
-    related_entity_id: Mapped[int | None]
-    batch_id: Mapped[int | None] = mapped_column(ForeignKey('customer_import_batches.id'), index=True)
-    row_number: Mapped[int | None]
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'))
-    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    resolution_code: Mapped[str | None] = mapped_column(String(60))
-
-
-class LearnerFingerprint(Base):
-    __tablename__ = 'learner_fingerprints'
-    __table_args__ = (
-        CheckConstraint("kind in ('snils', 'passport_pair')", name='kind'),
-        Index('ix_learner_fingerprints_lookup', 'kind', 'key_version', 'digest'),
-    )
-    learner_id: Mapped[int] = mapped_column(ForeignKey('learners.id', ondelete='CASCADE'), primary_key=True)
-    kind: Mapped[str] = mapped_column(String(20), primary_key=True)
-    key_version: Mapped[int] = mapped_column(primary_key=True)
-    digest: Mapped[str] = mapped_column(String(64))
 
 
 class UniversityContact(Base):
