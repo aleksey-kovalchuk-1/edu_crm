@@ -5,7 +5,7 @@ from datetime import timedelta
 
 from sqlalchemy import select
 
-from .email import EmailSendError, send_email
+from .email import EmailSendError, email_configured, send_email
 from .errors import AppError, ErrorCode
 from .models import EmailSenderIdentity, utcnow
 from .organization import organization_name
@@ -60,6 +60,6 @@ def issue_confirmation(db, request, identity):
                from_address=settings.email_sender_address or None, from_name=organization)
     except EmailSendError as error:
         raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось отправить письмо подтверждения, попробуйте позже') from error
-    if settings.email_provider_url or sender is not send_email:
+    if email_configured(settings) or sender is not send_email:
         return True, f'Письмо подтверждения отправлено на {identity.email_address}.'
     return False, 'Почтовый провайдер не настроен: письмо подтверждения записано только в журнал сервера.'

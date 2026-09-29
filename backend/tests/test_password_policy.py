@@ -17,8 +17,8 @@ def test_the_realm_policy_in_russian():
     ('specialChars(1)', 'Содержит спецсимволов: не меньше 1'),
     ('forceExpiredPasswordChange(1)', 'Срок действия пароля, дней: 1'),
     ('passwordHistory(5)', 'Не совпадает с последними паролями: 5'),
-    ('length', 'Правило Keycloak: length'),
-    ('regexPattern(^a.*)', 'Правило Keycloak: regexPattern(^a.*)'),
+    ('length', 'Правило сервиса входа: length'),
+    ('regexPattern(^a.*)', 'Правило сервиса входа: regexPattern(^a.*)'),
 ])
 def test_each_rule(rule, text):
     assert describe_policy(rule) == [text]

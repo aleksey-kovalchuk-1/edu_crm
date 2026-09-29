@@ -13,11 +13,13 @@ from .db import get_db
 from .errors import AppError, ErrorCode
 from .models import Notification, NotificationPreference, utcnow
 from .notification_scheduler import FIRST_HOUR, user_zone
-from .notifications import EVENT_TYPES, FOREVER, GROUPS, UNSCOPED_EVENTS, can_see, is_enabled, visible_notifications
+from .notifications import (
+    EVENT_TYPES, FOREVER, GROUPS, SUPERADMIN_GROUPS, UNSCOPED_EVENTS, can_see, is_enabled, visible_notifications,
+)
 
 router = APIRouter(prefix='/api/v1/notifications', tags=['Уведомления'])
 any_role = require_roles(*ALL_ROLES, ROLE_SUPERADMIN)
-PATHS = {'university': '/universities/{}', 'launch': '/interactions/{}', 'task': '/tasks/{}'}
+PATHS = {'university': '/universities/{}', 'launch': '/interactions/{}', 'task': '/tasks/{}', 'registration': '/settings/users'}
 
 
 class LinkOut(BaseModel):
@@ -123,7 +125,7 @@ def _preferences(db, user):
     groups = [GroupOut(key=key, label=label, events=[
         EventPreferenceOut(key=event_key, label=event.label, enabled=is_enabled(db, user.id, event_key), default=event.default)
         for event_key, event in EVENT_TYPES.items() if event.group == key
-    ]) for key, label in GROUPS]
+    ]) for key, label in GROUPS if key not in SUPERADMIN_GROUPS or ROLE_SUPERADMIN in user.roles]
     return PreferencesOut(groups=groups, paused_until=user.notifications_paused_until)
 
 

@@ -11,7 +11,7 @@ describe("settings security", () => {
   it("lists sessions, marks this device, and ends another session with the server's message", async () => {
     const api = mockApi({
       "GET /security/sessions": () => sessions,
-      "DELETE /security/sessions/cccc3333dddd4444": () => ({ keycloak_ended: false, message: "Сеанс в CRM завершён. Сеанс Keycloak завершится сам после 30 минут бездействия." }),
+      "DELETE /security/sessions/cccc3333dddd4444": () => ({ keycloak_ended: false, message: "Сеанс в CRM завершён. Сеанс входа завершится сам после 30 минут бездействия." }),
     });
     renderApp("/settings/security");
     await screen.findByText("Это устройство");
@@ -62,7 +62,7 @@ describe("settings security", () => {
       }),
     });
     renderApp("/settings/security");
-    await screen.findByText("Журнал Keycloak недоступен: хранение событий не включено");
+    await screen.findByText("Журнал входов недоступен: хранение событий не включено");
     screen.getByText("Активен");
   });
 
@@ -85,7 +85,7 @@ describe("settings security", () => {
     renderApp("/settings/security");
     await screen.findByText("Не короче 12 символов");
     expect(screen.getByRole("link", { name: "Сменить пароль" }).getAttribute("href")).toContain("/account/account-security/signing-in");
-    expect(screen.queryByRole("link", { name: "Изменить политику в Keycloak" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Изменить политику в консоли входа" })).toBeNull();
   });
 
   it("gives admins the Keycloak console link", async () => {
@@ -99,7 +99,7 @@ describe("settings security", () => {
     });
     renderApp("/settings/security");
     await screen.findByText("После 30 неудачных попыток вход временно блокируется");
-    await waitFor(() => expect(screen.getByRole("link", { name: "Изменить политику в Keycloak" })).toBeTruthy());
+    await waitFor(() => expect(screen.getByRole("link", { name: "Изменить политику в консоли входа" })).toBeTruthy());
   });
 
   it("says the policy is unavailable instead of inventing rules", async () => {

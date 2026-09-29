@@ -145,3 +145,17 @@ def test_server_factory_requires_configuration(monkeypatch):
 def test_explicit_non_postgres_url_is_rejected():
     with pytest.raises(SettingsError):
         create_app(make_settings('sqlite:///./edu_crm.db'))
+
+
+def test_mail_goes_through_a_russian_smtp_server_only():
+    settings = load_settings(valid_environ(
+        EMAIL_SMTP_HOST='smtp.yandex.ru', EMAIL_SMTP_USER='noreply@school.ru', EMAIL_SMTP_PASSWORD='x',
+        EMAIL_SENDER_ADDRESS='noreply@school.ru', ACCESS_CONTACT_EMAIL='admin@school.ru'))
+    assert (settings.email_smtp_host, settings.email_smtp_port) == ('smtp.yandex.ru', 465)
+    assert settings.access_contact_email == 'admin@school.ru'
+    for bad in ({'EMAIL_SMTP_HOST': 'smtp.gmail.com'}, {'EMAIL_SMTP_HOST': 'smtp.yandex.ru.evil.com'},
+                {'EMAIL_SMTP_HOST': 'smtp.mail.ru', 'EMAIL_SENDER_ADDRESS': 'noreply@gmail.com'},
+                {'EMAIL_SMTP_HOST': 'smtp.mail.ru', 'EMAIL_SENDER_ADDRESS': ''}):
+        with pytest.raises(SettingsError):
+            load_settings(valid_environ(**bad))
+    assert load_settings(valid_environ()).email_smtp_host == ''

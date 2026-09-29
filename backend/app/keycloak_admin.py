@@ -39,7 +39,7 @@ class KeycloakAdminNotFound(KeycloakAdminError):
 
 
 class AdminUser:
-    def __init__(self, id, email, username, roles, first_name='', last_name='', enabled=True):
+    def __init__(self, id, email, username, roles, first_name='', last_name='', enabled=True, email_verified=False):
         self.id = id
         self.email = email
         self.username = username
@@ -47,6 +47,7 @@ class AdminUser:
         self.first_name = first_name
         self.last_name = last_name
         self.enabled = enabled
+        self.email_verified = email_verified
 
 
 class KeycloakAdminClient:
@@ -213,6 +214,7 @@ class KeycloakAdminClient:
             id=user_id, email=row.get('email', ''), username=row.get('username', ''),
             roles=self._realm_roles_of(user_id), first_name=row.get('firstName', ''),
             last_name=row.get('lastName', ''), enabled=row.get('enabled', True),
+            email_verified=row.get('emailVerified', False),
         )
 
     def _realm_roles_of(self, user_id):

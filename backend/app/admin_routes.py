@@ -58,13 +58,13 @@ UserId = Annotated[str, Path(pattern=r'^[A-Za-z0-9_-]{1,80}$')]
 
 def _account_for_admin_action(keycloak_admin, keycloak_id):
     if not keycloak_admin.is_configured():
-        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Управление пользователями Keycloak не настроено')
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Управление пользователями не подключено')
     try:
         account = keycloak_admin.get_user(keycloak_id)
     except KeycloakAdminNotFound as error:
         raise AppError(ErrorCode.NOT_FOUND, 'Учётная запись не найдена') from error
     except KeycloakAdminError as error:
-        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Keycloak временно недоступен') from error
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Сервис входа временно недоступен') from error
     if not account.email:
         raise AppError(ErrorCode.NOT_FOUND, 'Учётная запись не найдена')
     return account
@@ -96,7 +96,7 @@ def create_admin_user(
 ):
     keycloak_admin = request.app.state.keycloak_admin
     if not keycloak_admin.is_configured():
-        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Управление пользователями Keycloak не настроено')
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Управление пользователями не подключено')
     password = secrets.token_urlsafe(24)
     user_id = None
     try:
@@ -259,7 +259,7 @@ def list_all_users(request: Request, db: Session = Depends(get_db)):
     try:
         accounts = _all_keycloak_accounts(keycloak_admin)
     except KeycloakAdminError as error:
-        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Keycloak временно недоступен, попробуйте ещё раз позже') from error
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Сервис входа временно недоступен, попробуйте ещё раз позже') from error
     accounts = [account for account in accounts if account.email and not CRM_ROLES.isdisjoint(account.roles)]
     local_rows = db.scalars(select(User).where(User.keycloak_sub.in_([account.id for account in accounts]))).all()
     local_by_sub = {row.keycloak_sub: row for row in local_rows}
@@ -301,7 +301,7 @@ def list_pending_registrations(request: Request):
     try:
         users = _all_keycloak_accounts(keycloak_admin)
     except KeycloakAdminError as error:
-        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Keycloak временно недоступен, попробуйте ещё раз позже') from error
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Сервис входа временно недоступен, попробуйте ещё раз позже') from error
     # No email (e.g. the edu-crm-admin service account itself) can't be a pending human registration.
     pending = [u for u in users if u.email and CRM_ROLES.isdisjoint(u.roles)]
     return PendingRegistrationsOut(
@@ -320,7 +320,7 @@ def approve_pending_registration(
 ):
     keycloak_admin = request.app.state.keycloak_admin
     if not keycloak_admin.is_configured():
-        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Управление пользователями Keycloak не настроено')
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Управление пользователями не подключено')
     try:
         keycloak_admin.assign_realm_role(keycloak_id, 'crm-user')
     except KeycloakAdminError as error:
@@ -328,7 +328,7 @@ def approve_pending_registration(
     record_event(
         db, request, auth.user, 'admin.pending_registration_approve',
         entity_type='keycloak_user', entity_id=keycloak_id,
-        summary=f'Одобрена регистрация пользователя Keycloak {keycloak_id}',
+        summary=f'Одобрена регистрация пользователя {keycloak_id}',
         payload={'keycloak_id': keycloak_id, 'granted_role': 'crm-user'},
     )
     db.commit()

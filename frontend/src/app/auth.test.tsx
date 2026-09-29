@@ -54,13 +54,13 @@ describe("auth gate", () => {
     ],
     [
       "NO_ACCESS",
-      "У вашей учётной записи нет доступа к CRM. Обратитесь к администратору.",
+      "У вашей учётной записи пока нет доступа к CRM. Если вы только что зарегистрировались, администратор рассмотрит заявку и выдаст доступ.",
     ],
   ])("explains auth_error=%s and waits for the user", async (code, message) => {
     const api = mockApi({ "GET /auth/me": unauthenticated });
     renderApp(`/?auth_error=${code}`);
     expect((await screen.findByRole("alert")).textContent).toBe(message);
-    const button = screen.getByRole("button", { name: /Войти через Keycloak/ });
+    const button = screen.getByRole("button", { name: /Войти/ });
     expect(document.activeElement).toBe(button);
     expect(api.count("GET", "/auth/me")).toBe(1);
     expect(assign()).not.toHaveBeenCalled();
@@ -81,7 +81,7 @@ describe("auth gate", () => {
     );
     expect(location()).toBe("/tasks?view=1&auth_error=SESSION_NOT_SAVED");
     expect(assign()).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: /Войти через Keycloak/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Войти/ }));
     expect(assign()).toHaveBeenCalledWith("/api/v1/auth/login?next=%2Ftasks%3Fview%3D1");
   });
 

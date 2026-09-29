@@ -21,7 +21,7 @@ router = APIRouter(prefix='/api/v1/security', tags=['Безопасность'])
 any_role = require_roles(*ALL_ROLES, ROLE_SUPERADMIN)
 HISTORY_DAYS = 30
 HISTORY_LIMIT = 50
-KEYCLOAK_SELF_EXPIRY = 'Сеанс Keycloak завершится сам после 30 минут бездействия.'
+KEYCLOAK_SELF_EXPIRY = 'Сеанс входа завершится сам после 30 минут бездействия.'
 EVENT_LABELS = {'LOGIN': 'Вход', 'LOGIN_ERROR': 'Неудачная попытка входа', 'LOGOUT': 'Выход',
                 'UPDATE_PASSWORD': 'Смена пароля'}
 BROWSERS = [('Edg/', 'Edge'), ('YaBrowser', 'Яндекс Браузер'), ('OPR/', 'Opera'), ('Firefox/', 'Firefox'),
@@ -79,7 +79,7 @@ def list_sessions(auth: AuthContext = Depends(any_role), db: Session = Depends(g
 ENDED, SHARED, NOT_ENDED = 'ended', 'shared', 'not_ended'
 MESSAGES = {
     ENDED: 'Сеанс завершён.',
-    SHARED: 'Сеанс в CRM завершён. Вход в Keycloak общий с этим устройством и остаётся активным.',
+    SHARED: 'Сеанс в CRM завершён. Вход в систему общий с этим устройством и остаётся активным.',
     NOT_ENDED: f'Сеанс в CRM завершён. {KEYCLOAK_SELF_EXPIRY}',
 }
 
@@ -144,7 +144,7 @@ def terminate_others(request: Request, auth: AuthContext = Depends(any_role), db
     elif NOT_ENDED in results:
         message = f'Сеансы в CRM завершены. {KEYCLOAK_SELF_EXPIRY}'
     else:
-        message = 'Сеансы в CRM завершены. Вход в Keycloak общий с этим устройством и остаётся активным.'
+        message = 'Сеансы в CRM завершены. Вход в систему общий с этим устройством и остаётся активным.'
     return TerminateOthersOut(count=len(others), keycloak_all_ended=all_ended, message=message)
 
 
