@@ -147,4 +147,16 @@ describe("new interaction analytics", () => {
     expect(group.textContent).toContain("0*");
     expect(screen.getByText(/0 может означать незаполненные данные/)).toBeTruthy();
   });
+
+  it("keeps each ranking value outside its coloured bar, so it reads as dark text on white", async () => {
+    mockApi({ "GET /analytics/interactions": () => snapshot });
+    renderApp("/analytics");
+    const group = await screen.findByRole("listitem", { name: /Колледж связи: внедрённые программы — 2/ });
+    const values = [...group.querySelectorAll("strong")];
+    expect(values.map((v) => v.textContent)).toEqual(["2", "24"]);
+    for (const value of values) {
+      expect(value.closest(".analytics-program-bar, .analytics-students-bar")).toBeNull();
+    }
+    expect(group.querySelectorAll(".analytics-ranking-fill[aria-hidden='true']")).toHaveLength(2);
+  });
 });

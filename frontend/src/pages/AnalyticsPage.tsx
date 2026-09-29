@@ -106,7 +106,7 @@ export function AnalyticsPage() {
               <li>Переводите взаимодействие по этапам — так заполнится воронка.</li>
               <li>Переведите его в «Обучение» — дата перехода заполнит график внедрений и рейтинг.</li>
             </ol>
-            <Link to="/interactions">Открыть взаимодействия</Link>
+            <Link className="text-button" to="/interactions">Открыть взаимодействия</Link>
           </div>
         )}
         <RefreshError queries={[universities]} />
