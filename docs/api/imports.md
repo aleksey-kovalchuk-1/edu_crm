@@ -1,4 +1,4 @@
-# API загрузки справочников из xls/xlsx (контракт T-033)
+# API загрузки справочников из xls/xlsx и файлов заказчика (контракт T-033, D-247)
 
 Сценарий и правила разбора — `docs/design/import.md`. Доступ: руководитель (`crm-supervisor`) и администратор (`crm-admin`). Изменяющие запросы требуют `X-CSRF-Token`. Ошибки — `{code, message, details}`.
 
@@ -72,4 +72,20 @@
 ## Просмотр
 
 - `GET /api/v1/imports/{id}` — объект как при загрузке (без `preview` строк старше 20), `status` = `uploaded` или `applied`, `report` — отчёт применения или `null`.
-- `GET /api/v1/imports` — последние 20 загрузок: `[{id, filename, status, row_count, created_at, created_by, applied_at, summary | null}]`.
+- `GET /api/v1/imports` — последние 20 загрузок: `[{id, kind, filename, status, row_count, created_at, created_by, applied_at, summary | null}]`.
+
+## Файлы заказчика (D-247)
+
+Правила и карта листов — [`docs/design/customer-files-import.md`](../design/customer-files-import.md). Тот же
+`POST /api/v1/imports` принимает JSON заявок и книгу заказчика; поле `kind` в ответе — `catalog` (реестр по столбцам),
+`applications` или `workbook`. Для них сопоставление не нужно: `check` и `apply` принимают `{"mapping": {}}` или
+пустое тело.
+
+- **`applications`:** `headers` = `["Номер заявки", "Курс", "Номер потока"]`, `preview[].cells` — эти три значения
+  (для `null` и неверных записей — `null`). Отчёт: `rows[].key` — номер заявки, `action` — `create`, `update`,
+  `unchanged` или `null`; `summary.created`/`updated` — `{"course_applications": n}`. ФИО, телефон и почта не
+  возвращаются и не сохраняются. JSON не массив, не разбирается или без полей заявки — `422 VALIDATION_ERROR`.
+- **`workbook`:** `sheets` — `[{name, status: supported | not_supported | service | error, rows, reason}]` для
+  каждого листа; `preview[].cells` — `[лист, идентификатор, наименование]`. Отчёт дополнительно содержит `rows[].sheet`,
+  `unmatched_universities: [{external_id, name, short_name}]` (их строки пропущены, вузы не создаются) и `sheets`;
+  `summary.created`/`updated` — по `universities`, `it_directions`, `it_products`.

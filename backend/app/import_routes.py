@@ -1,4 +1,7 @@
-"""Catalog upload API (contract: docs/api/imports.md; rules: docs/design/import.md, decisions D-142–D-146)."""
+"""Catalog upload API (contract: docs/api/imports.md; rules: docs/design/import.md, decisions D-142–D-146).
+
+The customer's applications JSON and workbook have their own importers in customer_files.py (D-247).
+"""
 from datetime import date, datetime
 
 from fastapi import APIRouter, Depends, File, Request, UploadFile
@@ -6,7 +9,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from . import importer
+from . import customer_files, importer
 from .audit import record_event
 from .auth import ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_roles
 from .catalog_routes import PersonOut
@@ -28,7 +31,8 @@ class FieldOut(BaseModel):
 
 
 class MappingIn(BaseModel):
-    mapping: dict[str, str | None]
+    # The customer's JSON and workbook have fixed layouts and need no mapping.
+    mapping: dict[str, str | None] = {}
 
 
 class PreviewRow(BaseModel):
@@ -38,6 +42,7 @@ class PreviewRow(BaseModel):
 
 class ImportOut(BaseModel):
     id: int
+    kind: str
     filename: str
     status: str
     header_row: int
@@ -48,10 +53,12 @@ class ImportOut(BaseModel):
     created_at: datetime
     created_by: PersonOut | None
     report: dict | None
+    sheets: list | None = None
 
 
 class ImportListItem(BaseModel):
     id: int
+    kind: str
     filename: str
     status: str
     row_count: int
@@ -81,17 +88,29 @@ def _display(value):
     return value.isoformat() if isinstance(value, date) else value
 
 
+def _preview(record):
+    rows = record.rows[:PREVIEW_ROWS]
+    if record.kind == 'applications':
+        return [PreviewRow(row_number=number, cells=customer_files.application_preview(cells)) for number, cells in rows]
+    if record.kind == 'workbook':
+        return [PreviewRow(row_number=row['row'], cells=[row['sheet'], row['values']['key'], row['values'].get('full_name') or row['values'].get('name')])
+                for row in rows]
+    return [PreviewRow(row_number=number, cells=[_display(cell) for cell in cells]) for number, cells in rows]
+
+
 def _import_out(record, db):
     creator = db.get(User, record.created_by_user_id) if record.created_by_user_id else None
     return ImportOut(
         id=record.id,
+        kind=record.kind,
         filename=record.filename,
         status=record.status,
         header_row=record.header_row,
         headers=record.headers,
         mapping=record.mapping or record.suggested_mapping,
         row_count=len(record.rows),
-        preview=[PreviewRow(row_number=number, cells=[_display(cell) for cell in cells]) for number, cells in record.rows[:PREVIEW_ROWS]],
+        preview=_preview(record),
+        sheets=record.sheets,
         created_at=record.created_at,
         created_by=PersonOut(id=creator.id, full_name=creator.full_name) if creator else None,
         report=record.report,
@@ -126,7 +145,7 @@ def list_imports(db: Session = Depends(get_db)):
     creators = {user.id: user for user in db.scalars(select(User).where(User.id.in_({r.created_by_user_id for r in records if r.created_by_user_id})))}
     return [
         ImportListItem(
-            id=record.id, filename=record.filename, status=record.status, row_count=len(record.rows),
+            id=record.id, kind=record.kind, filename=record.filename, status=record.status, row_count=len(record.rows),
             created_at=record.created_at, applied_at=record.applied_at,
             created_by=PersonOut(id=creators[record.created_by_user_id].id, full_name=creators[record.created_by_user_id].full_name) if record.created_by_user_id in creators else None,
             summary=(record.report or {}).get('summary'),
@@ -135,13 +154,16 @@ def list_imports(db: Session = Depends(get_db)):
     ]
 
 
-@router.post('', response_model=ImportOut, status_code=201, summary='Загрузить файл xls/xlsx')
+@router.post('', response_model=ImportOut, status_code=201, summary='Загрузить файл xls/xlsx или JSON заявок')
 def upload(request: Request, file: UploadFile = File(...), auth: AuthContext = Depends(importer_role), db: Session = Depends(get_db)):
     # Read one byte past the limit to detect oversize files without loading arbitrarily large uploads.
     content = file.file.read(importer.MAX_FILE_BYTES + 1)
     if len(content) > importer.MAX_FILE_BYTES:
         raise AppError(ErrorCode.PAYLOAD_TOO_LARGE, 'Файл больше 10 МБ')
     filename = (file.filename or 'upload').replace('\\', '/').rsplit('/', 1)[-1][:255]
+    kind = customer_files.detect_kind(filename, content)
+    if kind != 'catalog':
+        return _upload_customer_file(db, auth, filename, content, kind)
     try:
         sheet = read_upload(filename, content)
     except UnsupportedFileType as error:
@@ -163,6 +185,29 @@ def upload(request: Request, file: UploadFile = File(...), auth: AuthContext = D
     return _import_out(record, db)
 
 
+def _upload_customer_file(db, auth, filename, content, kind):
+    try:
+        if kind == 'applications':
+            headers, sheets, rows = customer_files.APPLICATION_HEADERS, None, customer_files.read_applications(content)
+        else:
+            headers, (sheets, rows) = [], customer_files.read_workbook(content)
+    except ImportFileError as error:
+        raise AppError(ErrorCode.VALIDATION_ERROR, str(error), [{'field': 'file', 'message': str(error)}]) from error
+    record = CatalogImport(created_by_user_id=auth.user.id, filename=filename, kind=kind, header_row=0, headers=headers,
+                           rows=rows, sheets=sheets, suggested_mapping={}, status='uploaded')
+    db.add(record)
+    db.commit()
+    return _import_out(record, db)
+
+
+def _writer(record, db, *, apply, mapping=None):
+    if record.kind == 'applications':
+        return customer_files.ApplicationWriter(db, apply=apply).run(record)
+    if record.kind == 'workbook':
+        return customer_files.WorkbookWriter(db, apply=apply).run(record)
+    return CatalogWriter(db, apply=apply).run(record, mapping)
+
+
 @router.get('/{import_id}', response_model=ImportOut, summary='Загрузка и её отчёт', dependencies=[Depends(importer_role)])
 def get_import(import_id: int, db: Session = Depends(get_db)):
     return _import_out(_load(db, import_id), db)
@@ -171,8 +216,8 @@ def get_import(import_id: int, db: Session = Depends(get_db)):
 @router.post('/{import_id}/check', summary='Проверить загрузку без записи', dependencies=[Depends(importer_role)])
 def check_import(import_id: int, data: MappingIn, db: Session = Depends(get_db)):
     record = _load(db, import_id)
-    mapping = _checked_mapping(record, data.mapping)
-    report = CatalogWriter(db, apply=False).run(record, mapping)
+    mapping = _checked_mapping(record, data.mapping) if record.kind == 'catalog' else None
+    report = _writer(record, db, apply=False, mapping=mapping)
     db.rollback()
     return report
 
@@ -182,16 +227,16 @@ def apply_import(import_id: int, data: MappingIn, request: Request, auth: AuthCo
     record = _load(db, import_id, lock=True)
     if record.status == 'applied':
         raise AppError(ErrorCode.CONFLICT, 'Эта загрузка уже применена')
-    mapping = _checked_mapping(record, data.mapping)
+    mapping = _checked_mapping(record, data.mapping) if record.kind == 'catalog' else None
     db.info['notification_source'] = 'import'  # imported contracts do not create "Подписали договор"
-    report = CatalogWriter(db, apply=True).run(record, mapping)
+    report = _writer(record, db, apply=True, mapping=mapping)
     record.status = 'applied'
     record.mapping = mapping
     record.report = report
     record.applied_at = utcnow()
     record_event(db, request, auth.user, 'import.apply', entity_type='catalog_import', entity_id=record.id,
                  summary=f'Применена загрузка «{record.filename}»: строк {report["summary"]["valid"]} из {report["summary"]["rows"]}',
-                 payload={'filename': record.filename, 'summary': report['summary']})
+                 payload={'filename': record.filename, 'kind': record.kind, 'summary': report['summary']})
     db.commit()
     return report
 

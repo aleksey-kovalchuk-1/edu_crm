@@ -1,6 +1,12 @@
-import { useImport, useImports, type ImportListItem, type ImportUpload } from "../api/imports";
+import { isCustomerFile, useImport, useImports, type ImportListItem, type ImportUpload } from "../api/imports";
 import { formatDateTime, formatNumber } from "../lib/format";
-import { ImportRowsTable, ImportStatusBadge, ImportSummaryView } from "./ImportReport";
+import {
+  ImportRowsTable,
+  ImportSheetsTable,
+  ImportStatusBadge,
+  ImportSummaryView,
+  UnmatchedUniversities,
+} from "./ImportReport";
 import { Modal } from "./Modal";
 import { RefreshError, queryFallback } from "./QueryState";
 
@@ -93,16 +99,20 @@ export function ImportDetailsModal({
                 <dt>Строк данных</dt>
                 <dd>{formatNumber(data.row_count)}</dd>
               </div>
-              <div>
-                <dt>Строка заголовков</dt>
-                <dd>{data.header_row}</dd>
-              </div>
+              {!isCustomerFile(data) && (
+                <div>
+                  <dt>Строка заголовков</dt>
+                  <dd>{data.header_row}</dd>
+                </div>
+              )}
             </dl>
+            {data.sheets && <ImportSheetsTable sheets={data.sheets} />}
             {data.report ? (
               <>
                 <h3 className="modal-subheading">Отчёт применения</h3>
                 <ImportSummaryView summary={data.report.summary} applied />
-                <ImportRowsTable report={data.report} />
+                <UnmatchedUniversities items={data.report.unmatched_universities ?? []} />
+                <ImportRowsTable report={data.report} kind={data.kind ?? "catalog"} />
               </>
             ) : data.status === "uploaded" ? (
               <>
