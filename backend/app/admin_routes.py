@@ -164,7 +164,8 @@ def create_admin_user(
 
 
 class RoleChangeIn(BaseModel):
-    role: Literal['crm-user', 'crm-admin']
+    # КАМ, руководитель or администратор; superadmin rights have their own grant/revoke actions below.
+    role: Literal['crm-user', 'crm-supervisor', 'crm-admin']
 
 
 class ChangedRole(BaseModel):
@@ -184,8 +185,8 @@ def change_user_role(
     keycloak_admin = request.app.state.keycloak_admin
     account = _account_for_admin_action(keycloak_admin, keycloak_id)
     previous = set(account.roles) & CRM_ROLES
-    if previous & {'crm-supervisor', 'crm-superadmin'}:
-        raise AppError(ErrorCode.CONFLICT, 'Роль руководителя и главного администратора защищена')
+    if ROLE_SUPERADMIN in previous:
+        raise AppError(ErrorCode.CONFLICT, 'Права суперадминистратора меняются отдельным действием')
     if previous == {data.role}:
         return ChangedRole(keycloak_id=keycloak_id, username=account.username, role=data.role)
 
@@ -239,8 +240,8 @@ def remove_user_role(
     keycloak_admin = request.app.state.keycloak_admin
     account = _account_for_admin_action(keycloak_admin, keycloak_id)
     previous = set(account.roles) & CRM_ROLES
-    if previous & {'crm-supervisor', 'crm-superadmin'}:
-        raise AppError(ErrorCode.CONFLICT, 'Роль руководителя и главного администратора защищена')
+    if ROLE_SUPERADMIN in previous:
+        raise AppError(ErrorCode.CONFLICT, 'Сначала снимите права суперадминистратора')
     if not previous:
         raise AppError(ErrorCode.CONFLICT, 'У пользователя нет роли CRM')
 
@@ -268,6 +269,87 @@ def remove_user_role(
         entity_id=keycloak_id, summary=f'Удалена роль CRM у пользователя {account.username}',
         payload={'keycloak_id': keycloak_id, 'old_roles': sorted(previous)},
     )
+    db.commit()
+    return Response(status_code=204)
+
+
+def _is_primary(request, username):
+    return username == request.app.state.settings.primary_superadmin_username
+
+
+def _caller_is_primary(request, keycloak_admin, auth):
+    try:
+        return _is_primary(request, keycloak_admin.get_user(auth.user.keycloak_sub).username)
+    except KeycloakAdminError:
+        return False
+
+
+def _swap_role(keycloak_admin, keycloak_id, add, remove):
+    """Adds `add` before removing `remove`, so a failure never leaves the person without a role; undoes on failure."""
+    keycloak_admin.assign_realm_role(keycloak_id, add)
+    try:
+        keycloak_admin.remove_realm_role(keycloak_id, remove)
+        if set(keycloak_admin.get_user(keycloak_id).roles) & CRM_ROLES != {add}:
+            raise KeycloakAdminError('Keycloak did not save the new role')
+        keycloak_admin.logout_user(keycloak_id)
+    except KeycloakAdminError:
+        try:
+            keycloak_admin.assign_realm_role(keycloak_id, remove)
+            keycloak_admin.remove_realm_role(keycloak_id, add)
+        except KeycloakAdminError:
+            logger.exception('Could not restore the role of %s', keycloak_id)
+        raise
+
+
+@router.post('/users/{keycloak_id}/superadmin', response_model=ChangedRole,
+             summary='Передать администратору права суперадминистратора')
+def grant_superadmin(
+    keycloak_id: UserId, request: Request,
+    auth: AuthContext = Depends(superadmin_only), db: Session = Depends(get_db),
+):
+    # crm-superadmin is a composite of crm-admin and crm-supervisor, so the person keeps everything they had.
+    keycloak_admin = request.app.state.keycloak_admin
+    account = _account_for_admin_action(keycloak_admin, keycloak_id)
+    if set(account.roles) & CRM_ROLES != {'crm-admin'}:
+        raise AppError(ErrorCode.CONFLICT, 'Права суперадминистратора можно передать только администратору')
+    try:
+        _swap_role(keycloak_admin, keycloak_id, ROLE_SUPERADMIN, 'crm-admin')
+    except KeycloakAdminError as error:
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось передать права; повторите действие') from error
+    local = _revoke_crm_sessions(db, keycloak_id)
+    if local is not None:
+        local.roles = [ROLE_SUPERADMIN]
+    record_event(db, request, auth.user, 'admin.superadmin_grant', entity_type='keycloak_user', entity_id=keycloak_id,
+                 summary=f'Пользователю {account.username} переданы права суперадминистратора',
+                 payload={'keycloak_id': keycloak_id})
+    db.commit()
+    return ChangedRole(keycloak_id=keycloak_id, username=account.username, role=ROLE_SUPERADMIN)
+
+
+@router.delete('/users/{keycloak_id}/superadmin', status_code=204,
+               summary='Снять права суперадминистратора (только главный суперадминистратор)')
+def revoke_superadmin(
+    keycloak_id: UserId, request: Request,
+    auth: AuthContext = Depends(superadmin_only), db: Session = Depends(get_db),
+):
+    keycloak_admin = request.app.state.keycloak_admin
+    account = _account_for_admin_action(keycloak_admin, keycloak_id)
+    if not _caller_is_primary(request, keycloak_admin, auth):
+        raise AppError(ErrorCode.FORBIDDEN, 'Снять права суперадминистратора может только главный суперадминистратор')
+    if _is_primary(request, account.username):
+        raise AppError(ErrorCode.CONFLICT, 'Права главного суперадминистратора не снимаются')
+    if ROLE_SUPERADMIN not in account.roles:
+        raise AppError(ErrorCode.CONFLICT, 'У пользователя нет прав суперадминистратора')
+    try:
+        _swap_role(keycloak_admin, keycloak_id, 'crm-admin', ROLE_SUPERADMIN)
+    except KeycloakAdminError as error:
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось снять права; повторите действие') from error
+    local = _revoke_crm_sessions(db, keycloak_id)
+    if local is not None:
+        local.roles = ['crm-admin']
+    record_event(db, request, auth.user, 'admin.superadmin_revoke', entity_type='keycloak_user', entity_id=keycloak_id,
+                 summary=f'У пользователя {account.username} сняты права суперадминистратора',
+                 payload={'keycloak_id': keycloak_id})
     db.commit()
     return Response(status_code=204)
 
@@ -334,19 +416,23 @@ class AdminUserOut(BaseModel):
     last_login_at: datetime | None
     # Hasn't confirmed the address or set a password yet (Keycloak still asks for it).
     setup_pending: bool = False
+    # The superadmin whose rights nobody can take away (PRIMARY_SUPERADMIN_USERNAME).
+    primary_superadmin: bool = False
 
 
 class AdminUsersOut(BaseModel):
     available: bool
     total: int
     users: list[AdminUserOut]
+    # Only the primary superadmin may take superadmin rights away.
+    can_revoke_superadmin: bool = False
 
 
 @router.get(
     '/users', response_model=AdminUsersOut, summary='Все пользователи CRM',
     dependencies=[Depends(superadmin_only)],
 )
-def list_all_users(request: Request, db: Session = Depends(get_db)):
+def list_all_users(request: Request, auth: AuthContext = Depends(superadmin_only), db: Session = Depends(get_db)):
     keycloak_admin = request.app.state.keycloak_admin
     if not keycloak_admin.is_configured():
         return AdminUsersOut(available=False, total=0, users=[])
@@ -366,9 +452,11 @@ def list_all_users(request: Request, db: Session = Depends(get_db)):
             full_name=name, roles=sorted(CRM_ROLES.intersection(account.roles)),
             is_active=account.enabled, last_login_at=local.last_login_at if local else None,
             setup_pending=bool(_setup_actions(account)),
+            primary_superadmin=_is_primary(request, account.username),
         ))
     users.sort(key=lambda row: (row.full_name.casefold(), row.username))
-    return AdminUsersOut(available=True, total=len(users), users=users)
+    return AdminUsersOut(available=True, total=len(users), users=users,
+                         can_revoke_superadmin=_caller_is_primary(request, keycloak_admin, auth))
 
 
 class PendingRegistrationOut(BaseModel):

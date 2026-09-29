@@ -166,6 +166,31 @@ function UniversityDetail({ university }: { university: University }) {
             </dd>
           </div>
           <div>
+            <dt>Доступ КАМ</dt>
+            <dd>
+              {canEdit ? (
+                <span className="team-visibility">
+                  <label className="toggle">
+                    <input
+                      type="checkbox"
+                      checked={university.team_visible_to_managers}
+                      disabled={toggle.isPending}
+                      onChange={(e) => toggle.mutate({ id: university.id, data: { team_visible_to_managers: e.target.checked } })}
+                    />
+                    Видят все КАМ
+                  </label>
+                  <small className="muted">
+                    {university.team_visible_to_managers ? "Сейчас: все КАМ." : "Сейчас: только назначенные КАМ."}
+                  </small>
+                </span>
+              ) : university.team_visible_to_managers ? (
+                "Все КАМ"
+              ) : (
+                "Только назначенные КАМ"
+              )}
+            </dd>
+          </div>
+          <div>
             <dt>Краткое название</dt>
             <dd>{university.short_name || "—"}</dd>
           </div>

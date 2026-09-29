@@ -350,6 +350,8 @@ class UniversityOut(BaseModel):
     email: str
     contact: str
     is_active: bool
+    # Every KAM sees it (not only the assigned ones); heads and admins change it on the card.
+    team_visible_to_managers: bool
     managers: list[PersonOut]
 
 
@@ -379,6 +381,7 @@ class UniversityPatch(BaseModel):
     website: Annotated[str, StringConstraints(strip_whitespace=True, max_length=300)] | None = None
     contact: ShortText | None = None
     is_active: bool | None = None
+    team_visible_to_managers: bool | None = None
 
     @field_validator('website')
     @classmethod

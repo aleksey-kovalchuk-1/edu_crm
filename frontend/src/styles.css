@@ -1540,6 +1540,40 @@ textarea {
   overflow-wrap: anywhere;
 }
 /* A card value with its own «Изменить» (the university's email address). */
+/* «Доступ КАМ» on the university card: the switch and what it means right now. */
+.team-visibility {
+  display: flex;
+  flex-direction: column;
+  gap: var(--atmr-spacing-1x);
+  font-weight: var(--weight-regular);
+}
+@media (max-width: 767px) {
+  .team-visibility .toggle {
+    min-height: 44px;
+  }
+}
+/* Register filters under the search toolbar: one row on desktop, two columns on phones. */
+.register-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atmr-spacing-2x) var(--atmr-spacing-3x);
+  margin-bottom: var(--atmr-spacing-4x);
+}
+.register-filter select {
+  min-width: 11rem;
+  max-width: 100%;
+}
+@media (max-width: 767px) {
+  .register-filters {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .register-filter select {
+    min-width: 0;
+    width: 100%;
+  }
+}
 .inline-edit {
   display: flex;
   flex-wrap: wrap;
@@ -4784,6 +4818,12 @@ footer {
 .role-editor select {
   min-width: 10rem;
   max-width: 100%;
+}
+.role-editor-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--atmr-spacing-1x);
 }
 .role-editor-actions {
   display: flex;
