@@ -42,3 +42,11 @@ def test_the_script_and_the_realm_file_agree():
     rule = _email_rule()
     assert f"PATTERN='{rule['pattern']}'" in script
     assert f"MESSAGE='{rule['error-message']}'" in script
+
+
+def test_every_script_and_style_the_theme_lists_exists():
+    properties = dict(line.split('=', 1) for line in (THEME / 'theme.properties').read_text().splitlines()
+                      if '=' in line and not line.startswith('#'))
+    own = [name for name in properties['styles'].split() if name != 'css/styles.css'] + properties['scripts'].split()
+    missing = [name for name in own if not (THEME / 'resources' / name).is_file()]
+    assert missing == []

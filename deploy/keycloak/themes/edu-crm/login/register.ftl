@@ -28,7 +28,7 @@
             <@registerCommons.termsAcceptance/>
 
             <#if recaptchaRequired?? && (recaptchaVisible!false)>
-                <#-- UniCRM: the full-size widget, scaled by js/captcha-fit.js to the width of the «Фамилия» field. -->
+                <#-- UniCRM: the full-size widget, scaled by js/captcha-fit-2.js to the width of the «Фамилия» field. -->
                 <div class="form-group unicrm-captcha">
                     <div class="${properties.kcInputWrapperClass!}">
                         <div class="g-recaptcha" data-size="normal" data-sitekey="${recaptchaSiteKey}" data-action="${recaptchaAction}"></div>
