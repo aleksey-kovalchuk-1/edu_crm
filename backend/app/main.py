@@ -34,6 +34,7 @@ from .vendor_routes import router as vendor_router
 from .learner_routes import router as learner_router
 from .customer_import_routes import router as customer_import_router
 from .fraud_routes import router as fraud_router
+from .policy_routes import router as policy_router
 from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
 from .schemas import LaunchInput, LaunchProductInput, StageInput
@@ -147,6 +148,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.include_router(report_router)
     app.include_router(task_router)
     app.include_router(workflow_router)
+    app.include_router(policy_router)
     if settings.customer_data_enabled:
         # Archived features (learners, supplier companies, course applications, customer imports, fraud alerts): off
         # unless CUSTOMER_DATA_ENABLED is set; its screens live in archive/customer-data.
