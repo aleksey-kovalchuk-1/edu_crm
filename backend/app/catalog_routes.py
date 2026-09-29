@@ -7,7 +7,8 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, validate_email
+from pydantic_core import PydanticCustomError
 from sqlalchemy import exists, func, or_, select, true
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
@@ -346,6 +347,7 @@ class UniversityOut(BaseModel):
     city: str
     region: str
     website: str
+    email: str
     contact: str
     is_active: bool
     managers: list[PersonOut]
@@ -382,6 +384,20 @@ class UniversityPatch(BaseModel):
     @classmethod
     def check_website(cls, value):
         return None if value is None else _website(value)
+
+
+class UniversityEmailIn(BaseModel):
+    email: Annotated[str, StringConstraints(strip_whitespace=True, max_length=254)]
+
+    @field_validator('email')
+    @classmethod
+    def check_email(cls, value):
+        if value:
+            try:
+                validate_email(value)
+            except PydanticCustomError as error:
+                raise ValueError('Некорректный адрес электронной почты') from error
+        return value
 
 
 class ManagersIn(BaseModel):
@@ -448,6 +464,20 @@ def update_university(university_id: int, data: UniversityPatch, request: Reques
             setattr(university, field, value)
         record_event(db, request, auth.user, 'university.update', entity_type='university', entity_id=university_id,
                      summary=f'Изменено учебное заведение «{university.name}»', payload=changes)
+        commit_or_conflict(db)
+    return university_out(db, university_id)
+
+
+@router.put('/universities/{university_id}/email', response_model=UniversityOut, summary='Адрес электронной почты вуза')
+def set_university_email(university_id: int, data: UniversityEmailIn, request: Request, auth: AuthContext = Depends(any_role), db: Session = Depends(get_db)):
+    # Any role, on any university it can open (unlike the rest of the card, which heads and admins edit).
+    university_in_scope(db, auth.user, university_id)
+    university = db.get(University, university_id)
+    if university.email != data.email:
+        record_event(db, request, auth.user, 'university.email', entity_type='university', entity_id=university_id,
+                     summary=f'Изменён адрес электронной почты «{university.name}»',
+                     payload={'email': {'from': university.email, 'to': data.email}})
+        university.email = data.email
         commit_or_conflict(db)
     return university_out(db, university_id)
 

@@ -17,7 +17,7 @@ def test_partner_roster_archives_demo_without_losing_linked_task(database_url):
 
     with database(database_url) as db:
         preview = sync_partner_universities(db, apply=False)
-        assert preview == {'created': 10, 'reactivated': 0, 'archived_demo': 1, 'shared_with_managers': 10}
+        assert preview == {'created': 10, 'reactivated': 0, 'archived_demo': 1, 'shared_with_managers': 10, 'emails_filled': 0}
         assert db.scalar(select(University.is_active).where(University.id == old_id)) is True
         result = sync_partner_universities(db, apply=True)
         db.commit()
@@ -33,7 +33,7 @@ def test_partner_roster_archives_demo_without_losing_linked_task(database_url):
         assert db.get(Task, task_id).university_id == old_id
         assert db.scalar(select(AuditEvent.id).where(AuditEvent.action == 'university.roster_sync'))
         assert sync_partner_universities(db, apply=True) == {
-            'created': 0, 'reactivated': 0, 'archived_demo': 0, 'shared_with_managers': 0,
+            'created': 0, 'reactivated': 0, 'archived_demo': 0, 'shared_with_managers': 0, 'emails_filled': 0,
         }
 
 

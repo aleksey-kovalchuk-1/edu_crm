@@ -191,7 +191,9 @@ describe("universities", () => {
     expect(within(contacts).getByRole("button", { name: "Изменить контакт Иван Демо" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Деактивировать" })).not.toBeNull();
     const card = await sectionOf("Колледж связи");
-    expect(within(card).queryByRole("button", { name: /Изменить/ })).toBeNull();
+    // The card itself is for heads and admins; its email address is open to every role.
+    expect(within(card).queryByRole("button", { name: "Изменить" })).toBeNull();
+    expect(within(card).getByRole("button", { name: "Изменить адрес" })).toBeTruthy();
   });
 
   it("shows the contracts of the university only", async () => {
