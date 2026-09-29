@@ -39,7 +39,7 @@ class ApplicationOut(BaseModel):
     external_number: str
     course: str
     stream_number: str
-    learner_id: int
+    learner_id: int | None  # None for applications from the customer's JSON import (D-247)
     learner_name: str
     payment_status: str
     payment_status_label: str
@@ -50,7 +50,7 @@ def application_out(record):
     return ApplicationOut(
         id=record.id, external_number=record.external_number, course=record.course,
         stream_number=record.stream_number, learner_id=record.learner_id,
-        learner_name=' '.join(filter(None, [learner.last_name, learner.first_name, learner.middle_name])),
+        learner_name=' '.join(filter(None, [learner.last_name, learner.first_name, learner.middle_name])) if learner else '',
         payment_status=record.payment_status, payment_status_label='Не подтверждено данными',
     )
 

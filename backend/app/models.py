@@ -39,6 +39,8 @@ class University(Base):
     website: Mapped[str] = mapped_column(String(300), default='', server_default='')
     # The university's own address; employees write to it from their mail program (no automatic emails).
     email: Mapped[str] = mapped_column(String(254), default='', server_default='')
+    # Stable ID from the customer's workbook (`university_id`), set by «Загрузка справочников» (D-247).
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     # Initial partner roster is shared with every manager; ordinary new universities stay assigned-only.
     team_visible_to_managers: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
@@ -499,6 +501,7 @@ class ITDirection(Base):
     name: Mapped[str] = mapped_column(russian_text(120), unique=True)
     description: Mapped[str] = mapped_column(Text, default='', server_default='')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True)  # workbook `direction_id` (D-247)
 
 
 vendor_contact_products = Table(
@@ -526,6 +529,7 @@ class ITProduct(Base):
     name: Mapped[str] = mapped_column(russian_text(200))
     description: Mapped[str] = mapped_column(Text, default='', server_default='')
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
+    external_id: Mapped[str | None] = mapped_column(String(64), unique=True)  # workbook `product_id` (D-247)
     company_id: Mapped[int | None] = mapped_column(ForeignKey('vendor_companies.id'), index=True)
     company: Mapped['VendorCompany | None'] = relationship(back_populates='products')
     vendor_contacts: Mapped[list['VendorContact']] = relationship(
@@ -593,13 +597,14 @@ class CourseApplication(Base):
     __table_args__ = (CheckConstraint("payment_status = 'unconfirmed_by_data'", name='payment_status'),)
     id: Mapped[int] = mapped_column(primary_key=True)
     external_number: Mapped[str] = mapped_column(String(100), unique=True)
-    learner_id: Mapped[int] = mapped_column(ForeignKey('learners.id'), index=True)
+    # Applications from the customer's JSON import keep no learner and no personal data (D-247).
+    learner_id: Mapped[int | None] = mapped_column(ForeignKey('learners.id'), index=True)
     course: Mapped[str] = mapped_column(russian_text(200))
     stream_number: Mapped[str] = mapped_column(String(100))
     payment_status: Mapped[str] = mapped_column(String(40), default='unconfirmed_by_data', server_default='unconfirmed_by_data')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
-    learner: Mapped['Learner'] = relationship()
+    learner: Mapped['Learner | None'] = relationship()
 
 
 class CustomerImportBatch(Base):
@@ -785,6 +790,7 @@ class AuditEvent(Base):
 
 
 IMPORT_STATUSES = ('uploaded', 'applied')
+IMPORT_KINDS = ('catalog', 'applications', 'workbook')
 
 
 class CatalogImport(Base):
@@ -792,6 +798,7 @@ class CatalogImport(Base):
     __tablename__ = 'catalog_imports'
     __table_args__ = (
         CheckConstraint(f"status in ({', '.join(repr(s) for s in IMPORT_STATUSES)})", name='status'),
+        CheckConstraint(f"kind in ({', '.join(repr(k) for k in IMPORT_KINDS)})", name='kind'),
     )
     id: Mapped[int] = mapped_column(primary_key=True)
     created_by_user_id: Mapped[int | None] = mapped_column(ForeignKey('users.id'), index=True)
@@ -803,6 +810,10 @@ class CatalogImport(Base):
     suggested_mapping: Mapped[dict] = mapped_column(JSONB)
     mapping: Mapped[dict | None] = mapped_column(JSONB)
     status: Mapped[str] = mapped_column(String(20), default='uploaded')
+    # Which importer read the file: the column import, the customer's applications JSON or the customer's workbook.
+    kind: Mapped[str] = mapped_column(String(20), default='catalog', server_default='catalog')
+    # Workbook only: every sheet with its status and reason, so nothing is dropped silently.
+    sheets: Mapped[list | None] = mapped_column(JSONB)
     report: Mapped[dict | None] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
     applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

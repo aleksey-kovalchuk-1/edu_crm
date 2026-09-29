@@ -23,7 +23,23 @@ export interface ImportPreviewRow {
 
 export type ImportStatus = "uploaded" | "applied";
 export type ImportRowStatus = "ok" | "warning" | "error" | "skipped";
-export type ImportRowAction = "create" | "update" | null;
+export type ImportRowAction = "create" | "update" | "unchanged" | null;
+/** Which importer read the file (D-247): the column import, the customer's applications JSON or workbook. */
+export type ImportKind = "catalog" | "applications" | "workbook";
+
+/** One sheet of the customer workbook and whether it is imported. */
+export interface ImportSheet {
+  name: string;
+  status: "supported" | "not_supported" | "service" | "error";
+  rows: number;
+  reason: string;
+}
+
+export interface UnmatchedUniversity {
+  external_id: string;
+  name: string;
+  short_name: string;
+}
 
 export interface ImportSummary {
   rows: number;
@@ -40,7 +56,11 @@ export interface ImportRowResult {
   row_number: number;
   status: ImportRowStatus;
   action: ImportRowAction;
-  contract_number: string | null;
+  contract_number?: string | null;
+  /** Application number or workbook ID for the customer files. */
+  key?: string | null;
+  /** Workbook sheet of the row. */
+  sheet?: string | null;
   errors: string[];
   warnings: string[];
 }
@@ -48,10 +68,15 @@ export interface ImportRowResult {
 export interface ImportReport {
   summary: ImportSummary;
   rows: ImportRowResult[];
+  /** Workbook: universities not found in the CRM catalogue; their rows are skipped. */
+  unmatched_universities?: UnmatchedUniversity[];
+  sheets?: ImportSheet[] | null;
 }
 
 export interface ImportUpload {
   id: number;
+  kind?: ImportKind;
+  sheets?: ImportSheet[] | null;
   filename: string;
   status: ImportStatus;
   header_row: number;
@@ -81,7 +106,10 @@ export interface ImportListItem {
 
 export const MAX_IMPORT_BYTES = 10 * 1024 * 1024;
 export const IMPORT_ACCEPT =
-  ".xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+  ".xls,.xlsx,.json,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/json";
+
+export const isCustomerFile = (upload: Pick<ImportUpload, "kind"> | null | undefined) =>
+  !!upload?.kind && upload.kind !== "catalog";
 
 export const formatFileSize = (bytes: number) =>
   bytes < 1024 * 1024
@@ -90,8 +118,8 @@ export const formatFileSize = (bytes: number) =>
 
 /** Russian message when the file cannot be uploaded, otherwise null. */
 export function importFileProblem(file: File): string | null {
-  if (!/\.xlsx?$/i.test(file.name)) {
-    return `Файл «${file.name}» не подходит: выберите таблицу Excel в формате .xls или .xlsx.`;
+  if (!/\.(xlsx?|json)$/i.test(file.name)) {
+    return `Файл «${file.name}» не подходит: выберите таблицу Excel в формате .xls или .xlsx или файл заявок .json.`;
   }
   if (file.size > MAX_IMPORT_BYTES) {
     return `Файл «${file.name}» весит ${formatFileSize(file.size)} — это больше допустимых 10 МБ. Разделите таблицу на части.`;
