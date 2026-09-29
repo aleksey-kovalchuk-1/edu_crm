@@ -31,10 +31,6 @@ from .security_routes import router as security_router
 from .report_routes import router as report_router
 from .task_routes import router as task_router
 from .workflow_routes import router as workflow_router
-from .vendor_routes import router as vendor_router
-from .learner_routes import router as learner_router
-from .customer_import_routes import router as customer_import_router
-from .fraud_routes import router as fraud_router
 from .policy_routes import router as policy_router
 from .workflows import active_statuses, all_statuses, default_template, launch_in_scope, status_at_position
 from .oidc import OIDCClient
@@ -119,7 +115,6 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
         http=http,
     )
     app.state.cipher = TokenCipher(settings.session_encryption_key)
-    app.state.learner_cipher = TokenCipher(settings.learner_data_encryption_key) if settings.learner_data_encryption_key else None
     # Defaults to the real sender (log-only or HTTP, per settings.sms_provider_url — see app/sms.py);
     # tests substitute a fake here so phone verification tests assert on calls, not logs or real HTTP.
     app.state.sms_sender = sms_sender or send_sms
@@ -151,13 +146,6 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.include_router(task_router)
     app.include_router(workflow_router)
     app.include_router(policy_router)
-    if settings.customer_data_enabled:
-        # Archived features (learners, supplier companies, course applications, customer imports, fraud alerts): off
-        # unless CUSTOMER_DATA_ENABLED is set; its screens live in archive/customer-data.
-        app.include_router(vendor_router)
-        app.include_router(learner_router)
-        app.include_router(customer_import_router)
-        app.include_router(fraud_router)
 
     @app.get('/api/v1/health')
     def health(db: Session = Depends(get_db)):
