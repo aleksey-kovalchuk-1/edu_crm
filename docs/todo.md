@@ -2,7 +2,7 @@
 
 Working list, ordered by priority within each section. Started 2026-09-24 after the design-token
 and Задачи-list redesign (D-216, D-217), which are live on unicrm.tech. Details and history live in
-`docs/decisions.md` (D-/F- items), `docs/night-backlog.md` (T- items) and
+`docs/decisions.md` (D-/F- items), `docs/backlog.md` (T- items) and
 `docs/improvement-ideas.md` (I- items); this file is the single place to see what is next.
 
 Legend: `[ ]` open · `[~]` in progress · `[x]` done.
@@ -19,7 +19,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
       attachment backups → rebuild api/web with both compose files → health + login redirect).
 - [x] Activate the customer's ten named universities and deactivate the six demonstration rows
       without deleting linked task and interaction history. New universities remain addable in Settings.
-- [x] Add `CLAUDE.md` (stack, commands, conventions, "the laptop stack *is* production").
+- [x] Developer notes (stack, commands, conventions, "the laptop stack *is* production") — now in the README.
 
 ## 1. Design and UX (F-002)
 

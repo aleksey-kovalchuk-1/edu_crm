@@ -38,7 +38,7 @@ class Settings:
     backup_status_file: str = ''
     # Folder where the API may drop a manual-backup request for the host agent; empty means not offered here.
     backup_request_dir: str = ''
-    # SMS provider for CRM-owned phone verification (D-not-yet-numbered; see docs/design/phone-verification.md).
+    # SMS provider for CRM-owned phone verification (D-155–D-157; see docs/api/profile.md).
     # Unset in local dev/CI on purpose: app/sms.py falls back to a logging-only sender so the code is
     # visible (API container log) without any real gateway account. Real credentials are supplied only
     # through deploy/local/api.env, never committed.

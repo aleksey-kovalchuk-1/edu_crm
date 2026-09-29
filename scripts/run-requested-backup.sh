@@ -5,7 +5,7 @@
 # The API can only drop request.json into the request folder; this script takes the request atomically
 # (so one request means one run), ignores its contents entirely (nothing from the container reaches a
 # command line) and runs the same scripts/scheduled-backup.sh with a manual label. Manual copies are never
-# deleted by the retention rule. Spec: docs/superpowers/specs/2026-09-27-backup-settings-design.md.
+# deleted by the retention rule. Spec: docs/design/specs/2026-09-27-backup-settings-design.md.
 set -euo pipefail
 umask 077
 cd "$(dirname "$0")/.."

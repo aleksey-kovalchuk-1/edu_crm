@@ -3,7 +3,7 @@
 # service account read it (view-events), for Настройки → Безопасность → «История входов».
 # Idempotent: re-setting the realm fields and re-adding an existing role/scope-mapping change nothing.
 # Events are recorded only from the moment this runs. Run against the live realm only at release,
-# with the owner's approval (spec docs/superpowers/specs/2026-09-27-security-settings-design.md).
+# with the owner's approval (spec docs/design/specs/2026-09-27-security-settings-design.md).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

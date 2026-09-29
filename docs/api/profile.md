@@ -1,6 +1,6 @@
 # API личного профиля и подтверждения телефона
 
-Спецификация: `docs/superpowers/specs/2026-09-27-profile-and-sender-addresses-design.md`; решения D-155–D-157, D-223–D-226 в `docs/decisions.md`.
+Спецификация: `docs/design/specs/2026-09-27-profile-and-sender-addresses-design.md`; решения D-155–D-157, D-223–D-226 в `docs/decisions.md`.
 
 ## Профиль
 

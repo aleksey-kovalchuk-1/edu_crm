@@ -7,11 +7,9 @@ __pycache__/
 .env
 *.tsbuildinfo
 pytest-of-root/
-.claude/settings.local.json
 deploy/local/
 
-# Local tooling, never published: personal Claude permissions, browser-test screenshots, and vendored
-# third-party skills (reinstall from skills-lock.json).
+# Local editor and tooling folders, never published.
 .playwright-mcp/
 .agents/
-.claude/skills/
+.claude/

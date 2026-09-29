@@ -106,7 +106,7 @@ services:
 
   # Date-based in-app notifications (tasks due today/overdue, licences expiring): one pass every 15 minutes.
   # Same image and settings as the API, but its own entrypoint: migrations and seeding stay with the API,
-  # which must be healthy (migrated) first. See docs/superpowers/specs/2026-09-27-notifications-design.md.
+  # which must be healthy (migrated) first. See docs/design/specs/2026-09-27-notifications-design.md.
   # Off unless explicitly enabled (release decision): docker compose --profile notifications up -d
   notifier:
     build: ./backend

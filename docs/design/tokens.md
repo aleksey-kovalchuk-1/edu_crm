@@ -6,7 +6,7 @@ Component rules use tokens only — no raw colours, font sizes or radii; `fronte
 Source: the Rostelecom Gen2 (Atomaro) **Purple light** theme — CSS variables of `.Theme_root_rtk_purple_light`
 in the Rostelecom React Storybook (Design Tokens stories), read on 28 Sep 2026. Names keep the `--atmr-` prefix
 so they compare one to one with the Storybook; UniCRM additions use `--crm-`. No `@atomaro/*` package is used:
-the values are reproduced in UniCRM's own CSS. Design system: `docs/superpowers/specs/2026-09-28-rostelecom-redesign-design.md`.
+the values are reproduced in UniCRM's own CSS. Design system: `docs/design/specs/2026-09-28-rostelecom-redesign-design.md`.
 
 ## Rules
 

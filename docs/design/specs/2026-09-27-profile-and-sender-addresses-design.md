@@ -14,7 +14,7 @@
 
 ## Основа: ветка GPT
 
-В рабочем дереве `codex/customer-data` (закоммичено как `326ac7f`, 27.09.2026) GPT изменил создание учётных записей, Keycloak и права менеджеров: миграция `0024_team_visible_universities`, в `backend/app/keycloak_admin.py` — `create_user`, `set_user_enabled`, `delete_user`, `KeycloakAdminConflict`, поля `AdminUser.first_name/last_name/enabled`.
+В параллельной ветке (коммит `326ac7f`, 27.09.2026) было изменено создание учётных записей, Keycloak и права менеджеров: миграция `0024_team_visible_universities`, в `backend/app/keycloak_admin.py` — `create_user`, `set_user_enabled`, `delete_user`, `KeycloakAdminConflict`, поля `AdminUser.first_name/last_name/enabled`.
 
 - Ветка реализации создаётся от завершённой и закоммиченной ветки GPT, не от `ai/design-tokens`. До этого реализация не начинается.
 - Миграция этой работы — `0025`, `down_revision = '0024'`. Если номер у GPT изменится, `down_revision` меняется вслед за ним.

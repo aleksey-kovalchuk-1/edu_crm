@@ -2,7 +2,7 @@
 
 Run window: 2026-09-15 10:57 MSK → 2026-09-16 08:30 MSK. Branch: `ai/crm-foundation`.
 
-Status values: `TODO`, `IN_PROGRESS`, `VERIFIED`, `BLOCKED`. A task is `VERIFIED` only when its acceptance criteria were checked and the evidence is recorded in `docs/night-report.md`.
+Status values: `TODO`, `IN_PROGRESS`, `VERIFIED`, `BLOCKED`. A task is `VERIFIED` only when its acceptance criteria were checked and the evidence is recorded with the change (tests, PR description).
 
 Priority order: owner decisions and the official specification (`docs/specification.md`) first, then improvements (`docs/improvement-ideas.md`).
 

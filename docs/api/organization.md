@@ -1,6 +1,6 @@
 # API карточки организации
 
-Спецификация: `docs/superpowers/specs/2026-09-27-organization-settings-design.md`; решение D-227.
+Спецификация: `docs/design/specs/2026-09-27-organization-settings-design.md`; решение D-227.
 
 Одна карточка (`organization_profile`, строка `id = 1`), заполненная миграцией `0026` данными владельца.
 
