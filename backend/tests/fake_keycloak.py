@@ -94,10 +94,10 @@ class FakeKeycloak:
             if claims['sub'] == subject:
                 claims['roles'] = list(roles)
 
-    def add_admin_user(self, *, id, email, username, roles, first_name='', last_name='', enabled=True):
+    def add_admin_user(self, *, id, email, username, roles, first_name='', last_name='', enabled=True, email_verified=True):
         self.admin_users[id] = {
             'id': id, 'email': email, 'username': username, 'roles': list(roles),
-            'firstName': first_name, 'lastName': last_name, 'enabled': enabled,
+            'firstName': first_name, 'lastName': last_name, 'enabled': enabled, 'emailVerified': email_verified,
         }
 
     def handler(self, request):
@@ -176,7 +176,7 @@ class FakeKeycloak:
                 maximum = int(request.url.params.get('max', '100'))
                 users = users[first:first + maximum]
             return httpx.Response(200, json=[
-                {field: u[field] for field in ('id', 'email', 'username', 'firstName', 'lastName', 'enabled')}
+                {field: u.get(field, True) if field == 'emailVerified' else u[field] for field in ('id', 'email', 'username', 'firstName', 'lastName', 'enabled', 'emailVerified')}
                 for u in users
             ])
         if suffix == 'users' and request.method == 'POST':

@@ -7,6 +7,7 @@ from sqlalchemy import and_, exists, or_, select
 from sqlalchemy.dialects.postgresql import insert
 
 from .catalog_routes import university_scope
+from .auth import ROLE_SUPERADMIN
 from .models import Notification, NotificationPreference, Task, University, User, utcnow
 from .task_policy import visible_tasks_query
 
@@ -18,7 +19,10 @@ GROUPS = [
     ('launches', 'Взаимодействия с вузами'),
     ('tasks', 'Задачи'),
     ('contracts', 'Договоры и лицензии'),
+    # Superadmin only (SUPERADMIN_GROUPS): the sign-up queue in «Пользователи и роли».
+    ('access', 'Доступ к CRM'),
 ]
+SUPERADMIN_GROUPS = frozenset({'access'})
 
 
 @dataclass(frozen=True)
@@ -49,10 +53,12 @@ EVENT_TYPES = {
     'contract_transfer_changed': EventType('contracts', 'Изменили статус передачи лицензий или материалов', False),
     'license_expires_30': EventType('contracts', 'Срок действия лицензии по вашему вузу истекает через 30 дней', False),
     'license_expires_7': EventType('contracts', 'Срок действия лицензии по вашему вузу истекает через 7 дней', False),
+    'registration_pending': EventType('access', 'Новая заявка на доступ', True),
 }
 
 # Links for contracts point at the university page: there is no «Договоры» navigation item.
-LINK_TYPES = ('university', 'launch', 'task', 'contract')
+# 'registration' points at the sign-up queue (/settings/users); its link_id is always 0.
+LINK_TYPES = ('university', 'launch', 'task', 'contract', 'registration')
 # Sent to someone who is losing access: created without the visibility check and listed without a link
 # once the record is no longer visible (the text only names what the person already knew).
 UNSCOPED_EVENTS = frozenset({'university_unassigned', 'task_unassigned'})
@@ -70,6 +76,8 @@ def is_paused(user, now=None) -> bool:
 
 def can_see(db, user, link_type, link_id, university_id) -> bool:
     """Checked in the database, so rows added earlier in this transaction (new members, new managers) count."""
+    if link_type == 'registration':
+        return ROLE_SUPERADMIN in user.roles
     if link_type == 'task':
         return bool(db.scalar(select(exists().where(Task.id == link_id, visible_tasks_query(user)))))
     if university_id is None:
@@ -82,11 +90,14 @@ def visible_notifications(user):
     One query for any number of rows, so the list and the unread count agree and stay cheap to poll."""
     task_visible = exists().where(Task.id == Notification.link_id, visible_tasks_query(user))
     university_visible = exists().where(University.id == Notification.university_id, university_scope(University.id, user))
-    return or_(
+    clauses = [
         Notification.event_type.in_(UNSCOPED_EVENTS),
         and_(Notification.link_type == 'task', task_visible),
         and_(Notification.link_type != 'task', university_visible),
-    )
+    ]
+    if ROLE_SUPERADMIN in user.roles:
+        clauses.append(Notification.link_type == 'registration')
+    return or_(*clauses)
 
 
 def notify(db, *, user_id, event_type, title, body, link_type, link_id, university_id=None, actor_user_id=None,

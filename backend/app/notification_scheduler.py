@@ -14,8 +14,13 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from sqlalchemy import create_engine, or_, select
 from sqlalchemy.orm import sessionmaker
 
+import httpx
+
+from .email import email_configured, send_email
+from .keycloak_admin import KeycloakAdminClient
 from .models import Contract, Task, TaskMember, UniversityManager, User
 from .notifications import notify
+from .registration_watch import watch_registrations
 
 logger = logging.getLogger(__name__)
 INTERVAL_SECONDS = 15 * 60
@@ -95,6 +100,14 @@ def run_once(session_factory, now=None):
     return created
 
 
+def registration_pass(session_factory, settings, keycloak_admin, sender=send_email):
+    """New Keycloak sign-ups: bell notifications for superadmins and one acknowledgement e-mail each
+    (app/registration_watch.py)."""
+    return watch_registrations(
+        session_factory, keycloak_admin, send=lambda to, subject, body: sender(settings, to, subject, body),
+        contact_email=settings.access_contact_email, email_configured=email_configured(settings))
+
+
 def main():
     from .settings import load_settings
 
@@ -102,12 +115,21 @@ def main():
     parser.add_argument('--once', action='store_true', help='run a single pass and exit')
     args = parser.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(name)s %(message)s')
-    session_factory = sessionmaker(bind=create_engine(load_settings().database_url, pool_pre_ping=True))
+    settings = load_settings()
+    session_factory = sessionmaker(bind=create_engine(settings.database_url, pool_pre_ping=True))
+    keycloak_admin = KeycloakAdminClient(
+        base_url=settings.keycloak_admin_base_url, client_id=settings.keycloak_admin_client_id,
+        client_secret=settings.keycloak_admin_client_secret, http_client=httpx.Client(timeout=10),
+    )
     while True:
         try:
             logger.info('notification scheduler pass created %d notification(s)', run_once(session_factory))
         except Exception:  # keep the service alive; the next pass retries
             logger.exception('notification scheduler pass failed')
+        try:
+            logger.info('sign-up check: %s', registration_pass(session_factory, settings, keycloak_admin))
+        except Exception:
+            logger.exception('sign-up check failed')
         if args.once:
             return
         time.sleep(INTERVAL_SECONDS)
