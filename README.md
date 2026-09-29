@@ -84,7 +84,7 @@ flowchart LR
 Нужны Docker Engine, Docker Compose v2 и `openssl`.
 
 ```bash
-git clone https://github.com/aleksey-kovalchuk-1/edu_crm.git && cd edu_crm
+git clone https://github.com/aleksey-kovalchuk-1/unicrm.git && cd unicrm
 cp .env.example .env
 scripts/generate-dev-secrets.sh      # случайные локальные секреты в deploy/local/ (не попадают в git)
 docker compose up --build -d          # первый запуск Keycloak — около минуты
@@ -104,7 +104,7 @@ Python 3.12 и Node.js 22; нужен PostgreSQL (удобно взять из C
 python -m venv .venv && source .venv/bin/activate
 pip install -r backend/requirements-dev.txt -c backend/constraints.txt
 cd backend
-DATABASE_URL=postgresql+psycopg://crm:local-demo-only@127.0.0.1:5432/edu_crm SEED_DEMO=true \
+DATABASE_URL=postgresql+psycopg://crm:local-demo-only@127.0.0.1:5432/unicrm SEED_DEMO=true \
   uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --reload
 # в другом терминале
 cd frontend && npm ci && npm run dev   # http://localhost:5173, /api проксируется на порт 8000
@@ -120,7 +120,7 @@ cd backend && ../.venv/bin/python -m pytest -q     # другой сервер: 
 cd ../frontend && npx vitest run && npx tsc -b && npx eslint . && npx vite build
 ```
 
-Тесты создают отдельную базу на каждый тест и не трогают рабочую `edu_crm`.
+Тесты создают отдельную базу на каждый тест и не трогают рабочую `unicrm`.
 
 ## Развёртывание
 
