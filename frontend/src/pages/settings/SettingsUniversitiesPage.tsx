@@ -38,7 +38,7 @@ export function SettingsUniversitiesPage() {
             <RefreshError queries={[universities]} />
             <p className="muted">Доступных вузов: {universities.data?.length ?? 0}</p>
             {universities.data?.length ? (
-              <ul>
+              <ul className="settings-university-list">
                 {universities.data.map((university) => (
                   <li key={university.id}><Link to={universityPath(university.id)}>{university.name}</Link></li>
                 ))}

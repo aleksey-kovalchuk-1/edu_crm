@@ -86,10 +86,13 @@ export function UniversityRanking({ ranking }: { ranking: AnalyticsSnapshot["ran
           {ranking.map((row) => (
             <div className="analytics-ranking-group" role="listitem" aria-label={`${row.name}: внедрённые программы — ${row.programs}, студенты — ${row.students}${row.students === 0 ? " (возможно, данные не заполнены)" : ""}`} key={row.id}>
               <div className="analytics-ranking-bars">
-                <div className="analytics-ranking-bar analytics-program-bar" style={{ height: `${row.programs ? Math.max(2, row.programs / maximumPrograms * 100) : 0}%` }}>
+                {/* The value sits above the bar on white; the colour is a separate fill, not the value's parent. */}
+                <div className="analytics-ranking-bar" style={{ height: `${row.programs ? Math.max(2, row.programs / maximumPrograms * 100) : 0}%` }}>
+                  <i className="analytics-ranking-fill analytics-program-bar" aria-hidden="true" />
                   <strong>{row.programs}</strong>
                 </div>
-                <div className="analytics-ranking-bar analytics-students-bar" style={{ height: `${row.students ? Math.max(2, row.students / maximumStudents * 100) : 0}%` }}>
+                <div className="analytics-ranking-bar" style={{ height: `${row.students ? Math.max(2, row.students / maximumStudents * 100) : 0}%` }}>
+                  <i className="analytics-ranking-fill analytics-students-bar" aria-hidden="true" />
                   <strong>{row.students === 0 ? "0*" : row.students}</strong>
                 </div>
               </div>

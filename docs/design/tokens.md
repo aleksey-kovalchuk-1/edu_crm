@@ -83,9 +83,12 @@ Not used: `description-m` (11 px) and `description-s` (10 px). No text below 12 
 | Status text | `-700` / `-800` / `-600` steps | The `-default` steps fail as text |
 
 
-## Legacy names (aliases)
+## Scale and rules (Stage 5)
 
-Today's names — `--color-*`, `--chart-*`, `--sidebar-*`, `--text-*`, `--weight-*`, `--radius-*`, `--shadow-*`,
-`--focus-ring`, `--font-sans` — are aliases of the tokens above (see the `:root` block for the mapping).
-Rules are moved to the `--atmr-*` names as each page is redesigned; the aliases are removed in Stage 5.
-`--shadow-xs`, `--shadow-sm` and `--shadow-accent` are `none`: page sections have no shadow.
+The aliases are gone: rules use the `--atmr-*` tokens and the `--crm-*` overrides directly, and
+`styles.test.ts` fails if any other custom property appears. Only UniCRM's own value scales remain —
+`--text-*` (12–36 px), `--weight-*` (400/500/700) and `--space-*` (2–48 px) — because they hold values, not
+references. Shadows were `none` everywhere and are no longer declared.
+
+Charts: series differ by pattern as well as colour (the second ranking series is striped, the legend
+matches), and values sit outside the coloured shapes so they read as dark text on white.
