@@ -37,7 +37,7 @@
 |---|---|---|
 | `GET /api/v1/universities?q=&include_inactive=` | все (в области видимости) | Массив `University` по названию |
 | `POST /api/v1/universities` | все авторизованные роли CRM | Тело `{name, city, short_name?, region?, website?, contact?}` → `201 University` |
-| `PATCH /api/v1/universities/{id}` | руководитель, администратор | Те же поля и `is_active` → `University` |
+| `PATCH /api/v1/universities/{id}` | руководитель, администратор | Те же поля, `is_active` и `team_visible_to_managers` («Видят все КАМ»: вуз видят все КАМ, а не только назначенные) → `University` |
 | `PUT /api/v1/universities/{id}/managers` | руководитель, администратор | Тело `{user_ids: number[]}` — полный список ответственных → `University` |
 | `PUT /api/v1/universities/{id}/email` | все (в области видимости) | Тело `{email}` — адрес вуза для писем сотрудников; пустая строка очищает; неверный адрес → `422` (поле `email`); изменение пишется в журнал (`university.email`) → `University` |
 
