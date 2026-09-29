@@ -296,9 +296,27 @@ def test_a_kam_cannot_upload_the_json_or_the_workbook(app, keycloak, roles):
         assert upload(client, customer_workbook(), 'RTK.xlsx').status_code == 403
 
 
-def test_an_administrator_can_upload_the_json(app, keycloak):
+def test_only_the_head_role_handles_customer_files(app, keycloak, head):
+    # Owner 29.09.2026: the workbook and JSON imports belong to «Руководитель»; the administrator keeps the column import.
+    json_id = upload(head, applications_json(), 'заявки.json').json()['id']
+    book_id = upload(head, customer_workbook(), 'RTK.xlsx').json()['id']
     with TestClient(app) as client:
         login(client, keycloak, roles=('crm-admin',), subject='kc-admin')
+        for response in (upload(client, applications_json(), 'заявки.json'), upload(client, customer_workbook(), 'RTK.xlsx'),
+                         check(client, json_id), apply(client, json_id), check(client, book_id), apply(client, book_id)):
+            assert response.status_code == 403, response.text
+            assert 'руководител' in response.json()['message']
+        book = openpyxl.Workbook()
+        book.active.append(['Наименование вуза', 'Вендор', 'Программное обеспечение', 'Номер договора', 'Подписание лицензии'])
+        book.active.append(['Вуз', 'РТК', 'ПО', 'Д-1', '01.03.2026'])
+        buffer = io.BytesIO()
+        book.save(buffer)
+        assert upload(client, buffer.getvalue(), 'реестр.xlsx').status_code == 201
+
+
+def test_a_superadmin_includes_the_head_role(app, keycloak):
+    with TestClient(app) as client:
+        login(client, keycloak, roles=('crm-superadmin', 'crm-admin', 'crm-supervisor'), subject='kc-irina')
         assert upload(client, applications_json(), 'заявки.json').status_code == 201
 
 

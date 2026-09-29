@@ -1,7 +1,7 @@
 import { fireEvent, screen, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { ImportReport, ImportUpload } from "../api/imports";
-import { mockApi, renderApp } from "../test/utils";
+import { mockApi, renderApp, sessionFixture } from "../test/utils";
 
 /* The customer's applications JSON and workbook in «Загрузка справочников» (D-247). */
 
@@ -117,5 +117,16 @@ describe("imports: customer files", () => {
     expect(screen.getByText("Неизвестный университет (НУ) · UNI-002")).toBeTruthy();
     expect(screen.getByRole("columnheader", { name: "Лист" })).toBeTruthy();
     expect(screen.getByRole("button", { name: /К составу файла/ })).toBeTruthy();
+  });
+
+  it("tells an administrator that customer files are uploaded by the head", async () => {
+    mockApi({
+      "GET /auth/me": () => sessionFixture(["crm-admin"]),
+      "GET /imports/fields": () => FIELDS,
+      "GET /imports": () => [],
+    });
+    renderApp("/imports");
+    expect(await screen.findByText(/Файлы заказчика .* загружает руководитель/)).toBeTruthy();
+    expect(screen.queryByText(/Также принимаются файлы заказчика/)).toBeNull();
   });
 });

@@ -78,7 +78,7 @@
 
 Правила и карта листов — [`docs/design/customer-files-import.md`](../design/customer-files-import.md). Тот же
 `POST /api/v1/imports` принимает JSON заявок и книгу заказчика; поле `kind` в ответе — `catalog` (реестр по столбцам),
-`applications` или `workbook`. Для них сопоставление не нужно: `check` и `apply` принимают `{"mapping": {}}` или
+`applications` или `workbook`. Загрузка, проверка и применение этих файлов доступны только роли `crm-supervisor` (руководитель; суперадминистратор её включает), иначе `403 FORBIDDEN`. Для них сопоставление не нужно: `check` и `apply` принимают `{"mapping": {}}` или
 пустое тело.
 
 - **`applications`:** `headers` = `["Номер заявки", "Курс", "Номер потока"]`, `preview[].cells` — эти три значения

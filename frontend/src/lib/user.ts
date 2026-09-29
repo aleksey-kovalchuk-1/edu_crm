@@ -28,6 +28,9 @@ export const canEditCatalog = (roles: string[]) =>
 export const canImportCatalogs = (roles: string[]) =>
   roles.includes(ROLES.supervisor) || roles.includes(ROLES.admin);
 
+/** The customer's workbook and applications JSON are uploaded by «Руководитель» only (D-247). */
+export const canImportCustomerFiles = (roles: string[]) => roles.includes(ROLES.supervisor);
+
 /** Creating and editing workflows and their statuses (T-043) — supervisors and admins. */
 export const canEditWorkflows = (roles: string[]) =>
   roles.includes(ROLES.supervisor) || roles.includes(ROLES.admin);
