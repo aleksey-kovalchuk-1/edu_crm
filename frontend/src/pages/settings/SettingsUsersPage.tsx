@@ -30,6 +30,20 @@ function PendingRegistrations() {
       description="Люди, которые зарегистрировались, но пока не получили роль CRM."
     >
       {changeRole.error && <ErrorAlert error={changeRole.error} />}
+      {changeRole.data?.password_setup === "sent" && (
+        <Notice tone="success">
+          Доступ выдан пользователю {changeRole.data.username}. Письмо для установки пароля отправлено: ссылка действует 12 часов.
+        </Notice>
+      )}
+      {changeRole.data?.password_setup === "failed" && (
+        <Notice tone="warning">
+          Доступ выдан пользователю {changeRole.data.username}, но письмо для установки пароля не отправилось. Отправьте его
+          ещё раз в таблице «Пользователи CRM».
+        </Notice>
+      )}
+      {changeRole.data?.password_setup === "not_needed" && (
+        <Notice tone="success">Доступ выдан пользователю {changeRole.data.username}.</Notice>
+      )}
       {queryFallback([pending]) ??
         (data && (
           <>
@@ -47,7 +61,7 @@ function PendingRegistrations() {
                 <table className="data-table stack-table users-table">
                   <thead>
                     <tr>
-                      <th scope="col">Логин</th>
+                      <th scope="col">Электронная почта</th>
                       <th scope="col">Логин</th>
                       <th scope="col">
                         <span className="visually-hidden">Действия</span>
@@ -57,7 +71,7 @@ function PendingRegistrations() {
                   <tbody>
                     {data.pending.map((p) => (
                       <tr key={p.keycloak_id}>
-                        <td data-label="Логин">
+                        <td data-label="Электронная почта">
                           <strong className="cell-title wrap-anywhere">{p.email}</strong>
                         </td>
                         <td data-label="Логин" className="muted wrap-anywhere">{p.username}</td>
