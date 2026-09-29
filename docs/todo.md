@@ -10,16 +10,16 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 ## 0. Housekeeping (do first)
 
 - [x] Push `ai/design-tokens` (pushed 2026-09-24).
-- [ ] Open a PR into `main` once `ai/phone-verification` (its base) is merged.
-- [ ] Reconcile the branch history: `ai/phone-verification`, `ai/auth-registration`,
-      `ai/registration-polish`, `ai/integration-candidate` all diverge from `main` (D-158). Decide
-      the merge order, merge, delete stale branches/worktrees.
+- [x] `ai/phone-verification` and `ai/design-tokens` are merged into `main`; work since then goes through PRs.
+- [ ] Old branches still diverge from `main` (state 2026-09-29): `ai/auth-registration` (3 commits),
+      `ai/registration-polish` (4), `ai/integration-candidate` (19 — invented contract and shared secret,
+      must never be merged, D-246). Decide whether to delete them; the local worktrees were removed.
 - [ ] Protect `main` (P-003) so the live site is only ever deployed from reviewed code.
 - [x] Write a one-command deploy script (`scripts/deploy-public.sh`: encrypted database and
       attachment backups → rebuild api/web with both compose files → health + login redirect).
 - [x] Activate the customer's ten named universities and deactivate the six demonstration rows
       without deleting linked task and interaction history. New universities remain addable in Settings.
-- [ ] Add `CLAUDE.md` (stack, commands, conventions, "the laptop stack *is* production").
+- [x] Add `CLAUDE.md` (stack, commands, conventions, "the laptop stack *is* production").
 
 ## 1. Design and UX (F-002)
 
@@ -54,7 +54,7 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
       Справочники or import them first); until then product/direction filters match nothing.
 - [x] Charts export to PNG / PDF (D-222): Аналитика and Обзор charts.
 - [x] In-app notification centre and Настройки → Уведомления, including the date-based scheduler.
-- [ ] Email delivery of notifications needs a configured provider; production currently uses log-only delivery.
+- [x] Email delivery through the Russian SMTP mailbox (Yandex, D-238/D-240); Keycloak mail uses the same box.
 - [x] Fill Настройки → Организация and Резервное копирование (status of complete encrypted pairs).
 - [x] Manual backup trigger from the web UI; execution remains on the host, with no recovery key in API.
 - [ ] Data scopes admin screen; supervisor reassigns responsible people (T-025).
@@ -68,10 +68,15 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 
 - [x] Record the owner's permanent-mock decision for LMS and the website
       (`docs/design/lms-cms-mocks.md`, 2026-09-28). No real API connector is planned.
-- [ ] Implement **permanent, labelled LMS and website stubs** from versioned synthetic fixtures;
-      keep their data out of confirmed reports, test permissions and repeat handling. The
-      divergent `ai/integration-candidate` must not be deployed as a real connector.
-- [ ] Real SMS and email providers behind the existing injectable senders (D-157, D-210).
+- [x] Minimal LMS/website boundary instead of user-facing stubs (D-246): preliminary internal format,
+      `GET /api/v1/integrations/contracts`, POST placeholders that store nothing. No screens.
+- [ ] When the customer's LMS/website contracts and samples arrive: replace the preliminary adapters in
+      `backend/app/integrations/`, version the format, record a decision (D-233 until then).
+- [x] Customer files in «Загрузка справочников» (D-247): applications JSON (number, course, stream only)
+      and the RTK workbook by sheet name; «Руководитель» only.
+- [ ] Vendors file (`Вендоры.xlsx`: Компания, Продукт, ФИО, Телефон, Почта, Способ связи) — postponed by the
+      owner; first decide whether contacts' personal data is imported or only companies and products.
+- [ ] Real SMS provider behind the existing injectable sender (D-157, D-210); email is done (D-238).
 - [ ] Superset profile on the current schema, read-only analytics views (T-074).
 
 ## 4. Quality, security, operations
@@ -82,28 +87,27 @@ Legend: `[ ]` open · `[~]` in progress · `[x]` done.
 - [x] Automatic daily encrypted database + attachments backup on the production Mac, 30-day
       retention with seven complete days kept, and a tested restore (2026-09-27).
 - [ ] Uptime check for unicrm.tech (the site depends on this laptop being awake and online).
+- [ ] Off-laptop copies of the recovery key, `deploy/local/`, `~/.cloudflared/` and the backup folder —
+      today they exist only on the production Mac (owner action).
+- [x] Deploy backups verified with `scripts/verify-encrypted-pair.sh` (2026-09-29: pairs
+      `deploy-20260929-143853` and `deploy-20260929-145440` decrypt and parse).
 - [ ] Load test: 50 concurrent users, 10 parallel reports (T-071).
 - [ ] Test-client deprecation warnings (I-005); pin local Python to 3.12 like Docker/CI (I-006).
 - [ ] Code-split the frontend bundle (Vite warns about chunk size).
 - [ ] User and admin guides in the app (T-072); architecture and install docs (T-073).
 
-## Handover — state on 2026-09-25
+## Handover — state on 2026-09-29
 
-Live on unicrm.tech and pushed to `ai/design-tokens` (not yet merged into `main`):
-design tokens (D-216), Задачи list (D-217), task page (D-218), board cards (D-219), compact shell
-and density pass (D-220), reports module (D-221), chart PNG/PDF export (D-222).
+Production (unicrm.tech) runs `main` at the latest deployed merge; everything is on GitHub and
+`docs/REVIEW.md` is the reviewer entry point. Recent decisions: D-243…D-247.
 
 **Next, in order**
-1. Calendar view for tasks — a fourth «Календарь» tab next to Список/Сроки/Мой план: month grid
-   by `deadline` (and `planned_start` when set), same scope/filters as the list, drag to move a
-   deadline via the existing `PATCH /tasks/{id}` (as «Сроки» does, D-206). Frontend only.
-2. Owner: fill the IT product / direction catalogs and link interactions (reports filters by
-   product/direction match nothing until then). Do not seed placeholder catalog data.
-3. Housekeeping section above: PR into `main` after `ai/phone-verification` is merged, protect
-   `main`, `scripts/deploy-public.sh`, `CLAUDE.md`.
-4. Then: slide-over task panel, permanent LMS/website stubs, security headers.
+1. Owner: off-laptop copies of the recovery key, `deploy/local/`, `~/.cloudflared/`, backups; protect `main` (P-003).
+2. Security headers on the public nginx (T-070), uptime check.
+3. Vendors file importer once the contact-data decision is made.
+4. Product backlog: calendar view for tasks, slide-over task panel, dark theme, accessibility audit.
 
-**How to deploy** (the laptop stack *is* production): `scripts/deploy-public.sh <label>` makes
-encrypted database and attachment copies, updates API/web/notifier, and checks local/public health
-and the login redirect. Existing Keycloak realms additionally need the idempotent middle-name and
-login-event setup scripts when the Settings features are first released.
+**How to deploy** (the laptop stack *is* production): merge the PR, `git merge --ff-only origin/main` in
+the main checkout, tag rollback images (`docker image tag "edu-crm-${i}" "edu-crm-${i}:rollback-<sha>"`), then
+`bash scripts/deploy-public.sh` — it makes encrypted database and attachment backups first, releases
+API/notifier/web, runs migrations on API start and checks local and public health.
