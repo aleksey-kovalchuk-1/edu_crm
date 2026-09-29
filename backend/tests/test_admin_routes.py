@@ -219,16 +219,20 @@ def test_superadmin_can_assign_admin_role_to_pending_account(configured_client, 
     assert configured_client.get(PENDING_PATH).json()['pending'] == []
 
 
-def test_role_change_rejects_new_head_and_protects_existing_head(configured_client, keycloak):
+def test_superadmins_grant_and_change_the_head_role_but_not_superadmin_through_it(configured_client, keycloak):
+    # «Руководитель» is assigned in the CRM (29 Sep); superadmin rights have their own grant/revoke actions.
     keycloak.add_admin_user(id='kc-head', email='head@example.test', username='head', roles=['crm-supervisor'])
     keycloak.add_admin_user(id='kc-manager', email='manager@example.test', username='manager', roles=['crm-user'])
+    keycloak.add_admin_user(id='kc-super', email='super@example.test', username='super2', roles=['crm-superadmin'])
     login(configured_client, keycloak, roles=('crm-superadmin', 'crm-admin'), subject='kc-irina')
 
-    assert configured_client.patch(f'{USERS_PATH}/kc-manager/role', json={'role': 'crm-supervisor'}).status_code == 422
+    assert configured_client.patch(f'{USERS_PATH}/kc-manager/role', json={'role': 'crm-supervisor'}).status_code == 200
+    assert keycloak.admin_users['kc-manager']['roles'] == ['crm-supervisor']
+    assert configured_client.patch(f'{USERS_PATH}/kc-head/role', json={'role': 'crm-user'}).status_code == 200
+    assert keycloak.admin_users['kc-head']['roles'] == ['crm-user']
     assert configured_client.patch(f'{USERS_PATH}/kc-manager/role', json={'role': 'crm-superadmin'}).status_code == 422
-    assert configured_client.patch(f'{USERS_PATH}/kc-head/role', json={'role': 'crm-user'}).status_code == 409
-    assert keycloak.admin_users['kc-head']['roles'] == ['crm-supervisor']
-    assert keycloak.admin_users['kc-manager']['roles'] == ['crm-user']
+    assert configured_client.patch(f'{USERS_PATH}/kc-super/role', json={'role': 'crm-user'}).status_code == 409
+    assert keycloak.admin_users['kc-super']['roles'] == ['crm-superadmin']
 
 
 def test_only_superadmin_can_change_role_or_reset_password(configured_client, keycloak):

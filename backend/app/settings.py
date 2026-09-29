@@ -78,6 +78,8 @@ class Settings:
     email_smtp_password: str = ''
     # Address named in the acknowledgement e-mail to new sign-ups; empty = the organisation's e-mail.
     access_contact_email: str = ''
+    # The one superadmin who may take superadmin rights away from others (owner decision 2026-09-29: Irina).
+    primary_superadmin_username: str = 'irina_super_admin'
 
     @property
     def callback_url(self):
@@ -227,4 +229,5 @@ def load_settings(environ=None):
         email_smtp_user=(environ.get('EMAIL_SMTP_USER') or '').strip(),
         email_smtp_password=environ.get('EMAIL_SMTP_PASSWORD') or '',
         access_contact_email=(environ.get('ACCESS_CONTACT_EMAIL') or '').strip(),
+        primary_superadmin_username=(environ.get('PRIMARY_SUPERADMIN_USERNAME') or '').strip() or 'irina_super_admin',
     )
