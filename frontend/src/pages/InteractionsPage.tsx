@@ -127,6 +127,7 @@ export function InteractionsPage() {
         search={search}
         onSearch={setSearch}
         count={filtered.length}
+        placeholder="Поиск по программе, продукту, вузу, городу или ответственному"
       >
         <div className="segmented" role="group" aria-label="Вид">
           <button
