@@ -312,11 +312,12 @@ describe("Настройки menu", () => {
     expect(within(nav).queryByRole("link", { name: "Резервное копирование" })).toBeNull();
   });
 
-  it("Персональные данные is a real, distinctly-worded placeholder", async () => {
+  it("Персональные данные shows the two policy documents instead of a placeholder", async () => {
     mockApi();
     renderApp(paths.settingsPersonalData);
-    expect(await screen.findByRole("heading", { level: 2, name: "Персональные данные" })).toBeTruthy();
-    expect(screen.queryByText(/скоро|появится в одном из следующих/i)).toBeNull();
+    expect(await screen.findByRole("heading", { level: 2, name: "Политика в области обработки персональных данных" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Политика информационной безопасности" })).toBeTruthy();
+    expect(screen.queryByText(/скоро|появится в одном из следующих|Здесь будет представлена/i)).toBeNull();
   });
 
   it.each([
