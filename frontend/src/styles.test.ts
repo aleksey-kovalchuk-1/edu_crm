@@ -41,15 +41,9 @@ describe("styles.css design tokens", () => {
     expect(tokens).toMatch(/--atmr-fg-default:\s*#101828;/);
   });
 
-  it("points every legacy colour token at a Rostelecom or UniCRM token", () => {
-    const legacy = [...tokens.matchAll(/--(?:color|chart|sidebar)-[\w-]+:\s*([^;]+);/g)].map((m) => m[1].trim());
-    expect(legacy.length).toBeGreaterThan(30);
-    expect(legacy.filter((v) => !/^var\(--(?:atmr|crm)-[\w-]+\)$/.test(v))).toEqual([]);
-  });
-
   it("draws focus as a 2px accent ring with a 2px gap (6.5:1 on white)", () => {
     expect(tokens).toMatch(/--crm-focus-ring:\s*0 0 0 2px var\(--atmr-bg-surface1\), 0 0 0 4px var\(--atmr-accent-default\);/);
-    expect(tokens).toMatch(/--focus-ring:\s*var\(--crm-focus-ring\);/);
+    expect(css).toMatch(/box-shadow:\s*var\(--crm-focus-ring\)/);
   });
   it("loads Rostelecom Basis from the app's own files, not Google Fonts", () => {
     expect(css).not.toMatch(/fonts\.googleapis\.com/);
@@ -118,6 +112,22 @@ describe("styles.css design tokens", () => {
     });
   });
 
+  describe("charts (Stage 4)", () => {
+    it("tells the two ranking series apart by pattern as well as colour, in the bars and the legend", () => {
+      const clean = withoutComments(rules);
+      expect(clean).toMatch(/\.analytics-students-bar,\s*\.analytics-students-swatch\s*\{[^}]*repeating-linear-gradient/);
+    });
+  });
+
+  describe("clean-up (Stage 5)", () => {
+    it("uses the Rostelecom tokens directly: no legacy aliases left", () => {
+      const clean = withoutComments(rules);
+      const names = new Set([...clean.matchAll(/(--[a-z0-9_-]+)\s*:/g), ...clean.matchAll(/var\((--[a-z0-9_-]+)/g)].map((m) => m[1]));
+      const legacy = [...names].filter((name) => !/^--(?:atmr|crm|text|weight|space)-/.test(name));
+      expect(legacy).toEqual([]);
+    });
+  });
+
   describe("daily workflows (Stage 3)", () => {
     const clean = withoutComments(rules);
     const phone = [...clean.matchAll(/@media \(max-width: 767px\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join("\n");
@@ -128,9 +138,16 @@ describe("styles.css design tokens", () => {
       expect(phone).toMatch(/\.stack-table thead\s*\{[^}]*position:\s*absolute/);
     });
 
+    it("gives the Stage 4-5 pages' remaining small controls 44px on phones", () => {
+      // Analytics university filter, import wizard steps, Settings → Учебные заведения list links.
+      expect(phone).toMatch(/\.analytics-university-trigger,\s*\.stepper \.step,\s*\.settings-university-list a\s*\{[^}]*min-height:\s*44px/);
+    });
+
     it("gives page toolbars, task counters and stacked-row titles 44px on phones", () => {
       expect(phone).toMatch(/\.toolbar \.primary,\s*\.toolbar \.secondary,\s*\.toolbar \.filter,\s*\.task-toolbar \.primary,\s*\.scope-select select,\s*\.task-search,\s*\.counter-chip,\s*\.th-sort\s*\{[^}]*min-height:\s*44px/);
       expect(phone).toMatch(/\.stack-table td:first-child a\s*\{[^}]*min-height:\s*44px/);
+      // Short names («ИТМО») still get a 44px-wide target.
+      expect(phone).toMatch(/\.stack-table td:first-child a\s*\{[^}]*min-width:\s*44px/);
     });
 
     it("sets body text at 16px (tables and fields stay at 14px)", () => {
