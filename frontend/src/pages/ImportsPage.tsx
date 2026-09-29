@@ -29,7 +29,7 @@ import { Modal } from "../components/Modal";
 import { ErrorAlert, queryFallback } from "../components/QueryState";
 import { fieldErrorMessage } from "../components/forms/FormParts";
 import { formatNumber } from "../lib/format";
-import { canImportCatalogs } from "../lib/user";
+import { canImportCatalogs, canImportCustomerFiles } from "../lib/user";
 
 export const FORBIDDEN_TITLE = "Недостаточно прав";
 
@@ -48,7 +48,7 @@ export function ImportsPage() {
       </section>
     );
   }
-  return <ImportWorkspace />;
+  return <ImportWorkspace customerFiles={canImportCustomerFiles(user.roles)} />;
 }
 
 type Step = 1 | 2 | 3 | 4;
@@ -73,7 +73,7 @@ function prefillMapping(upload: ImportUpload): ImportMapping {
 
 const alreadyApplied = (error: unknown) => error instanceof ApiError && error.status === 409;
 
-function ImportWorkspace() {
+function ImportWorkspace({ customerFiles }: { customerFiles: boolean }) {
   const [step, setStep] = useState<Step>(1);
   const [upload, setUpload] = useState<ImportUpload | null>(null);
   const [mapping, setMapping] = useState<ImportMapping>({});
@@ -228,6 +228,7 @@ function ImportWorkspace() {
           {step === 1 && (
             <FileStep
               current={upload}
+              customerFiles={customerFiles}
               pending={uploadFile.isPending}
               error={uploadFile.error}
               onChoose={() => uploadFile.reset()}
@@ -412,6 +413,7 @@ function ImportWorkspace() {
 
 function FileStep({
   current,
+  customerFiles,
   pending,
   error,
   onChoose,
@@ -420,6 +422,7 @@ function FileStep({
   canContinue,
 }: {
   current: ImportUpload | null;
+  customerFiles: boolean;
   pending: boolean;
   error: unknown;
   onChoose: () => void;
@@ -468,8 +471,9 @@ function FileStep({
         сопоставляются с полями CRM на следующем шаге, до проверки ничего не записывается.
       </p>
       <p className="step-note">
-        Также принимаются файлы заказчика: книга Excel с листами «Вузы», «Направления», «Продукты
-        РТК» и файл заявок в формате JSON (из него берутся только номер заявки, курс и поток).
+        {customerFiles
+          ? "Также принимаются файлы заказчика: книга Excel с листами «Вузы», «Направления», «Продукты РТК» и файл заявок в формате JSON (из него берутся только номер заявки, курс и поток)."
+          : "Файлы заказчика (книгу Excel с листами «Вузы», «Продукты РТК» и JSON заявок) загружает руководитель."}
       </p>
       {current && (
         <div className="current-file">
