@@ -3,14 +3,21 @@
 # mailbox the API uses (owner decision 2026-09-28: Russian providers only). Reads EMAIL_SMTP_HOST, EMAIL_SMTP_PORT,
 # EMAIL_SMTP_USER, EMAIL_SMTP_PASSWORD, EMAIL_SENDER_ADDRESS and EMAIL_SENDER_NAME from deploy/local/api.env, so
 # the mailbox is configured in one place. Refuses a server or sender outside .ru. Never prints the password.
-# Preview by default; --apply changes Keycloak and reads the settings back. Idempotent.
+# Preview by default; --apply changes Keycloak and reads the settings back. Idempotent. The comparison leaves the
+# password out (Keycloak never returns it), so after changing only the password run: --apply --force.
 # Rollback: kcadm update realms/edu-crm -s 'smtpServer={}' (Keycloak then sends nothing, as before). Note: kcadm's
 # --fields filter returns nested objects empty, so the settings are read from the whole realm.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-apply=false
-[ "${1:-}" = "--apply" ] && apply=true
+apply=false; force=false
+for arg in "$@"; do
+  case "$arg" in
+    --apply) apply=true ;;
+    --force) force=true ;;
+    *) echo "usage: $0 [--apply [--force]]"; exit 2 ;;
+  esac
+done
 
 value() { grep "^$1=" deploy/local/api.env | head -1 | cut -d= -f2- || true; }
 host=$(value EMAIL_SMTP_HOST | tr 'A-Z' 'a-z')
@@ -42,7 +49,7 @@ ssl=false; starttls=true
 wanted="host=$host port=$port from=$from ssl=$ssl starttls=$starttls auth=$([ -n "$user" ] && echo true || echo false)"
 echo "Keycloak mail now: $current"
 echo "Wanted:            $wanted"
-if [ "$current" = "$wanted" ]; then echo "Already up to date."; exit 0; fi
+if [ "$current" = "$wanted" ] && ! $force; then echo "Already up to date (use --apply --force after a password change)."; exit 0; fi
 $apply || { echo "Preview only; run with --apply to change Keycloak."; exit 0; }
 
 HOST="$host" PORT="$port" FROM="$from" NAME="$name" USER_NAME="$user" SSL="$ssl" STARTTLS="$starttls" \
