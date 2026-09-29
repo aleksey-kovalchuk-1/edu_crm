@@ -150,7 +150,7 @@ button:focus-visible,
   color: var(--atmr-error);
 }
 
-/* reCAPTCHA: js/captcha-fit.js scales it to the field width; keep the box from clipping it. */
+/* reCAPTCHA: js/captcha-fit-2.js scales it to the field width; keep the box from clipping it. */
 .unicrm-captcha .pf-v5-c-form__group-control,
 .unicrm-captcha > div {
   overflow: visible;
