@@ -50,6 +50,8 @@ class FakeKeycloak:
         self.admin_sessions = set()   # Keycloak session ids that are still active
         self.admin_events = []        # stored login events ({'time', 'type', 'userId', ...})
         self.events_forbidden = False  # service account lacks view-events
+        self.actions_emails = []        # (user_id, actions, lifespan) sent through execute-actions-email
+        self.fail_actions_email = False
         self.fail_session_delete = False
         self.registration_email_as_username = False
         self.edit_username_allowed = True
@@ -94,10 +96,12 @@ class FakeKeycloak:
             if claims['sub'] == subject:
                 claims['roles'] = list(roles)
 
-    def add_admin_user(self, *, id, email, username, roles, first_name='', last_name='', enabled=True, email_verified=True):
+    def add_admin_user(self, *, id, email, username, roles, first_name='', last_name='', enabled=True, email_verified=True,
+                       required_actions=()):
         self.admin_users[id] = {
             'id': id, 'email': email, 'username': username, 'roles': list(roles),
             'firstName': first_name, 'lastName': last_name, 'enabled': enabled, 'emailVerified': email_verified,
+            'requiredActions': list(required_actions),
         }
 
     def handler(self, request):
@@ -176,7 +180,8 @@ class FakeKeycloak:
                 maximum = int(request.url.params.get('max', '100'))
                 users = users[first:first + maximum]
             return httpx.Response(200, json=[
-                {field: u.get(field, True) if field == 'emailVerified' else u[field] for field in ('id', 'email', 'username', 'firstName', 'lastName', 'enabled', 'emailVerified')}
+                {field: u.get(field, True if field == 'emailVerified' else []) if field in ('emailVerified', 'requiredActions') else u[field]
+                 for field in ('id', 'email', 'username', 'firstName', 'lastName', 'enabled', 'emailVerified', 'requiredActions')}
                 for u in users
             ])
         if suffix == 'users' and request.method == 'POST':
@@ -229,6 +234,14 @@ class FakeKeycloak:
             if user_id not in self.admin_users:
                 return httpx.Response(404)
             self.logged_out_users.append(user_id)
+            return httpx.Response(204)
+        if suffix.startswith('users/') and suffix.endswith('/execute-actions-email') and request.method == 'PUT':
+            user_id = suffix[len('users/'):-len('/execute-actions-email')]
+            if user_id not in self.admin_users:
+                return httpx.Response(404)
+            if self.fail_actions_email:
+                return httpx.Response(500, text='mail server down')
+            self.actions_emails.append((user_id, json.loads(request.content), request.url.params.get('lifespan')))
             return httpx.Response(204)
         if suffix.startswith('users/') and suffix.endswith('/reset-password') and request.method == 'PUT':
             user_id = suffix[len('users/'):-len('/reset-password')]

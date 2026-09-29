@@ -11,6 +11,8 @@ export interface AdminUser {
   roles: string[];
   is_active: boolean;
   last_login_at: string | null;
+  /** Hasn't confirmed the address or set a password yet (Keycloak still asks for it). */
+  setup_pending: boolean;
 }
 
 export interface AdminUsers {
@@ -41,6 +43,13 @@ export interface ChangedRole {
   keycloak_id: string;
   username: string;
   role: AssignableRole;
+  /** Granting a first role to someone without a password e-mails them a setup link. */
+  password_setup: "sent" | "not_needed" | "failed";
+}
+
+export interface SetupEmailResult {
+  sent: boolean;
+  message: string;
 }
 
 export interface ResetPasswordResult {
@@ -91,6 +100,27 @@ export function useChangeUserRole() {
       void client.invalidateQueries({ queryKey: adminKeys.users });
       void client.invalidateQueries({ queryKey: adminKeys.pending });
     },
+  });
+}
+
+/** DELETE /admin/users/{id}/role — ends CRM access; the person reappears in «Заявки на доступ». */
+export function useRemoveUserRole() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ keycloakId }: { keycloakId: string; username: string }) =>
+      apiRequest<void>(`/admin/users/${keycloakId}/role`, "DELETE"),
+    onSuccess: () => {
+      void client.invalidateQueries({ queryKey: adminKeys.users });
+      void client.invalidateQueries({ queryKey: adminKeys.pending });
+    },
+  });
+}
+
+/** POST /admin/users/{id}/password-setup-email — Keycloak's «confirm the address and set a password» link, 12 hours. */
+export function useSendPasswordSetup() {
+  return useMutation({
+    mutationFn: (keycloakId: string) =>
+      apiRequest<SetupEmailResult>(`/admin/users/${keycloakId}/password-setup-email`, "POST"),
   });
 }
 

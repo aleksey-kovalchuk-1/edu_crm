@@ -3,6 +3,8 @@
   "displayName": "UniCRM",
   "displayNameHtml": "UniCRM",
   "loginTheme": "edu-crm",
+  "emailTheme": "edu-crm",
+  "actionTokenGeneratedByUserLifespan": 43200,
   "enabled": true,
   "sslRequired": "external",
   "registrationAllowed": false,
