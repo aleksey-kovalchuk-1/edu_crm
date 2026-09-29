@@ -1,6 +1,6 @@
 # API уведомлений
 
-Спецификация: `docs/superpowers/specs/2026-09-27-notifications-design.md`; решение D-228. Все методы — только для собственных уведомлений, любая роль CRM (и `crm-superadmin`).
+Спецификация: `docs/design/specs/2026-09-27-notifications-design.md`; решение D-228. Все методы — только для собственных уведомлений, любая роль CRM (и `crm-superadmin`).
 
 ## Лента
 

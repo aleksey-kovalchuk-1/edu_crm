@@ -1,7 +1,7 @@
 # Platform Foundation (Phase 0, Spec A1) — Design
 
 - **Date:** 2026-09-14
-- **Status:** SUPERSEDED on 2026-09-15. The official specification (`docs/specification.md`) requires Keycloak, so the custom password and session authentication in sections 4.4–4.6 and 4.9 will not be implemented. Still-valid parts (PostgreSQL only, Alembic, migrations in tests, audit log, Docker entrypoint) continue in `docs/night-backlog.md` and `docs/decisions.md`. Do not implement from this document.
+- **Status:** SUPERSEDED on 2026-09-15. The official specification (`docs/specification.md`) requires Keycloak, so the custom password and session authentication in sections 4.4–4.6 and 4.9 will not be implemented. Still-valid parts (PostgreSQL only, Alembic, migrations in tests, audit log, Docker entrypoint) continue in `docs/backlog.md` and `docs/decisions.md`. Do not implement from this document.
 - **Related specs:** A2 — Directory model and universal ingestion (`/sveden/` first connector); B — Frontend restructure
 
 ## 1. Context

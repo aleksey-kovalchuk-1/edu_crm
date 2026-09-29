@@ -1,7 +1,7 @@
 # Public/demo overlay for the Cloudflare Tunnel deployment. Use together with the base file:
 #   docker compose -f compose.yaml -f compose.public.yaml up -d
 # Never used alone — it only overrides the handful of values that must reflect the public origin.
-# See docs/superpowers/specs/2026-09-20-laptop-cloudflare-tunnel-design.md.
+# See docs/design/specs/2026-09-20-laptop-cloudflare-tunnel-design.md.
 services:
   api:
     environment:
