@@ -5,6 +5,7 @@ import {
   IMPORT_ACCEPT,
   formatFileSize,
   importFileProblem,
+  isCustomerFile,
   isMappingError,
   useApplyImport,
   useCheckImport,
@@ -18,7 +19,12 @@ import {
 } from "../api/imports";
 import { useSession } from "../app/AuthGate";
 import { ImportDetailsModal, ImportHistory } from "../components/ImportHistory";
-import { ImportRowsTable, ImportSummaryView } from "../components/ImportReport";
+import {
+  ImportRowsTable,
+  ImportSheetsTable,
+  ImportSummaryView,
+  UnmatchedUniversities,
+} from "../components/ImportReport";
 import { Modal } from "../components/Modal";
 import { ErrorAlert, queryFallback } from "../components/QueryState";
 import { fieldErrorMessage } from "../components/forms/FormParts";
@@ -95,6 +101,10 @@ function ImportWorkspace() {
   }, [step]);
 
   const busy = uploadFile.isPending || check.isPending || apply.isPending;
+  // The customer's JSON and workbook have fixed layouts: step 2 shows what the file contains instead of a mapping.
+  const customer = isCustomerFile(upload);
+  const kind = upload?.kind ?? "catalog";
+  const stepLabel = (s: Step) => (s === 2 && customer ? "Состав файла" : STEPS[s - 1].label);
 
   function start(next: ImportUpload) {
     checkSeq.current += 1;
@@ -139,7 +149,7 @@ function ImportWorkspace() {
 
   function runCheck() {
     if (!upload || check.isPending) return;
-    const absent = (fields.data ?? []).filter((f) => f.required && !mapping[f.name]);
+    const absent = customer ? [] : (fields.data ?? []).filter((f) => f.required && !mapping[f.name]);
     setMissing(absent);
     if (absent.length) return;
     const seq = ++checkSeq.current;
@@ -147,7 +157,7 @@ function ImportWorkspace() {
     apply.reset();
     setStep(3);
     check.mutate(
-      { id: upload.id, mapping: fullMapping() },
+      { id: upload.id, mapping: customer ? {} : fullMapping() },
       {
         onSuccess: (report) => {
           if (seq === checkSeq.current) setChecked(report);
@@ -159,7 +169,7 @@ function ImportWorkspace() {
   function runApply() {
     if (!upload || apply.isPending) return;
     apply.mutate(
-      { id: upload.id, mapping: fullMapping() },
+      { id: upload.id, mapping: customer ? {} : fullMapping() },
       {
         onSuccess: (report) => {
           setApplied(report);
@@ -203,7 +213,7 @@ function ImportWorkspace() {
                   </span>
                   <span>
                     <span className="visually-hidden">Шаг {s}: </span>
-                    {label}
+                    {s === 2 ? stepLabel(s) : label}
                   </span>
                 </button>
               </li>
@@ -212,7 +222,7 @@ function ImportWorkspace() {
         </nav>
         <div className="wizard-body">
           <h2 id="import-step-title" ref={headingRef} tabIndex={-1} className="step-title">
-            {STEPS[step - 1].label}
+            {stepLabel(step)}
           </h2>
 
           {step === 1 && (
@@ -227,8 +237,13 @@ function ImportWorkspace() {
             />
           )}
 
+          {step === 2 && upload && customer && (
+            <CustomerFileStep upload={upload} pending={check.isPending} onCheck={runCheck} />
+          )}
+
           {step === 2 &&
             upload &&
+            !customer &&
             (queryFallback([fields]) ??
               (fields.data && (
                 <MappingStep
@@ -274,10 +289,11 @@ function ImportWorkspace() {
                     применении не загружаются.
                   </p>
                   <ImportSummaryView summary={checked.summary} />
-                  <ImportRowsTable report={checked} />
+                  <UnmatchedUniversities items={checked.unmatched_universities ?? []} />
+                  <ImportRowsTable report={checked} kind={kind} />
                   <div className="wizard-actions">
                     <button type="button" className="secondary" onClick={() => setStep(2)}>
-                      <ArrowLeft size={16} /> Изменить сопоставление
+                      <ArrowLeft size={16} /> {customer ? "К составу файла" : "Изменить сопоставление"}
                     </button>
                     <button type="button" className="secondary" onClick={runCheck} disabled={busy}>
                       <RefreshCw size={16} /> Проверить снова
@@ -314,7 +330,8 @@ function ImportWorkspace() {
                 </span>
               </div>
               <ImportSummaryView summary={applied.summary} applied />
-              <ImportRowsTable report={applied} />
+              <UnmatchedUniversities items={applied.unmatched_universities ?? []} />
+              <ImportRowsTable report={applied} kind={kind} />
               <div className="wizard-actions">
                 <button type="button" className="primary" onClick={restart}>
                   <Upload size={16} /> Загрузить другой файл
@@ -450,6 +467,10 @@ function FileStep({
         Загрузите реестр договоров в формате Excel. Данные читаются с первого листа; столбцы
         сопоставляются с полями CRM на следующем шаге, до проверки ничего не записывается.
       </p>
+      <p className="step-note">
+        Также принимаются файлы заказчика: книга Excel с листами «Вузы», «Направления», «Продукты
+        РТК» и файл заявок в формате JSON (из него берутся только номер заявки, курс и поток).
+      </p>
       {current && (
         <div className="current-file">
           <FileSpreadsheet size={18} />
@@ -459,7 +480,7 @@ function FileStep({
           </span>
           {canContinue && (
             <button type="button" className="text-button" onClick={onContinue}>
-              К сопоставлению
+              {isCustomerFile(current) ? "К составу файла" : "К сопоставлению"}
             </button>
           )}
         </div>
@@ -491,7 +512,7 @@ function FileStep({
           />
         </label>
         <small id={hintId} className="field-hint">
-          Формат .xls или .xlsx, размер до 10 МБ.
+          Формат .xls, .xlsx или .json, размер до 10 МБ.
         </small>
         {file && (
           <p className="chosen-file">
@@ -512,6 +533,68 @@ function FileStep({
         </button>
       </div>
     </form>
+  );
+}
+
+/** Step 2 for the customer's files: what will be read, without a column mapping. */
+function CustomerFileStep({
+  upload,
+  pending,
+  onCheck,
+}: {
+  upload: ImportUpload;
+  pending: boolean;
+  onCheck: () => void;
+}) {
+  const baseId = useId();
+  const preview = upload.preview ?? [];
+  const workbook = upload.kind === "workbook";
+  const headers = workbook ? ["Лист", "Идентификатор", "Наименование"] : upload.headers;
+  return (
+    <>
+      <p className="step-note">
+        {workbook
+          ? `Книга заказчика «${upload.filename}»: листы читаются по названию. Загружаются только «Вузы» (обновляются вузы, уже есть в каталоге), «Направления» и «Продукты РТК». Остальные листы перечислены с причиной.`
+          : `Файл заявок «${upload.filename}», записей: ${formatNumber(upload.row_count)}. Читаются только номер заявки, курс и номер потока; ФИО, телефоны и почта не читаются и не сохраняются. Статус оплаты не определяется.`}
+      </p>
+      {workbook && upload.sheets && <ImportSheetsTable sheets={upload.sheets} />}
+      <h3 className="preview-title" id={`${baseId}-preview`}>
+        Первые записи
+      </h3>
+      {preview.length ? (
+        <div className="table-wrap preview-wrap" role="region" aria-labelledby={`${baseId}-preview`} tabIndex={0}>
+          <table className="data-table preview-table">
+            <thead>
+              <tr>
+                <th scope="col">{workbook ? "Строка" : "Запись"}</th>
+                {headers.map((h) => (
+                  <th scope="col" key={h}>
+                    {h}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {preview.map((row, index) => (
+                <tr key={`${index}-${row.row_number}`}>
+                  <td>{row.row_number}</td>
+                  {headers.map((_, i) => (
+                    <td key={i}>{cellText(row.cells[i])}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="step-note">Предпросмотр недоступен.</p>
+      )}
+      <div className="wizard-actions">
+        <button type="button" className="primary" onClick={onCheck} disabled={pending} aria-busy={pending}>
+          {pending ? "Проверяем…" : "Проверить"}
+        </button>
+      </div>
+    </>
   );
 }
 

@@ -414,7 +414,7 @@ class CustomerImportRunner:
         existing = self.applications.get(number)
         if existing is not None:
             proposed = self.match_learner(values.get('phone'), values.get('email'))
-            same_name = (key(existing.learner.last_name) == key(values['last_name']) and
+            same_name = existing.learner is not None and (key(existing.learner.last_name) == key(values['last_name']) and
                          key(existing.learner.first_name) == key(values['first_name']))
             signals = evaluate_application(existing, proposed.id if proposed is not None and same_name else None,
                                            course, stream, self.current_row_number)
