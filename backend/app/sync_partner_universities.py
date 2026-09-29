@@ -37,6 +37,20 @@ PARTNERS = (
     PartnerUniversity('Вятский государственный университет', 'Киров'),
 )
 
+# Addresses the customer gave on 2026-09-28; spbu@spbu.ru for СПбПУ was confirmed by the owner the same day.
+PARTNER_EMAILS = {
+    'ВолгГТУ': 'vstu@vstu.ru',
+    'Вятский государственный университет': 'info@vyatsu.ru',
+    'ИТМО': 'info@itmo.ru',
+    'Московский Политех': 'info@mospolytech.ru',
+    'МФТИ': 'mipt@mipt.ru',
+    'РГУ им. А.Н. Косыгина': 'info@rguk.ru',
+    'СПбГУТ им. проф. М.А. Бонч-Бруевича': 'rector@sut.ru',
+    'СПбПУ': 'spbu@spbu.ru',
+    'Томский политехнический университет': 'tpu@tpu.ru',
+    'ЮУрГУ (НИУ)': 'info@susu.ru',
+}
+
 DEMO_NAMES = (
     'Северный технологический университет',
     'Волжский институт цифровых технологий',
@@ -63,11 +77,16 @@ def sync_partner_universities(db: Session, *, apply: bool) -> dict[str, int]:
                 if university.is_active and university.name in demo_names]
     shared = [item for item in PARTNERS
               if item.name not in by_name or not by_name[item.name].team_visible_to_managers]
+    # Only empty addresses are filled: one somebody typed on the card wins.
+    unaddressed = [by_name[name] for name in PARTNER_EMAILS if name in by_name and not by_name[name].email]
     result = {'created': len(created), 'reactivated': len(reactivated),
-              'archived_demo': len(archived), 'shared_with_managers': len(shared)}
+              'archived_demo': len(archived), 'shared_with_managers': len(shared), 'emails_filled': len(unaddressed)}
     if apply and any(result.values()):
         for item in created:
-            db.add(University(name=item.name, city=item.city, team_visible_to_managers=True))
+            db.add(University(name=item.name, city=item.city, email=PARTNER_EMAILS.get(item.name, ''),
+                              team_visible_to_managers=True))
+        for university in unaddressed:
+            university.email = PARTNER_EMAILS[university.name]
         for item in reactivated:
             by_name[item.name].is_active = True
         for item in shared:
