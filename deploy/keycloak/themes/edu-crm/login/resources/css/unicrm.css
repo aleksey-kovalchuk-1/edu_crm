@@ -1,0 +1,165 @@
+/*
+ * UniCRM look for Keycloak's keycloak.v2 pages (sign-in, registration, password reset and change, errors,
+ * sign-out). Loaded after keycloak.v2's own css/styles.css; values mirror frontend/src/styles.css (Rostelecom
+ * Purple Light) and PatternFly's own variables are pointed at them.
+ */
+@font-face {
+  font-family: "Rostelecom Basis";
+  src: url("../fonts/RostelecomBasis-Regular.woff2") format("woff2");
+  font-weight: 400;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rostelecom Basis";
+  src: url("../fonts/RostelecomBasis-Medium.woff2") format("woff2");
+  font-weight: 500;
+  font-display: swap;
+}
+@font-face {
+  font-family: "Rostelecom Basis";
+  src: url("../fonts/RostelecomBasis-Bold.woff2") format("woff2");
+  font-weight: 700;
+  font-display: swap;
+}
+
+:root {
+  --atmr-bg-page: #f4f4f5;
+  --atmr-bg-surface1: #fff;
+  --atmr-fg-default: #101828;
+  --atmr-fg-soft: rgba(16, 24, 40, 0.75);
+  --atmr-border-soft: rgba(88, 93, 105, 0.25);
+  --crm-input-border: #8b8f99;
+  --atmr-accent-default: #7700ff;
+  --atmr-accent-hover: #6500d9;
+  --atmr-accent-active: #5300b3;
+  --atmr-error: #d11a2a;
+
+  --pf-v5-global--FontFamily--text: "Rostelecom Basis", "Helvetica Neue", Arial, sans-serif;
+  --pf-v5-global--FontFamily--heading: "Rostelecom Basis", "Helvetica Neue", Arial, sans-serif;
+  --pf-v5-global--Color--100: var(--atmr-fg-default);
+  --pf-v5-global--Color--200: var(--atmr-fg-soft);
+  --pf-v5-global--primary-color--100: var(--atmr-accent-default);
+  --pf-v5-global--primary-color--200: var(--atmr-accent-active);
+  --pf-v5-global--link--Color: var(--atmr-accent-default);
+  --pf-v5-global--link--Color--hover: var(--atmr-accent-hover);
+  --pf-v5-global--BorderRadius--sm: 8px;
+  --keycloak-card-top-color: var(--atmr-accent-default);
+}
+
+/* No Keycloak artwork: a plain page and the UniCRM wordmark. */
+.login-pf body,
+body {
+  background: var(--atmr-bg-page);
+  color: var(--atmr-fg-default);
+}
+/* Pixels, not rem: PatternFly shrinks the root size on these pages. */
+.pf-v5-c-login {
+  --pf-v5-c-login__container--MaxWidth: 600px;
+}
+.pf-v5-c-login__container {
+  grid-template-columns: minmax(0, 600px);
+  padding-inline: 16px;
+}
+/* keycloak.v2 paints the realm name white for its dark artwork (with !important). */
+#kc-header-wrapper {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--atmr-accent-default) !important;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+/* The pages are Russian only: no language menu squeezing the heading. */
+.pf-v5-c-login__main-header-utilities {
+  display: none;
+}
+div.pf-v5-c-login__main-header:has(.pf-v5-c-login__main-header-utilities) {
+  grid-template-columns: 1fr;
+}
+#kc-header-wrapper::after {
+  content: "ИТ Школа Ростелеком";
+  display: block;
+  margin-top: 4px;
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--atmr-fg-soft);
+}
+.pf-v5-c-login__main {
+  border: 1px solid var(--atmr-border-soft);
+  border-radius: 12px;
+  box-shadow: none;
+  overflow: hidden;
+}
+.pf-v5-c-login__main-header {
+  border-top: 0;
+}
+#kc-page-title {
+  font-weight: 700;
+}
+
+/* Fields and buttons as in the CRM: 8 px radius, 1 px border, 44 px targets. */
+/* PatternFly draws field borders with ::before (frame) and ::after (underline); keep one 1 px frame. */
+.pf-v5-c-form-control {
+  min-height: 44px;
+  font-size: 16px;
+  border-radius: 8px;
+}
+.pf-v5-c-form-control::before {
+  border: 1px solid var(--crm-input-border);
+  border-radius: 8px;
+}
+.pf-v5-c-form-control::after {
+  border: 0;
+}
+.pf-v5-c-form-control:hover::before,
+.pf-v5-c-form-control:focus-within::before {
+  border-color: var(--atmr-accent-default);
+}
+.pf-v5-c-form-control.pf-m-error::before,
+.pf-v5-c-form-control:has([aria-invalid="true"])::before {
+  border-color: var(--atmr-error);
+}
+.pf-v5-c-form-control input:focus-visible {
+  outline: none;
+}
+.pf-v5-c-form-control:focus-within {
+  outline: 2px solid var(--atmr-accent-default);
+  outline-offset: 2px;
+}
+.pf-v5-c-input-group .pf-v5-c-button.pf-m-control {
+  border-radius: 8px;
+}
+.pf-v5-c-button {
+  min-height: 44px;
+  border-radius: 8px;
+  font-weight: 500;
+}
+.pf-v5-c-button.pf-m-primary {
+  --pf-v5-c-button--m-primary--BackgroundColor: var(--atmr-accent-default);
+  --pf-v5-c-button--m-primary--hover--BackgroundColor: var(--atmr-accent-hover);
+  --pf-v5-c-button--m-primary--focus--BackgroundColor: var(--atmr-accent-hover);
+  --pf-v5-c-button--m-primary--active--BackgroundColor: var(--atmr-accent-active);
+}
+a:focus-visible,
+button:focus-visible,
+.pf-v5-c-button:focus-visible {
+  outline: 2px solid var(--atmr-accent-default);
+  outline-offset: 2px;
+}
+.pf-v5-c-helper-text__item-text.pf-m-error,
+.kc-feedback-text.pf-m-error {
+  color: var(--atmr-error);
+}
+
+/* reCAPTCHA: js/captcha-fit.js scales it to the field width; keep the box from clipping it. */
+.unicrm-captcha .pf-v5-c-form__group-control,
+.unicrm-captcha > div {
+  overflow: visible;
+}
+
+@media (max-width: 767px) {
+  .pf-v5-c-login__main-body,
+  .pf-v5-c-login__main-header,
+  .pf-v5-c-login__main-footer {
+    padding-inline: 16px;
+  }
+}

@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from .audit import record_event
 from .auth import ALL_ROLES, ROLE_ADMIN, ROLE_SUPERVISOR, AuthContext, require_roles
 from .db import get_db
-from .email import EmailSendError, send_email
+from .email import EmailSendError, email_configured, send_email
 from .errors import AppError, ErrorCode
 from .models import EmailSenderIdentity, User, utcnow
 from .organization import organization_name
@@ -286,11 +286,11 @@ def test_send(request: Request, auth: AuthContext = Depends(any_role), db: Sessi
     # same pattern as app.state.sms_sender.
     sender = getattr(request.app.state, 'email_sender', None) or send_email
     # "Configured" means real delivery is actually possible: either the settings-driven default
-    # sender has a provider URL to call (the same condition send_email itself checks before falling
-    # back to logging), or the request-scoped sender has been swapped for something other than that
-    # default — which is how tests stand in for "a working provider is in place" without touching
-    # settings.email_provider_url or hitting real HTTP.
-    configured = bool(settings.email_provider_url) or sender is not send_email
+    # sender has a real provider (Russian SMTP or the HTTP provider — the same condition send_email
+    # checks before falling back to logging), or the request-scoped sender has been swapped for
+    # something other than that default — which is how tests stand in for "a working provider is in
+    # place" without touching settings or hitting a real server.
+    configured = email_configured(settings) or sender is not send_email
     now = utcnow()
     if auth.user.email_test_sent_at is not None and (now - auth.user.email_test_sent_at).total_seconds() < TEST_SEND_COOLDOWN_SECONDS:
         raise AppError(ErrorCode.RATE_LIMITED, TEST_SEND_COOLDOWN_MESSAGE)

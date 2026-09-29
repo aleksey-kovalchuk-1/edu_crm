@@ -37,7 +37,7 @@ export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
         (list && (
           <>
             <RefreshError queries={[users]} />
-            {!users.data?.available && <Notice tone="info">Список учётных записей Keycloak сейчас недоступен.</Notice>}
+            {!users.data?.available && <Notice tone="info">Список учётных записей сейчас недоступен.</Notice>}
             {users.data?.available && (
               <div className="table-wrap">
                 <table className="data-table stack-table users-table">

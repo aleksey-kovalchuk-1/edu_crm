@@ -30,7 +30,7 @@ export const AUTH_ERROR_MESSAGES: Record<string, string> = {
   LOGIN_FAILED:
     "Не удалось выполнить вход. Попробуйте ещё раз или обратитесь к администратору.",
   NO_ACCESS:
-    "У вашей учётной записи нет доступа к CRM. Обратитесь к администратору.",
+    "У вашей учётной записи пока нет доступа к CRM. Если вы только что зарегистрировались, администратор рассмотрит заявку и выдаст доступ.",
   // Set by the interface itself when a fresh login still leaves no session.
   SESSION_NOT_SAVED:
     "Не удалось завершить вход. Проверьте, что браузер разрешает cookie для этого сайта, и попробуйте снова.",
@@ -363,7 +363,7 @@ export function AuthGate({ children }: { children: ReactNode }) {
       >
         <button className="primary" onClick={login}>
           <LogIn size={18} />
-          Войти через Keycloak
+          Войти
         </button>
       </AuthScreen>
     );
