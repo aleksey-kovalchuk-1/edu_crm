@@ -142,7 +142,6 @@ def test_apply_creates_applications_without_a_learner_and_without_payment(head, 
     with database(database_url) as db:
         rows = {row.external_number: row for row in db.scalars(select(CourseApplication))}
         assert set(rows) == {'ORD-TEST-0001', 'ORD-TEST-0002'}
-        assert rows['ORD-TEST-0001'].learner_id is None
         assert rows['ORD-TEST-0001'].stream_number == '1'
         assert {row.payment_status for row in rows.values()} == {'unconfirmed_by_data'}
         event = db.scalar(select(AuditEvent).where(AuditEvent.action == 'import.apply'))
@@ -318,12 +317,3 @@ def test_a_superadmin_includes_the_head_role(app, keycloak):
     with TestClient(app) as client:
         login(client, keycloak, roles=('crm-superadmin', 'crm-admin', 'crm-supervisor'), subject='kc-irina')
         assert upload(client, applications_json(), 'заявки.json').status_code == 201
-
-
-def test_the_archived_applications_api_tolerates_applications_without_a_learner(head, database_url):
-    # The archived section stays switched off in production (D-235); its API must not break on these rows when enabled.
-    apply(head, upload(head, applications_json(), 'Данные оплат.json').json()['id'])
-    response = head.get('/api/v1/course-applications')
-    assert response.status_code == 200, response.text
-    assert {(row['external_number'], row['learner_id'], row['learner_name']) for row in response.json()} == {
-        ('ORD-TEST-0001', None, ''), ('ORD-TEST-0002', None, '')}
