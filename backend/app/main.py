@@ -16,6 +16,7 @@ from .chart_routes import router as chart_router
 from .catalog_routes import active_university_in_scope, router as catalog_router, university_scope
 from .email_routes import router as email_router
 from .import_routes import router as import_router
+from .integrations.routes import router as integrations_router
 from .db import get_db
 from .errors import AppError, ErrorCode, install_error_handlers
 from .keycloak_admin import KeycloakAdminClient
@@ -140,6 +141,7 @@ def create_app(settings=None, *, http_client=None, sms_sender=None, email_sender
     app.include_router(chart_router)
     app.include_router(email_router)
     app.include_router(import_router)
+    app.include_router(integrations_router)
     app.include_router(plan_router)
     app.include_router(notification_router)
     app.include_router(organization_router)
