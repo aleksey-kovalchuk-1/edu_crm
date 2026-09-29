@@ -50,3 +50,13 @@ def test_every_script_and_style_the_theme_lists_exists():
     own = [name for name in properties['styles'].split() if name != 'css/styles.css'] + properties['scripts'].split()
     missing = [name for name in own if not (THEME / 'resources' / name).is_file()]
     assert missing == []
+
+
+def test_new_installations_send_unicrm_emails_with_twelve_hour_links():
+    realm = _realm()
+    assert realm['emailTheme'] == 'edu-crm'
+    assert realm['actionTokenGeneratedByUserLifespan'] == 43200
+    email = ROOT / 'deploy/keycloak/themes/edu-crm/email'
+    assert 'parent=keycloak' in (email / 'theme.properties').read_text()
+    assert 'executeActionsSubject=UniCRM: доступ выдан' in (email / 'messages/messages_ru.properties').read_text()
+    assert 'LINK_SECONDS=43200' in (ROOT / 'scripts/keycloak-login-settings.sh').read_text()

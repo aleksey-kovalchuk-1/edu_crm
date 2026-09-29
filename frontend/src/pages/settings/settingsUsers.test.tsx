@@ -95,13 +95,14 @@ describe("settings users page", () => {
       "PATCH /admin/users/kc-manager/role": () => [200, { keycloak_id: "kc-manager", username: "manager_1", role: "crm-admin" }],
     });
     renderApp("/settings/users");
-    const editor = await screen.findByRole("form", { name: "Роль пользователя manager_1" });
+    fireEvent.click(await screen.findByRole("button", { name: "Изменить роль пользователя manager_1" }));
+    const editor = screen.getByRole("form", { name: "Роль пользователя manager_1" });
     fireEvent.change(within(editor).getByLabelText("Новая роль"), { target: { value: "crm-admin" } });
-    fireEvent.submit(editor);
+    fireEvent.click(within(editor).getByRole("button", { name: "Сохранить" }));
 
     await waitFor(() => expect(api.callsTo("PATCH", "/admin/users/kc-manager/role")).toHaveLength(1));
     expect(api.callsTo("PATCH", "/admin/users/kc-manager/role")[0].body).toEqual({ role: "crm-admin" });
-    expect(screen.queryByRole("form", { name: "Роль пользователя irina_super_admin" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Изменить роль пользователя irina_super_admin" })).toBeNull();
   });
 
   it("lets Irina assign the administrator role to a pending Keycloak account", async () => {
@@ -153,9 +154,11 @@ describe("settings users page", () => {
       const table = await within(await screen.findByRole("region", { name: "Пользователи CRM" })).findByRole("table");
       const irina = within(table).getByText("irina_super_admin").closest("tr") as HTMLElement;
       expect(within(irina).getByText("Защищённая роль")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Изменить роль пользователя konstantin.dlinnofamilnyy-verkhnepyshminskiy" }));
       const editor = screen.getByRole("form", { name: "Роль пользователя konstantin.dlinnofamilnyy-verkhnepyshminskiy" });
       expect(within(editor).getByLabelText("Новая роль")).toBeTruthy();
-      expect(within(editor).getByRole("button", { name: "Сохранить роль" })).toBeTruthy();
+      expect(within(editor).getByRole("button", { name: "Сохранить" })).toBeTruthy();
+      expect(within(editor).getByRole("button", { name: "Удалить роль" })).toBeTruthy();
     });
 
     it("stacks into labelled rows on phones and lets long logins and emails wrap", async () => {
@@ -179,5 +182,103 @@ describe("settings users page", () => {
       }
     });
   });
-});
 
+  describe("role editor and password setup (29 Sep)", () => {
+    const people = (extra: object = {}) => () => ({
+      available: true, total: 2,
+      users: [
+        { keycloak_id: "kc-irina", username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null, setup_pending: false },
+        { keycloak_id: "kc-anna", username: "anna", email: "anna@edu.hse.ru", full_name: "Анна", roles: ["crm-user"], is_active: true, last_login_at: null, setup_pending: false, ...extra },
+      ],
+    });
+    const base = (extra: object = {}) => ({
+      "GET /auth/me": ADMIN_SESSION,
+      "GET /admin/pending-registrations": () => ({ available: true, pending: [] }),
+      "GET /admin/users": people(extra),
+    });
+
+    it("shows «Изменить роль» for a KAM or administrator, which opens «Сохранить» and «Удалить роль»", async () => {
+      mockApi(base());
+      renderApp("/settings/users");
+      const button = await screen.findByRole("button", { name: "Изменить роль пользователя anna" });
+      expect(button.textContent).toBe("Изменить роль");
+      expect(screen.queryByRole("form", { name: "Роль пользователя anna" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Сохранить роль/ })).toBeNull();
+      fireEvent.click(button);
+      const editor = screen.getByRole("form", { name: "Роль пользователя anna" });
+      fireEvent.click(within(editor).getByRole("button", { name: "Отмена" }));
+      expect(screen.queryByRole("form", { name: "Роль пользователя anna" })).toBeNull();
+    });
+
+    it("removes the role only after a confirmation", async () => {
+      let removed = false;
+      const api = mockApi({
+        ...base(),
+        "GET /admin/users": () => (removed ? { available: true, total: 1, users: [people()().users[0]] } : people()()),
+        "DELETE /admin/users/kc-anna/role": () => { removed = true; return [204, undefined]; },
+      });
+      renderApp("/settings/users");
+      fireEvent.click(await screen.findByRole("button", { name: "Изменить роль пользователя anna" }));
+      fireEvent.click(within(screen.getByRole("form", { name: "Роль пользователя anna" })).getByRole("button", { name: "Удалить роль" }));
+      const dialog = await screen.findByRole("dialog", { name: "Удалить роль?" });
+      expect(dialog.textContent).toContain("anna");
+      expect(dialog.textContent).toContain("потеряет доступ к CRM");
+      expect(api.callsTo("DELETE", "/admin/users/kc-anna/role")).toHaveLength(0);
+      fireEvent.click(within(dialog).getByRole("button", { name: "Удалить роль" }));
+      await waitFor(() => expect(api.callsTo("DELETE", "/admin/users/kc-anna/role")).toHaveLength(1));
+      expect(await screen.findByText(/Роль пользователя anna удалена/)).toBeTruthy();
+      await waitFor(() => expect(screen.queryByText("anna@edu.hse.ru")).toBeNull());
+    });
+
+    it("keeps the protected roles without «Изменить роль»", async () => {
+      mockApi(base());
+      renderApp("/settings/users");
+      await screen.findByRole("button", { name: "Изменить роль пользователя anna" });
+      expect(screen.queryByRole("button", { name: "Изменить роль пользователя irina_super_admin" })).toBeNull();
+      expect(screen.getByText("Защищённая роль")).toBeTruthy();
+    });
+
+    it("marks someone who hasn't set a password and sends them the link again", async () => {
+      const api = mockApi({
+        ...base({ setup_pending: true }),
+        "POST /admin/users/kc-anna/password-setup-email": () => ({ sent: true, message: "Письмо для установки пароля отправлено на anna@edu.hse.ru." }),
+      });
+      renderApp("/settings/users");
+      const table = await within(await screen.findByRole("region", { name: "Пользователи CRM" })).findByRole("table");
+      const row = within(table).getByText("anna").closest("tr") as HTMLElement;
+      expect(within(row).getByText("Не задал пароль")).toBeTruthy();
+      fireEvent.click(within(row).getByRole("button", { name: "Отправить письмо для установки пароля пользователю anna" }));
+      await waitFor(() => expect(api.callsTo("POST", "/admin/users/kc-anna/password-setup-email")).toHaveLength(1));
+      expect(await screen.findByText("Письмо для установки пароля отправлено на anna@edu.hse.ru.")).toBeTruthy();
+    });
+
+    it("says after «Выдать доступ» that the password e-mail went out, or that it failed", async () => {
+      let result = "sent";
+      mockApi({
+        "GET /auth/me": ADMIN_SESSION,
+        "GET /admin/pending-registrations": () => ({ available: true, pending: [{ keycloak_id: "kc-new", username: "novikov", email: "novikov@edu.hse.ru" }] }),
+        "GET /admin/users": () => ({ available: true, total: 0, users: [] }),
+        "PATCH /admin/users/kc-new/role": () => ({ keycloak_id: "kc-new", username: "novikov", role: "crm-user", password_setup: result }),
+      });
+      renderApp("/settings/users");
+      const pendingPanel = await screen.findByRole("region", { name: "Заявки на доступ" });
+      fireEvent.click(await within(pendingPanel).findByRole("button", { name: "Выдать доступ" }));
+      expect(await within(pendingPanel).findByText(/Доступ выдан пользователю novikov\. Письмо для установки пароля отправлено/)).toBeTruthy();
+      result = "failed";
+      fireEvent.click(within(pendingPanel).getByRole("button", { name: "Выдать доступ" }));
+      expect(await within(pendingPanel).findByText(/письмо для установки пароля не отправилось/)).toBeTruthy();
+    });
+
+    it("heads the request table with e-mail and login", async () => {
+      mockApi({
+        "GET /auth/me": ADMIN_SESSION,
+        "GET /admin/pending-registrations": () => ({ available: true, pending: [{ keycloak_id: "kc-new", username: "novikov", email: "novikov@edu.hse.ru" }] }),
+        "GET /admin/users": () => ({ available: true, total: 0, users: [] }),
+      });
+      renderApp("/settings/users");
+      const pendingPanel = await screen.findByRole("region", { name: "Заявки на доступ" });
+      const headers = [...(await within(pendingPanel).findByRole("table")).querySelectorAll("th")].map((th) => th.textContent);
+      expect(headers.slice(0, 2)).toEqual(["Электронная почта", "Логин"]);
+    });
+  });
+});

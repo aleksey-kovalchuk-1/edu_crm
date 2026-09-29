@@ -39,7 +39,8 @@ class KeycloakAdminNotFound(KeycloakAdminError):
 
 
 class AdminUser:
-    def __init__(self, id, email, username, roles, first_name='', last_name='', enabled=True, email_verified=False):
+    def __init__(self, id, email, username, roles, first_name='', last_name='', enabled=True, email_verified=False,
+                 required_actions=()):
         self.id = id
         self.email = email
         self.username = username
@@ -48,6 +49,8 @@ class AdminUser:
         self.last_name = last_name
         self.enabled = enabled
         self.email_verified = email_verified
+        # Steps Keycloak still asks for at next sign-in, e.g. VERIFY_EMAIL and UPDATE_PASSWORD after self-registration.
+        self.required_actions = list(required_actions)
 
 
 class KeycloakAdminClient:
@@ -141,6 +144,11 @@ class KeycloakAdminClient:
             'lastName': last_name,
         })
 
+    def send_actions_email(self, user_id, actions, *, lifespan_seconds):
+        """E-mails the user Keycloak's link for `actions` (e.g. VERIFY_EMAIL, UPDATE_PASSWORD), valid `lifespan_seconds`."""
+        self._request('PUT', f'/users/{user_id}/execute-actions-email', params={'lifespan': str(lifespan_seconds)},
+                      json=list(actions))
+
     def logout_user(self, user_id):
         self._request('POST', f'/users/{user_id}/logout')
 
@@ -214,7 +222,7 @@ class KeycloakAdminClient:
             id=user_id, email=row.get('email', ''), username=row.get('username', ''),
             roles=self._realm_roles_of(user_id), first_name=row.get('firstName', ''),
             last_name=row.get('lastName', ''), enabled=row.get('enabled', True),
-            email_verified=row.get('emailVerified', False),
+            email_verified=row.get('emailVerified', False), required_actions=row.get('requiredActions') or [],
         )
 
     def _realm_roles_of(self, user_id):

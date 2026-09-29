@@ -79,6 +79,33 @@ def _revoke_crm_sessions(db, keycloak_id):
     return local
 
 
+# Steps a self-registered person may still owe Keycloak; granting access e-mails them a link for these (D-241).
+SETUP_ACTIONS = ('VERIFY_EMAIL', 'UPDATE_PASSWORD')
+SETUP_LINK_SECONDS = 12 * 60 * 60
+
+
+def _setup_actions(account):
+    return [action for action in SETUP_ACTIONS if action in account.required_actions]
+
+
+def _send_password_setup(db, request, auth, keycloak_admin, account):
+    """E-mails Keycloak's «confirm the address and set a password» link; 'sent', 'not_needed' or 'failed'."""
+    actions = _setup_actions(account)
+    if not actions:
+        return 'not_needed'
+    try:
+        keycloak_admin.send_actions_email(account.id, actions, lifespan_seconds=SETUP_LINK_SECONDS)
+    except KeycloakAdminError:
+        logger.exception('Could not send the password setup e-mail to %s', account.id)
+        return 'failed'
+    record_event(
+        db, request, auth.user, 'admin.password_setup_email', entity_type='keycloak_user', entity_id=account.id,
+        summary=f'Отправлено письмо для установки пароля пользователю {account.username}',
+        payload={'keycloak_id': account.id, 'actions': actions},
+    )
+    return 'sent'
+
+
 def _all_keycloak_accounts(client):
     accounts = []
     while True:
@@ -144,6 +171,8 @@ class ChangedRole(BaseModel):
     keycloak_id: str
     username: str
     role: str
+    # Granting a first CRM role to someone who hasn't confirmed their address or set a password e-mails them a link.
+    password_setup: Literal['sent', 'not_needed', 'failed'] = 'not_needed'
 
 
 @router.patch('/users/{keycloak_id}/role', response_model=ChangedRole,
@@ -197,8 +226,71 @@ def change_user_role(
         entity_id=keycloak_id, summary=f'Изменена роль пользователя {account.username}',
         payload={'keycloak_id': keycloak_id, 'old_roles': sorted(previous), 'new_role': data.role},
     )
+    setup = _send_password_setup(db, request, auth, keycloak_admin, account) if not previous else 'not_needed'
     db.commit()
-    return ChangedRole(keycloak_id=keycloak_id, username=account.username, role=data.role)
+    return ChangedRole(keycloak_id=keycloak_id, username=account.username, role=data.role, password_setup=setup)
+
+
+@router.delete('/users/{keycloak_id}/role', status_code=204, summary='Удалить роль CRM (доступ к CRM прекращается)')
+def remove_user_role(
+    keycloak_id: UserId, request: Request,
+    auth: AuthContext = Depends(superadmin_only), db: Session = Depends(get_db),
+):
+    keycloak_admin = request.app.state.keycloak_admin
+    account = _account_for_admin_action(keycloak_admin, keycloak_id)
+    previous = set(account.roles) & CRM_ROLES
+    if previous & {'crm-supervisor', 'crm-superadmin'}:
+        raise AppError(ErrorCode.CONFLICT, 'Роль руководителя и главного администратора защищена')
+    if not previous:
+        raise AppError(ErrorCode.CONFLICT, 'У пользователя нет роли CRM')
+
+    removed = []
+    try:
+        for old_role in sorted(previous):
+            keycloak_admin.remove_realm_role(keycloak_id, old_role)
+            removed.append(old_role)
+        if set(keycloak_admin.get_user(keycloak_id).roles) & CRM_ROLES:
+            raise KeycloakAdminError('Keycloak still lists a CRM role')
+        keycloak_admin.logout_user(keycloak_id)
+    except KeycloakAdminError as error:
+        for old_role in removed:
+            try:
+                keycloak_admin.assign_realm_role(keycloak_id, old_role)
+            except KeycloakAdminError:
+                logger.exception('Could not restore role %s on %s', old_role, keycloak_id)
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось удалить роль; проверьте учётную запись и повторите действие') from error
+
+    local = _revoke_crm_sessions(db, keycloak_id)
+    if local is not None:
+        local.roles = []
+    record_event(
+        db, request, auth.user, 'admin.user_role_remove', entity_type='keycloak_user',
+        entity_id=keycloak_id, summary=f'Удалена роль CRM у пользователя {account.username}',
+        payload={'keycloak_id': keycloak_id, 'old_roles': sorted(previous)},
+    )
+    db.commit()
+    return Response(status_code=204)
+
+
+class SetupEmailOut(BaseModel):
+    sent: bool
+    message: str
+
+
+@router.post('/users/{keycloak_id}/password-setup-email', response_model=SetupEmailOut,
+             summary='Отправить письмо для подтверждения адреса и установки пароля')
+def send_password_setup_email(
+    keycloak_id: UserId, request: Request,
+    auth: AuthContext = Depends(superadmin_only), db: Session = Depends(get_db),
+):
+    keycloak_admin = request.app.state.keycloak_admin
+    account = _account_for_admin_action(keycloak_admin, keycloak_id)
+    if not _setup_actions(account):
+        raise AppError(ErrorCode.CONFLICT, 'Пользователь уже подтвердил адрес и задал пароль')
+    if _send_password_setup(db, request, auth, keycloak_admin, account) != 'sent':
+        raise AppError(ErrorCode.SERVICE_UNAVAILABLE, 'Не удалось отправить письмо; попробуйте ещё раз позже')
+    db.commit()
+    return SetupEmailOut(sent=True, message=f'Письмо для установки пароля отправлено на {account.email}.')
 
 
 class ResetPasswordOut(BaseModel):
@@ -240,6 +332,8 @@ class AdminUserOut(BaseModel):
     roles: list[str]
     is_active: bool
     last_login_at: datetime | None
+    # Hasn't confirmed the address or set a password yet (Keycloak still asks for it).
+    setup_pending: bool = False
 
 
 class AdminUsersOut(BaseModel):
@@ -271,6 +365,7 @@ def list_all_users(request: Request, db: Session = Depends(get_db)):
             keycloak_id=account.id, username=account.username, email=account.email,
             full_name=name, roles=sorted(CRM_ROLES.intersection(account.roles)),
             is_active=account.enabled, last_login_at=local.last_login_at if local else None,
+            setup_pending=bool(_setup_actions(account)),
         ))
     users.sort(key=lambda row: (row.full_name.casefold(), row.username))
     return AdminUsersOut(available=True, total=len(users), users=users)
