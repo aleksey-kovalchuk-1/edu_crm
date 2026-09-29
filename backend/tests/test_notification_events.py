@@ -161,3 +161,14 @@ def test_a_rolled_back_transaction_leaves_no_notification(client, keycloak, data
         db.rollback()
     with database(database_url) as db:
         assert db.scalar(select(Notification)) is None
+
+
+def test_a_catalogue_import_does_not_announce_each_new_university(client, keycloak, database_url):
+    # Imports can create hundreds of universities; like imported contracts, they don't announce themselves.
+    from test_import_api import uploaded
+    kams = [ensure_user(database_url, f'kc-kam-{i}', f'КАМ {i}') for i in range(3)]
+    sign_in(client, keycloak, 'crm-supervisor', 'kc-head', 'Павел Демо')
+    body = uploaded(client)
+    applied = client.post(f"/api/v1/imports/{body['id']}/apply", json={'mapping': body['mapping']})
+    assert applied.status_code == 200, applied.text
+    assert [n for n in notifications(database_url) if n[1] == 'university_created' and n[0] in kams] == []

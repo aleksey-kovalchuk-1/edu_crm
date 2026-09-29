@@ -1,3 +1,7 @@
+> **Status: not pursued.** On 2026-09-28 the owner kept sign-up in Keycloak (decision D-239). The superadmin
+> notification and the acknowledgement e-mail were added to the existing «Заявки на доступ» queue instead
+> (`app/registration_watch.py`). This design is kept for reference.
+
 
 ## Goal
 
