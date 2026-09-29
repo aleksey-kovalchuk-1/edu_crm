@@ -30,7 +30,7 @@ def client(app, keycloak):
         yield test_client
 
 
-@pytest.mark.parametrize('role', ['crm-user', 'crm-admin'])
+@pytest.mark.parametrize('role', ['crm-user', 'crm-supervisor', 'crm-admin'])
 def test_removing_the_role_takes_access_away_and_returns_them_to_the_queue(app, client, keycloak, database_url, role):
     keycloak.add_admin_user(id='kc-anna', email='anna@mail.ru', username='anna', roles=[role])
     with TestClient(app) as anna:
@@ -51,7 +51,7 @@ def test_removing_the_role_takes_access_away_and_returns_them_to_the_queue(app, 
         assert event.payload == {'keycloak_id': 'kc-anna', 'old_roles': [role]}
 
 
-@pytest.mark.parametrize('roles', [['crm-supervisor'], ['crm-superadmin', 'crm-admin']])
+@pytest.mark.parametrize('roles', [['crm-superadmin'], ['crm-superadmin', 'crm-admin']])
 def test_protected_roles_cannot_be_removed(client, keycloak, roles):
     keycloak.add_admin_user(id='kc-head', email='head@mail.ru', username='head', roles=roles)
     assert client.delete(f'{USERS}/kc-head/role').status_code == 409

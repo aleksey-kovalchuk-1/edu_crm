@@ -13,12 +13,16 @@ export interface AdminUser {
   last_login_at: string | null;
   /** Hasn't confirmed the address or set a password yet (Keycloak still asks for it). */
   setup_pending: boolean;
+  /** The superadmin whose rights nobody can take away (Irina). */
+  primary_superadmin: boolean;
 }
 
 export interface AdminUsers {
   available: boolean;
   total: number;
   users: AdminUser[];
+  /** Only the primary superadmin may take superadmin rights away. */
+  can_revoke_superadmin: boolean;
 }
 
 export interface NewAccount {
@@ -37,12 +41,12 @@ export interface CreatedAccount {
   temporary_password: string;
 }
 
-export type AssignableRole = "crm-user" | "crm-admin";
+export type AssignableRole = "crm-user" | "crm-supervisor" | "crm-admin";
 
 export interface ChangedRole {
   keycloak_id: string;
   username: string;
-  role: AssignableRole;
+  role: AssignableRole | "crm-superadmin";
   /** Granting a first role to someone without a password e-mails them a setup link. */
   password_setup: "sent" | "not_needed" | "failed";
 }
@@ -113,6 +117,26 @@ export function useRemoveUserRole() {
       void client.invalidateQueries({ queryKey: adminKeys.users });
       void client.invalidateQueries({ queryKey: adminKeys.pending });
     },
+  });
+}
+
+/** POST /admin/users/{id}/superadmin — a superadmin shares superadmin rights with an administrator. */
+export function useGrantSuperadmin() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ keycloakId }: { keycloakId: string; username: string }) =>
+      apiRequest<ChangedRole>(`/admin/users/${keycloakId}/superadmin`, "POST"),
+    onSuccess: () => { void client.invalidateQueries({ queryKey: adminKeys.users }); },
+  });
+}
+
+/** DELETE /admin/users/{id}/superadmin — only the primary superadmin; the person becomes an administrator again. */
+export function useRevokeSuperadmin() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ keycloakId }: { keycloakId: string; username: string }) =>
+      apiRequest<void>(`/admin/users/${keycloakId}/superadmin`, "DELETE"),
+    onSuccess: () => { void client.invalidateQueries({ queryKey: adminKeys.users }); },
   });
 }
 

@@ -18,6 +18,14 @@ docker compose ps
 
 Скрипт создаёт `deploy/local/keycloak.env` и `deploy/local/api.env` с правами владельца и случайными секретами. Пароли не печатаются в журнале команд и не должны попадать в Git. На первом запуске Keycloak и миграции БД требуют времени; `backend/docker-entrypoint.sh` применяет миграции до старта API, а `SEED_DEMO=true` добавляет демонстрационные записи только для учебного стенда. Для чистой рабочей БД задать `SEED_DEMO=false` **до первого запуска**. Роль `crm-superadmin` для рабочего пользователя настраивается отдельно по утверждённой процедуре и `INITIAL_SUPERADMIN_EMAIL`; не полагаться на демонстрационные аккаунты.
 
+## Почта, вход и роли после первого запуска
+
+1. **Права сервисной учётной записи CRM в Keycloak:** `scripts/keycloak-grant-admin-permissions.sh` (список пользователей, роли, журнал входов).
+2. **Страницы входа и письма Keycloak:** `scripts/keycloak-login-settings.sh` — предпросмотр, затем `--apply`. Скрипт выбирает темы `edu-crm`, ставит 12 часов на ссылки из писем и русскую фразу для правила «только адреса `.ru`». После изменения файлов темы контейнер Keycloak пересоздаётся (`docker compose up -d --force-recreate --no-deps keycloak`), а не перезапускается.
+3. **Почта:** в `deploy/local/api.env` указать российский SMTP-ящик — `EMAIL_SMTP_HOST` (например, `smtp.yandex.ru`), `EMAIL_SMTP_PORT=465`, `EMAIL_SMTP_USER`, `EMAIL_SMTP_PASSWORD`, `EMAIL_SENDER_ADDRESS`, `EMAIL_SENDER_NAME`, `ACCESS_CONTACT_EMAIL`. API не запустится, если сервер или отправитель не в домене `.ru`. Письма Keycloak настраиваются из тех же значений: `scripts/keycloak-smtp.sh`, затем `--apply` (после смены пароля ящика — `--apply --force`).
+4. **Главный суперадминистратор:** `PRIMARY_SUPERADMIN_USERNAME` (по умолчанию `irina_super_admin`) — логин того, кто может снимать права суперадминистратора.
+5. **Служба уведомлений:** `docker compose --profile notifications up -d notifier` (напоминания о сроках, проверка регистраций раз в минуту).
+
 ## Адреса и проверка
 
 В локальной конфигурации: интерфейс `http://localhost:8080`, Swagger UI `http://localhost:8080/api/docs`, OpenAPI JSON `http://localhost:8080/api/openapi.json`, состояние API `http://localhost:8080/api/v1/health`. После входа открыть «Учебные заведения», «Взаимодействия», «Аналитика» и «Отчёты». Проверить скачивание JSON под двумя ролями с разным набором вузов. Порты Compose привязаны к loopback; для удалённого доступа нужен утверждённый HTTPS-прокси и корректная конфигурация внешнего URL/Keycloak, а не простое раскрытие портов.

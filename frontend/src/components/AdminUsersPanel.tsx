@@ -2,7 +2,9 @@ import { useState, type FormEvent } from "react";
 import {
   useAdminUsers,
   useChangeUserRole,
+  useGrantSuperadmin,
   useRemoveUserRole,
+  useRevokeSuperadmin,
   useSendPasswordSetup,
   type AdminUser,
   type AssignableRole,
@@ -14,7 +16,13 @@ import { Modal } from "./Modal";
 import { Notice } from "./Notice";
 import { ErrorAlert, queryFallback, RefreshError } from "./QueryState";
 
-const PROTECTED = new Set(["crm-supervisor", "crm-superadmin"]);
+const SUPERADMIN = "crm-superadmin";
+
+function currentRole(user: AdminUser): AssignableRole {
+  if (user.roles.includes("crm-admin")) return "crm-admin";
+  if (user.roles.includes("crm-supervisor")) return "crm-supervisor";
+  return "crm-user";
+}
 
 /**
  * «Изменить роль» for a KAM or administrator: opens the role picker with «Сохранить» and «Удалить роль»
@@ -42,7 +50,7 @@ function RoleEditor({
   function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const value = new FormData(event.currentTarget).get("role");
-    if (value !== "crm-user" && value !== "crm-admin") return;
+    if (value !== "crm-user" && value !== "crm-supervisor" && value !== "crm-admin") return;
     onSave(value);
     setOpen(false);
   }
@@ -50,8 +58,9 @@ function RoleEditor({
     <form className="role-editor" aria-label={`Роль пользователя ${user.username}`} onSubmit={save}>
       <label>
         <span className="visually-hidden">Новая роль</span>
-        <select name="role" defaultValue={user.roles.includes("crm-admin") ? "crm-admin" : "crm-user"} autoFocus>
+        <select name="role" defaultValue={currentRole(user)} autoFocus>
           <option value="crm-user">КАМ</option>
+          <option value="crm-supervisor">Руководитель</option>
           <option value="crm-admin">Администратор</option>
         </select>
       </label>
@@ -74,9 +83,14 @@ export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
   const change = useChangeUserRole();
   const remove = useRemoveUserRole();
   const setup = useSendPasswordSetup();
+  const grant = useGrantSuperadmin();
+  const revoke = useRevokeSuperadmin();
   const [confirming, setConfirming] = useState<AdminUser | null>(null);
+  const [granting, setGranting] = useState<AdminUser | null>(null);
+  const [revoking, setRevoking] = useState<AdminUser | null>(null);
   const list = users.data?.users;
-  const busy = change.isPending || remove.isPending;
+  const canRevoke = users.data?.can_revoke_superadmin ?? false;
+  const busy = change.isPending || remove.isPending || grant.isPending || revoke.isPending;
 
   function removeRole(user: AdminUser) {
     remove.mutate({ keycloakId: user.keycloak_id, username: user.username }, { onSettled: () => setConfirming(null) });
@@ -91,6 +105,14 @@ export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
       {change.error && <ErrorAlert error={change.error} />}
       {remove.error && <ErrorAlert error={remove.error} />}
       {setup.error && <ErrorAlert error={setup.error} />}
+      {grant.error && <ErrorAlert error={grant.error} />}
+      {revoke.error && <ErrorAlert error={revoke.error} />}
+      {grant.isSuccess && (
+        <Notice tone="success">{grant.variables?.username} теперь суперадминистратор. Его сеансы завершены — права действуют со следующего входа.</Notice>
+      )}
+      {revoke.isSuccess && (
+        <Notice tone="success">{revoke.variables?.username} снова администратор: права суперадминистратора сняты.</Notice>
+      )}
       {change.data && <Notice tone="success">Роль пользователя {change.data.username} изменена.</Notice>}
       {remove.isSuccess && (
         <Notice tone="success">Роль пользователя {remove.variables?.username} удалена, доступ к CRM прекращён.</Notice>
@@ -144,15 +166,42 @@ export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
                         <td data-label="Последний вход" className="muted">{u.last_login_at ? formatDateTime(u.last_login_at) : "—"}</td>
                         {editable && (
                           <td data-label="Изменить роль" className="role-editor-cell">
-                            {u.roles.some((role) => PROTECTED.has(role)) ? (
-                              <span className="muted">Защищённая роль</span>
+                            {u.primary_superadmin ? (
+                              <span className="muted">Главный суперадминистратор</span>
+                            ) : u.roles.includes(SUPERADMIN) ? (
+                              canRevoke ? (
+                                <button
+                                  type="button"
+                                  className="secondary danger"
+                                  aria-label={`Снять права суперадминистратора: ${u.username}`}
+                                  disabled={busy}
+                                  onClick={() => setRevoking(u)}
+                                >
+                                  Снять права суперадминистратора
+                                </button>
+                              ) : (
+                                <span className="muted">Снять права может главный суперадминистратор</span>
+                              )
                             ) : (
-                              <RoleEditor
-                                user={u}
-                                pending={busy}
-                                onSave={(role) => change.mutate({ keycloakId: u.keycloak_id, role })}
-                                onRemove={() => setConfirming(u)}
-                              />
+                              <div className="role-editor-stack">
+                                <RoleEditor
+                                  user={u}
+                                  pending={busy}
+                                  onSave={(role) => change.mutate({ keycloakId: u.keycloak_id, role })}
+                                  onRemove={() => setConfirming(u)}
+                                />
+                                {currentRole(u) === "crm-admin" && (
+                                  <button
+                                    type="button"
+                                    className="text-button"
+                                    aria-label={`Сделать суперадминистратором: ${u.username}`}
+                                    disabled={busy}
+                                    onClick={() => setGranting(u)}
+                                  >
+                                    Сделать суперадминистратором
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </td>
                         )}
@@ -165,6 +214,44 @@ export function AdminUsersPanel({ editable = false }: { editable?: boolean }) {
             )}
           </>
         ))}
+      {granting && (
+        <Modal title="Передать права суперадминистратора?" close={() => setGranting(null)}>
+          <p>
+            Администратор <strong>{granting.username}</strong> получит все права суперадминистратора: управление пользователями
+            и ролями, резервные копии. Снять их сможет только главный суперадминистратор.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="secondary" onClick={() => setGranting(null)}>Отмена</button>
+            <button
+              type="button"
+              className="primary"
+              disabled={grant.isPending}
+              onClick={() => grant.mutate({ keycloakId: granting.keycloak_id, username: granting.username }, { onSettled: () => setGranting(null) })}
+            >
+              Передать права
+            </button>
+          </div>
+        </Modal>
+      )}
+      {revoking && (
+        <Modal title="Снять права суперадминистратора?" close={() => setRevoking(null)}>
+          <p>
+            <strong>{revoking.username}</strong> снова станет администратором и потеряет управление пользователями и резервными
+            копиями. Его сеансы завершатся.
+          </p>
+          <div className="modal-actions">
+            <button type="button" className="secondary" onClick={() => setRevoking(null)}>Отмена</button>
+            <button
+              type="button"
+              className="primary danger"
+              disabled={revoke.isPending}
+              onClick={() => revoke.mutate({ keycloakId: revoking.keycloak_id, username: revoking.username }, { onSettled: () => setRevoking(null) })}
+            >
+              Снять права
+            </button>
+          </div>
+        </Modal>
+      )}
       {confirming && (
         <Modal title="Удалить роль?" close={() => setConfirming(null)}>
           <p>

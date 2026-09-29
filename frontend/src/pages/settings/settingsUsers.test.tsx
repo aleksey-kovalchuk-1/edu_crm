@@ -89,7 +89,7 @@ describe("settings users page", () => {
         available: true, total: 2,
         users: [
           { keycloak_id: "kc-manager", username: "manager_1", email: "manager@example.test", full_name: "Менеджер", roles: ["crm-user"], is_active: true, last_login_at: null },
-          { keycloak_id: "kc-irina", username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null },
+          { keycloak_id: "kc-irina", primary_superadmin: true, username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null },
         ],
       }),
       "PATCH /admin/users/kc-manager/role": () => [200, { keycloak_id: "kc-manager", username: "manager_1", role: "crm-admin" }],
@@ -128,7 +128,7 @@ describe("settings users page", () => {
     const users = () => ({
       available: true, total: 3,
       users: [
-        { keycloak_id: "kc-irina", username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина Руководитель", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null },
+        { keycloak_id: "kc-irina", primary_superadmin: true, username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина Руководитель", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null },
         { keycloak_id: "kc-long", username: "konstantin.dlinnofamilnyy-verkhnepyshminskiy", email: LONG, full_name: "Константин Длиннофамильный", roles: ["crm-user"], is_active: true, last_login_at: null },
         { keycloak_id: "kc-admin", username: "admin_1", email: "admin_1@example.test", full_name: "Администратор 1", roles: ["crm-user", "crm-admin"], is_active: true, last_login_at: null },
       ],
@@ -153,7 +153,7 @@ describe("settings users page", () => {
       renderApp("/settings/users");
       const table = await within(await screen.findByRole("region", { name: "Пользователи CRM" })).findByRole("table");
       const irina = within(table).getByText("irina_super_admin").closest("tr") as HTMLElement;
-      expect(within(irina).getByText("Защищённая роль")).toBeTruthy();
+      expect(within(irina).getByText("Главный суперадминистратор")).toBeTruthy();
       fireEvent.click(screen.getByRole("button", { name: "Изменить роль пользователя konstantin.dlinnofamilnyy-verkhnepyshminskiy" }));
       const editor = screen.getByRole("form", { name: "Роль пользователя konstantin.dlinnofamilnyy-verkhnepyshminskiy" });
       expect(within(editor).getByLabelText("Новая роль")).toBeTruthy();
@@ -187,7 +187,7 @@ describe("settings users page", () => {
     const people = (extra: object = {}) => () => ({
       available: true, total: 2,
       users: [
-        { keycloak_id: "kc-irina", username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null, setup_pending: false },
+        { keycloak_id: "kc-irina", primary_superadmin: true, username: "irina_super_admin", email: "irina@example.test", full_name: "Ирина", roles: ["crm-superadmin", "crm-admin", "crm-supervisor"], is_active: true, last_login_at: null, setup_pending: false },
         { keycloak_id: "kc-anna", username: "anna", email: "anna@edu.hse.ru", full_name: "Анна", roles: ["crm-user"], is_active: true, last_login_at: null, setup_pending: false, ...extra },
       ],
     });
@@ -235,7 +235,7 @@ describe("settings users page", () => {
       renderApp("/settings/users");
       await screen.findByRole("button", { name: "Изменить роль пользователя anna" });
       expect(screen.queryByRole("button", { name: "Изменить роль пользователя irina_super_admin" })).toBeNull();
-      expect(screen.getByText("Защищённая роль")).toBeTruthy();
+      expect(screen.getByText("Главный суперадминистратор")).toBeTruthy();
     });
 
     it("marks someone who hasn't set a password and sends them the link again", async () => {

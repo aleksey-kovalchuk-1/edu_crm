@@ -27,6 +27,8 @@ export interface University {
   /** Legacy free-text contact field. */
   contact: string;
   is_active: boolean;
+  /** Every KAM sees it, not only the assigned ones (heads and admins switch it on the card). */
+  team_visible_to_managers: boolean;
   /** Responsible CRM users (ответственные от ИТ-школы). */
   managers: PersonRef[];
 }
@@ -38,6 +40,7 @@ export interface UniversityInput {
   website?: string;
   contact?: string;
   is_active?: boolean;
+  team_visible_to_managers?: boolean;
 }
 
 export interface ITDirection {

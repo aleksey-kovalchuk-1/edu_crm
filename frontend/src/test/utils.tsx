@@ -42,6 +42,7 @@ export function fixtures() {
       email: "priem@ks.example",
       contact: "Анна Смирнова",
       is_active: true,
+      team_visible_to_managers: false,
       managers: [{ id: 5, full_name: "Анна Демо" }],
     },
     {
@@ -54,6 +55,7 @@ export function fixtures() {
       email: "",
       contact: "",
       is_active: true,
+      team_visible_to_managers: true,
       managers: [],
     },
   ];
