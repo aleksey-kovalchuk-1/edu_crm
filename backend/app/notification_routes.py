@@ -73,7 +73,7 @@ class PauseOut(BaseModel):
 
 
 def _link_visible(db, user, row):
-    # Rows already passed visible_notifications(); only removal notices can point at something now hidden.
+    # Scope-free notices remain visible, but their university link is included only while the user can see it.
     return row.event_type not in UNSCOPED_EVENTS or can_see(db, user, row.link_type, row.link_id, row.university_id)
 
 

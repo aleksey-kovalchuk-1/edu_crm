@@ -9,12 +9,14 @@ from sqlalchemy import event, inspect, select
 
 from .models import (
     Attachment, Contract, Launch, StatusChange, Task, TaskComment, TaskMember, University, UniversityContact,
-    UniversityManager, WorkflowStatus,
+    UniversityManager, User, WorkflowStatus,
 )
 from .notifications import notify
 
 PENDING = 'notification_changes'
-TRACKED_NEW = (UniversityManager, UniversityContact, StatusChange, TaskComment, TaskMember, Contract, WorkflowStatus)
+TRACKED_NEW = (
+    University, UniversityManager, UniversityContact, StatusChange, TaskComment, TaskMember, Contract, WorkflowStatus,
+)
 TRACKED_DELETED = (UniversityManager, TaskMember)
 
 
@@ -57,6 +59,8 @@ def _after_flush(session, _context):
 
 
 def _snapshot(obj):
+    if isinstance(obj, University):
+        return {'id': obj.id}
     if isinstance(obj, UniversityManager):
         return {'university_id': obj.university_id, 'user_id': obj.user_id}
     if isinstance(obj, TaskMember):
@@ -126,8 +130,20 @@ def _university_events(db, changes, actor):
             names[university_id] = university.name if university else ''
         return names[university_id]
 
+    from_import = db.info.get('notification_source') == 'import'
     for kind, model, data in changes:
-        if model == 'UniversityManager':
+        if model == 'University' and kind == 'new':
+            if from_import:
+                continue  # like imported contracts: a catalogue import doesn't announce each new university
+            university_id = data['id']
+            for user_id in db.scalars(select(User.id).where(
+                User.is_active.is_(True), User.roles.any('crm-user'),
+            ).order_by(User.id)):
+                notify(db, user_id=user_id, event_type='university_created', title='Создали новый вуз',
+                       body=name_of(university_id), link_type='university', link_id=university_id,
+                       university_id=university_id, actor_user_id=actor,
+                       dedupe_key=f'university_created:{university_id}')
+        elif model == 'UniversityManager':
             assigned = kind == 'new'
             notify(db, user_id=data['user_id'], event_type='university_assigned' if assigned else 'university_unassigned',
                    title='Вас назначили ответственным за вуз' if assigned else 'Вас сняли с ответственности за вуз',
