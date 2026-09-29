@@ -155,6 +155,18 @@ export const useUniversity = (id: number) =>
     select: (list) => list.find((u) => u.id === id) ?? null,
   });
 
+/** Any role may set the address on a university it can open (PUT /universities/{id}/email). */
+export function useSetUniversityEmail(id: number) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (email: string) => apiRequest<University>(`/universities/${id}/email`, "PUT", { email }),
+    onSuccess: () => {
+      invalidatePrefix(client, catalogKeys.universities);
+      invalidateAudit(client);
+    },
+  });
+}
+
 export function useSaveUniversity() {
   const client = useQueryClient();
   return useMutation({

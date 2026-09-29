@@ -1597,6 +1597,27 @@ textarea {
   font-weight: var(--weight-semibold);
   overflow-wrap: anywhere;
 }
+/* A card value with its own «Изменить» (the university's email address). */
+.inline-edit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}
+.inline-edit .text-button {
+  font-weight: var(--weight-medium);
+}
+.inline-edit-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-weight: var(--weight-regular);
+}
+.inline-edit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
 .detail-columns {
   display: grid;
   grid-template-columns: 1fr 1.6fr;
