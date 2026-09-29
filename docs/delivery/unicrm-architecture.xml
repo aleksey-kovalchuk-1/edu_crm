@@ -36,7 +36,7 @@
       <name xml:lang="ru">Аналитика и отчёты</name>
     </element>
     <element identifier="import-function" xsi:type="ApplicationFunction">
-      <name xml:lang="ru">Импорт файлов и сигналы антифрода</name>
+      <name xml:lang="ru">Загрузка справочников и выгрузок LMS / сайта</name>
     </element>
     <element identifier="keycloak" xsi:type="ApplicationComponent">
       <name xml:lang="ru">Keycloak: вход и роли</name>
@@ -55,6 +55,25 @@
     </element>
     <element identifier="report" xsi:type="DataObject">
       <name xml:lang="ru">Отчёт JSON / XLS / XLSX / PDF</name>
+    </element>
+    <element identifier="superadmin" xsi:type="BusinessRole">
+      <name xml:lang="ru">Суперадминистратор</name>
+      <documentation xml:lang="ru">Управляет пользователями и ролями; может передать права администратору. Снимает права только главный суперадминистратор.</documentation>
+    </element>
+    <element identifier="access-function" xsi:type="ApplicationFunction">
+      <name xml:lang="ru">Пользователи, роли и видимость вузов</name>
+      <documentation xml:lang="ru">Заявки на доступ, роли КАМ / руководитель / администратор, передача прав суперадминистратора, назначение КАМ на вузы и признак «Видят все КАМ».</documentation>
+    </element>
+    <element identifier="notifier" xsi:type="ApplicationComponent">
+      <name xml:lang="ru">Служба уведомлений (notifier)</name>
+      <documentation xml:lang="ru">Напоминания о сроках; раз в минуту проверяет новые регистрации и отправляет уведомления и письма.</documentation>
+    </element>
+    <element identifier="smtp" xsi:type="SystemSoftware">
+      <name xml:lang="ru">Почтовый сервер SMTP (домен .ru)</name>
+    </element>
+    <element identifier="lms-site-exports" xsi:type="DataObject">
+      <name xml:lang="ru">Файлы выгрузок LMS и сайта ИТ Школы</name>
+      <documentation xml:lang="ru">Поступают через загрузку справочников; сетевого обмена с LMS и сайтом нет (D-243).</documentation>
     </element>
   </elements>
   <relationships>
@@ -86,7 +105,7 @@
       <name xml:lang="ru">Реализует аналитику и отчёты</name>
     </relationship>
     <relationship identifier="api-import" source="api" target="import-function" xsi:type="Assignment">
-      <name xml:lang="ru">Реализует импорт и проверку сигналов</name>
+      <name xml:lang="ru">Реализует загрузку файлов</name>
     </relationship>
     <relationship identifier="api-calls-identity" source="api" target="keycloak" xsi:type="Flow">
       <name xml:lang="ru">Проверка входа и управление ролями</name>
@@ -105,6 +124,30 @@
     </relationship>
     <relationship identifier="database-serves-api" source="database" target="api" xsi:type="Serving">
       <name xml:lang="ru">Хранение данных CRM</name>
+    </relationship>
+    <relationship identifier="web-serves-superadmin" source="web" target="superadmin" xsi:type="Serving">
+      <name xml:lang="ru">Управление доступом</name>
+    </relationship>
+    <relationship identifier="api-access" source="api" target="access-function" xsi:type="Assignment">
+      <name xml:lang="ru">Реализует управление доступом</name>
+    </relationship>
+    <relationship identifier="access-uses-identity" source="access-function" target="keycloak" xsi:type="Flow">
+      <name xml:lang="ru">Роли и учётные записи</name>
+    </relationship>
+    <relationship identifier="notifier-reads-data" source="notifier" target="crm-data" xsi:type="Access">
+      <name xml:lang="ru">Уведомления и журнал</name>
+    </relationship>
+    <relationship identifier="notifier-calls-identity" source="notifier" target="keycloak" xsi:type="Flow">
+      <name xml:lang="ru">Новые регистрации</name>
+    </relationship>
+    <relationship identifier="notifier-sends-mail" source="notifier" target="smtp" xsi:type="Flow">
+      <name xml:lang="ru">Письма о заявках</name>
+    </relationship>
+    <relationship identifier="keycloak-sends-mail" source="keycloak" target="smtp" xsi:type="Flow">
+      <name xml:lang="ru">Подтверждение адреса и установка пароля</name>
+    </relationship>
+    <relationship identifier="exports-to-import" source="lms-site-exports" target="import-function" xsi:type="Flow">
+      <name xml:lang="ru">Загрузка файлов выгрузок</name>
     </relationship>
   </relationships>
 </model>

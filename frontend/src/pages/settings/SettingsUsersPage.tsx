@@ -19,7 +19,7 @@ function PendingRegistrations() {
   function grantAccess(event: FormEvent<HTMLFormElement>, keycloakId: string) {
     event.preventDefault();
     const value = new FormData(event.currentTarget).get("role");
-    if (value !== "crm-user" && value !== "crm-admin") return;
+    if (value !== "crm-user" && value !== "crm-supervisor" && value !== "crm-admin") return;
     changeRole.mutate({ keycloakId, role: value as AssignableRole });
   }
 
@@ -81,6 +81,7 @@ function PendingRegistrations() {
                               Роль
                               <select name="role" defaultValue="crm-user">
                                 <option value="crm-user">КАМ</option>
+                                <option value="crm-supervisor">Руководитель</option>
                                 <option value="crm-admin">Администратор</option>
                               </select>
                             </label>
