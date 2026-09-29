@@ -4761,6 +4761,26 @@ footer {
   align-items: center;
   gap: var(--atmr-spacing-2x);
 }
+/* «Персональные данные»: demo label and the download link, one row on desktop, stacked on phones. */
+.policy-document {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--atmr-spacing-2x) var(--atmr-spacing-4x);
+}
+.policy-download {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--atmr-spacing-2x);
+  text-decoration: none;
+}
+@media (max-width: 767px) {
+  .policy-download {
+    min-height: 44px;
+    width: 100%;
+    justify-content: center;
+  }
+}
 .role-editor select {
   min-width: 10rem;
   max-width: 100%;
